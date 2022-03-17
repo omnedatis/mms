@@ -1,0 +1,24 @@
+{
+	"mimosa":{
+		"dev": {
+			"engine": "mysql+pymysql",
+			"IP address": "192.168.0.76",
+			"Port": "3306",
+			"User": "apuser",
+			"Password": "apuser",
+			"Database name": "MIMOSA",
+			"charset": "utf8"
+		}
+	},
+	"meteor":{
+		"dev": {
+			"engine": "mssql+pymssql",
+			"IP address": "192.168.0.209",
+			"Port": "1433",
+			"User": "sa",
+			"Password": "bi2006",
+			"Database name": "meteor",
+			"charset": "utf8"
+		}
+	}
+}
