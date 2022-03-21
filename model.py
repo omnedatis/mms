@@ -1014,10 +1014,11 @@ def model_predict(model: ModelInfo, market: str,
             cur_tdate, next_tdate = next_tdate, model.get_next_tdate(
                 next_tdate)
             bidx, eidx = eidx, (dates < next_tdate).sum()
-            result = _model_predict(model, market, cur_tdate, period,
-                                    x_data=x_data[bidx: eidx])
-            if result is not None:
-                result_buffer.append(result)
+            if bidx < eidx:
+                result = _model_predict(model, market, cur_tdate, period,
+                                        x_data=x_data[bidx: eidx])
+                if result is not None:
+                    result_buffer.append(result)
         if result_buffer:
             ret_buffer.append(pd.concat(result_buffer, axis=0))
     if ret_buffer:
