@@ -21,8 +21,8 @@ class MimosaDB:
     用來取得資料庫資料的物件，需在同資料夾下設置 config
     """
     config = {}
-    CREATE_BY='biadmin'
-    MODIFY_BY='biadmin'
+    CREATE_BY='biadmin@softbi.com'
+    MODIFY_BY='biadmin@softbi.com'
     
     def __init__(self, db_name='mimosa', mode='dev'):
         """
@@ -777,3 +777,73 @@ class MimosaDB:
         ;
         """
         engine.execute(sql)
+
+    def save_latest_pattern_distribution(self, data: pd.DataFrame):
+        """ 儲存最新現象統計分布統計量
+        儲存發生指定現象後, 指定市場, 指定天期下的報酬分布統計量
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+        
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        
+        # 刪除現有資料庫
+        sql = "DELETE FROM FCST_PAT_MKT_DIST"
+        engine.execute(sql)
+
+        # 新增最新資料
+        data.to_sql(
+            'FCST_PAT_MKT_DIST', 
+            engine, 
+            if_exists='append', 
+            chunksize=1000,
+            index=False)
+    
+    def save_latest_pattern_occur(self, data: pd.DataFrame):
+        """ 儲存最新現象發生後次數統計
+        儲存發生指定現象後, 指定市場, 指定天期下的發生與未發生總數, 
+        上漲總數, 持平總數與下跌總數
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+        
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        
+        # 刪除現有資料庫
+        sql = "DELETE FROM FCST_PAT_MKT_OCCUR"
+        engine.execute(sql)
+
+        # 新增最新資料
+        data.to_sql(
+            'FCST_PAT_MKT_OCCUR', 
+            engine, 
+            if_exists='append', 
+            chunksize=1000,
+            index=False)
+
