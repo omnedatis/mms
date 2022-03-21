@@ -66,12 +66,6 @@ class ModelStatus(int, Enum):
     CREATED = 2
     COMPLETE = 3
 
-class ModelExecution(str, Enum):
-    """Execution types of Model."""
-    ADD_PREDICT = '0'
-    ADD_BACKTEST = '1'
-    BATCH_PREDICT = '2'
-    
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
     
