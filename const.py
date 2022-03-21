@@ -71,3 +71,43 @@ class ModelExecution(str, Enum):
     ADD_PREDICT = '0'
     ADD_BACKTEST = '1'
     BATCH_PREDICT = '2'
+    
+class MarketOccurField(Enum):
+    """Fields of pattern market occur stat info table on DB.
+    
+    Membors
+    -------
+    PATTERN_ID: ID of pattern.
+    MARKET_ID: ID of market.
+    DATE_PERIOD: date Period.
+    OCCUR_CNT: pattern occur count in history.
+    NON_OCCUR_CNT: pattern non-occur count in history.
+    OCCUR_RISE_RATE: rsise rate after pattern occurs.
+    OCCUR_FLAT_RATE: flat rate after pattern occurs.
+    OCCUR_FALL_RATE: fall rate after pattern occurs.
+    """
+    PATTERN_ID = 'PATTERN_ID'
+    MARKET_ID = 'MARKET_CODE'
+    DATE_PERIOD = 'DATE_PERIOD'
+    OCCUR_CNT = 'OCCUR_CNT'
+    NON_OCCUR_CNT = 'NON_OCCUR_CNT'
+    OCCUR_RISE_RATE = 'OCCUR_RISE_RATE'
+    OCCUR_FLAT_RATE = 'OCCUR_FLAT_RATE'
+    OCCUR_FALL_RATE = 'OCCUR_FALL_RATE'
+
+class MarketDistField(Enum):
+    """Fields of pattern market occur stat info table on DB.
+    
+    Membors
+    -------
+    PATTERN_ID: ID of pattern.
+    MARKET_ID: ID of market.
+    DATE_PERIOD: date Period.
+    RETURN_MEAN: return mean.
+    RETURN_STD: return standard deviation.
+    """
+    PATTERN_ID = 'PATTERN_ID'
+    MARKET_ID = 'MARKET_CODE'
+    DATE_PERIOD = 'DATE_PERIOD'
+    RETURN_MEAN = 'RETURN_MEAN'
+    RETURN_STD = 'RETURN_STD'
