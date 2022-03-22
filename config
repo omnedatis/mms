@@ -6,7 +6,7 @@
 			"Port": "3306",
 			"User": "apuser",
 			"Password": "apuser",
-			"Database name": "MIMOSA",
+			"Database name": "MIMOSA_TMP",
 			"charset": "utf8"
 		}
 	},
