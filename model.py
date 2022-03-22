@@ -1344,9 +1344,9 @@ def get_pattern_stats_info(pattern, freturn, market):
 
     market_occur = {MarketOccurField.OCCUR_CNT.value: [],
                     MarketOccurField.NON_OCCUR_CNT.value: [],
-                    MarketOccurField.OCCUR_RISE_RATE.value: [],
-                    MarketOccurField.OCCUR_FLAT_RATE.value: [],
-                    MarketOccurField.OCCUR_FALL_RATE.value: [],
+                    MarketOccurField.MARKET_RISE_CNT.value: [],
+                    MarketOccurField.MARKET_FLAT_CNT.value: [],
+                    MarketOccurField.MARKET_FALL_CNT.value: [],
                     MarketOccurField.MARKET_ID.value: [],
                     MarketOccurField.PATTERN_ID.value: [],
                     MarketOccurField.DATE_PERIOD.value: []}
@@ -1367,21 +1367,25 @@ def get_pattern_stats_info(pattern, freturn, market):
                 np.sum(ptn.values == 1))
             market_occur[MarketOccurField.NON_OCCUR_CNT.value].append(
                 np.sum(ptn.values == 0))
-            market_occur[MarketOccurField.OCCUR_RISE_RATE.value].append(np.sum(
+            market_occur[MarketOccurField.MARKET_RISE_CNT.value].append(np.sum(
                 (ptn.values == 1) & (fret.values > 0)))
-            market_occur[MarketOccurField.OCCUR_FLAT_RATE.value].append(np.sum(
+            market_occur[MarketOccurField.MARKET_FLAT_CNT.value].append(np.sum(
                 (ptn.values == 1) & (fret.values == 0)))
-            market_occur[MarketOccurField.OCCUR_FALL_RATE.value].append(np.sum(
+            market_occur[MarketOccurField.MARKET_FALL_CNT.value].append(np.sum(
                 (ptn.values == 1) & (fret.values < 0)))
             market_occur[MarketOccurField.MARKET_ID.value].append(market)
             market_occur[MarketOccurField.PATTERN_ID.value].append(pname)
             market_occur[MarketOccurField.DATE_PERIOD.value].append(
                 each_r.replace('FR', ''))
             ret_occur = fret[ptn.values == 1].values
-            market_dist[MarketDistField.RETURN_MEAN.value].append(
+            if len(ret_occur) != 0:
+                market_dist[MarketDistField.RETURN_STD.value].append(
+                    np.std(ret_occur))
+                market_dist[MarketDistField.RETURN_MEAN.value].append(
                 np.mean(ret_occur))
-            market_dist[MarketDistField.RETURN_STD.value].append(
-                np.std(ret_occur))
+            else:
+                market_dist[MarketDistField.RETURN_STD.value].append(None)
+                market_dist[MarketDistField.RETURN_MEAN.value].append(None)
             market_dist[MarketDistField.MARKET_ID.value].append(market)
             market_dist[MarketDistField.PATTERN_ID.value].append(pname)
             market_dist[MarketDistField.DATE_PERIOD.value].append(

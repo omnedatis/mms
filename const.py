@@ -76,18 +76,18 @@ class MarketOccurField(Enum):
     DATE_PERIOD: date Period.
     OCCUR_CNT: pattern occur count in history.
     NON_OCCUR_CNT: pattern non-occur count in history.
-    OCCUR_RISE_RATE: rsise rate after pattern occurs.
-    OCCUR_FLAT_RATE: flat rate after pattern occurs.
-    OCCUR_FALL_RATE: fall rate after pattern occurs.
+    MARKET_RISE_CNT: rise count after pattern occurs.
+    MARKET_FLAT_CNT: flat count after pattern occurs.
+    MARKET_FALL_CNT: fall count after pattern occurs.
     """
     PATTERN_ID = 'PATTERN_ID'
     MARKET_ID = 'MARKET_CODE'
     DATE_PERIOD = 'DATE_PERIOD'
     OCCUR_CNT = 'OCCUR_CNT'
     NON_OCCUR_CNT = 'NON_OCCUR_CNT'
-    OCCUR_RISE_RATE = 'OCCUR_RISE_RATE'
-    OCCUR_FLAT_RATE = 'OCCUR_FLAT_RATE'
-    OCCUR_FALL_RATE = 'OCCUR_FALL_RATE'
+    MARKET_RISE_CNT = 'MARKET_RISE_CNT'
+    MARKET_FLAT_CNT = 'MARKET_FLAT_CNT'
+    MARKET_FALL_CNT = 'MARKET_FALL_CNT'
 
 class MarketDistField(Enum):
     """Fields of pattern market occur stat info table on DB.
