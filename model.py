@@ -1360,19 +1360,19 @@ def get_pattern_stats_info(pattern, freturn, market):
 
         for each_r in freturn:
             fret = freturn[each_r][(
-                (~pattern[pname].isnull()) & (~freturn[each_r].isnull))]
+                (~pattern[pname].isnull()) & (~freturn[each_r].isnull()))]
             ptn = pattern[pname][((~pattern[pname].isnull())
-                                  & (~freturn[each_r].isnull))]
+                                  & (~freturn[each_r].isnull()))]
             market_occur[MarketOccurField.OCCUR_CNT.value].append(
                 np.sum(ptn.values == 1))
             market_occur[MarketOccurField.NON_OCCUR_CNT.value].append(
                 np.sum(ptn.values == 0))
             market_occur[MarketOccurField.OCCUR_RISE_RATE.value].append(np.sum(
-                ptn.values == 1 & fret.values > 0))
+                (ptn.values == 1) & (fret.values > 0)))
             market_occur[MarketOccurField.OCCUR_FLAT_RATE.value].append(np.sum(
-                ptn.values == 1 & fret.values == 0))
+                (ptn.values == 1) & (fret.values == 0)))
             market_occur[MarketOccurField.OCCUR_FALL_RATE.value].append(np.sum(
-                ptn.values == 1 & fret.values < 0))
+                (ptn.values == 1) & (fret.values < 0)))
             market_occur[MarketOccurField.MARKET_ID.value].append(market)
             market_occur[MarketOccurField.PATTERN_ID.value].append(pname)
             market_occur[MarketOccurField.DATE_PERIOD.value].append(
