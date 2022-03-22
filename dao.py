@@ -156,7 +156,7 @@ class MimosaDB:
         pickle_dump(data, self._get_future_return_file(market_id))
         self._local_db_lock.release()
 
-    def get_future_return(self, market_id:str, period: int, begin_date:str):
+    def get_future_return(self, market_id:str, period: int, begin_date:datetime.date):
         """Get future return results from begining date to the latest of given market from DB.
         
         Parameters
@@ -201,7 +201,7 @@ class MimosaDB:
         pickle_dump(data, self._get_pattern_file(market_id))
         self._local_db_lock.release()
 
-    def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:str):
+    def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:datetime.date):
         """Get pattern results from begining date to the latest of given market from DB.
         
         Parameters
@@ -508,8 +508,8 @@ class MimosaDB:
         """
         data = pd.read_sql_query(sql, engine)
         result = pd.DataFrame(
-            data[['OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values,
-            index=data['PRICE_DATE'].values,
+            data[['OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values.astype(float),
+            index=data['PRICE_DATE'].values.astype('datetime64[D]'),
             columns=['OP', 'HP', 'LP', 'CP']
             )
         return result
