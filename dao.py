@@ -8,8 +8,11 @@ from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
-from model import ModelInfo, PatternInfo, PredictResultField, PatternResultField, ModelExecution, pickle_dump, pickle_load, get_filed_name_of_future_return
-from const import LOCAL_DB
+from model import (ModelInfo, PatternInfo, 
+                pickle_dump, pickle_load, 
+                get_filed_name_of_future_return, set_model_execution_start)
+from const import (LOCAL_DB, MarketDistField, ModelExecution, PredictResultField, 
+                   PatternResultField, ModelExecution)
 # 設定 logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -389,13 +392,14 @@ class MimosaDB:
         """
         engine.execute(sql)
         
+        
         # DEL FCST_MODEL_USER_MAP
         sql = f"""
             DELETE FROM FCST_MODEL_USER_MAP
             WHERE
                 MODEL_ID='{model_id}'
         """
-        engine.execute(sql)
+        # engine.execute(sql)
 
         # DEL FCST_MODEL_PAT_MAP
         sql = f"""
@@ -403,7 +407,7 @@ class MimosaDB:
             WHERE
                 MODEL_ID='{model_id}'
         """
-        engine.execute(sql)
+        # engine.execute(sql)
 
         # DEL FCST_MODEL_MKT_MAP
         sql = f"""
@@ -411,7 +415,7 @@ class MimosaDB:
             WHERE
                 MODEL_ID='{model_id}'
         """
-        engine.execute(sql)
+        # engine.execute(sql)
 
         # DEL FCST_WATCHLIST_MODEL_MAP
         sql = f"""
@@ -419,7 +423,7 @@ class MimosaDB:
             WHERE
                 MODEL_ID='{model_id}'
         """
-        engine.execute(sql)
+        # engine.execute(sql)
 
         # DEL FCST_MODEL_EXEC
         sql = f"""
@@ -427,7 +431,7 @@ class MimosaDB:
             WHERE
                 MODEL_ID='{model_id}'
         """
-        engine.execute(sql)
+        # engine.execute(sql)
 
         # DEL FCST_MODEL
         sql = f"""
@@ -435,7 +439,7 @@ class MimosaDB:
             WHERE
                 MODEL_ID='{model_id}'
         """
-        engine.execute(sql)
+        # engine.execute(sql)
 
     def save_model_results(self, model_id:str, data:pd.DataFrame):
         """Save modle predicting results to DB.
@@ -513,29 +517,6 @@ class MimosaDB:
             columns=['OP', 'HP', 'LP', 'CP']
             )
         return result
-
-    def _set_model_status(self, exec_id:str, status:str):
-        """Set model status on DB.
-        
-        Parameters
-        ----------
-        exec_id: str
-            ID of model_exec
-        stauts: int
-            stauts code set to this model.
-        
-        """
-        now = datetime.datetime.now()
-        engine = self._engine()
-        sql = f"""
-        UPDATE
-            FCST_MODEL_EXECUTION
-        SET
-            STATUS_CODE='{status}', END_DT='{now}', MODIFY_DT='{now}'
-        WHERE
-            EXEC_ID='{exec_id}';
-        """
-        engine.execute(sql)
     
     def set_model_execution_start(self, model_id:str, exection:str) -> str:
         """ create model exec
@@ -544,7 +525,7 @@ class MimosaDB:
         ----------
         model_id: str
             ID of model
-        status: str
+        exection: str
             status code set to this model
 
         Returns
@@ -591,22 +572,52 @@ class MimosaDB:
         ----------
         exec_id: str
             ID of model_exec
+        execution: str
+            status code set to this model
+        model_id: str
+            ID of model
         
         """
         now = datetime.datetime.now()
         engine = self._engine()
+
+        finished_status = {
+            ModelExecution.ADD_BACKTEST.value: ModelExecution.ADD_BACKTEST_FINISHED.value,
+            ModelExecution.ADD_PREDICT.value: ModelExecution.ADD_PREDICT_FINISHED.value,
+            ModelExecution.BATCH_PREDICT.value: ModelExecution.BATCH_PREDICT_FINISHED.value
+        }
+
+        sql = f"""
+            SELECT
+                STATUS_CODE
+            FROM
+                FCST_MODEL_EXECUTION
+            WHERE
+                EXEC_ID='{exec_id}';
+        """
+        exec_data = pd.read_sql_query(sql, engine)['STATUS_CODE']
+        if len(exec_data) == 0:
+            raise Exception('call set_model_execution_complete before set_model_execution_start')
+
+        status = finished_status[exec_data.values[0]]
         sql = f"""
         UPDATE
             FCST_MODEL_EXECUTION
         SET
-            END_DT='{now}', MODIFY_DT='{now}'
+            END_DT='{now}', MODIFY_DT='{now}', STATUS_CODE='{status}'
         WHERE
             EXEC_ID='{exec_id}';
         """
         engine.execute(sql)
-
+        
     def get_recover_model_execution(self):
         """ 取得模型最新執行狀態
+        取得新增模型預測與新增模型回測的最新更新狀態，這兩個狀態對於任一模型而言
+        都必須且應該只會各有一筆
+        當新增模型狀態沒有找到且新增模型完成狀態也沒有找到時，狀態為需要新增預測
+        當新增模型狀態找到了但沒有結束時間時，狀態為需要新增預測
+        當新增模型完成找到但新增回測且新增回測完成狀態沒有沒找到時，狀態為需要新增回測
+        當新增回測狀態找到但沒有結束時間時，狀態為需要新增回測
         
         Parameters
         ----------
@@ -640,23 +651,28 @@ class MimosaDB:
             model_add_predict_info = model_state_info[
                 model_state_info['STATUS_CODE'].values==
                 ModelExecution.ADD_PREDICT.value]
+            model_add_predict_finished_info = model_state_info[
+                model_state_info['STATUS_CODE'].values==
+                ModelExecution.ADD_PREDICT_FINISHED.value]
             model_add_backtest_info = model_state_info[
                 model_state_info['STATUS_CODE'].values==
                 ModelExecution.ADD_BACKTEST.value]
+            model_add_backtest_finished_info = model_state_info[
+                model_state_info['STATUS_CODE'].values==
+                ModelExecution.ADD_BACKTEST_FINISHED.value]    
             # ADD_PREDICT 未建立就掛掉
-            if len(model_add_predict_info) == 0:
+            if (len(model_add_predict_info) == 0) and (len(model_add_predict_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_PREDICT))
             # ADD_PREDICT 未完成就掛掉
             elif pd.isnull(model_add_predict_info.iloc[0]['END_DT']):
                 results.append((model_id, ModelExecution.ADD_PREDICT))
             # ADD_BACKTEST 未建立就掛掉
-            elif len(model_add_backtest_info) == 0:
+            elif (len(model_add_backtest_info) == 0) and (len(model_add_backtest_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_BACKTEST))
             # ADD_BACKTEST 未完成就掛掉
             elif pd.isnull(model_add_backtest_info.iloc[0]['END_DT']):
                 results.append((model_id, ModelExecution.ADD_BACKTEST))
         return results
-
 
     def save_latest_pattern_results(self, data:pd.DataFrame, block_size: int=100000):
         """Save latest pattern results to DB.
@@ -717,7 +733,6 @@ class MimosaDB:
         for idx in range(0, len(data), block_size):
             self._save_latest_pattern_results(data[idx: idx+block_size])
             logging.info(f'save {idx} records')
-
 
     def _save_latest_pattern_results(self, data:pd.DataFrame):
         """Save latest pattern results to DB.
@@ -781,6 +796,8 @@ class MimosaDB:
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
         """ 儲存最新現象統計分布統計量
         儲存發生指定現象後, 指定市場, 指定天期下的報酬分布統計量
+        這個方法在儲存均值和標準差時會將結果轉換為 % , 因此會做
+        乘 100 的動作
 
         Parameters
         ----------
@@ -799,6 +816,14 @@ class MimosaDB:
         create_dt = now
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
+        data_mean = data[MarketDistField.RETURN_MEAN].values * 100
+        data_std = data[MarketDistField.RETURN_STD].values * 100
+        
+        data = data[[
+            'CREATE_BY', 'CREATE_DT', MarketDistField.PATTERN_ID, 
+            MarketDistField.MARKET_ID, MarketDistField.DATE_PERIOD]]
+        data[MarketDistField.RETURN_MEAN] = data_mean
+        data[MarketDistField.RETURN_STD] = data_std
         
         # 刪除現有資料庫
         sql = "DELETE FROM FCST_PAT_MKT_DIST"

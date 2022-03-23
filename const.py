@@ -54,10 +54,21 @@ class PatternResultField(Enum):
     VALUE = 'OCCUR_YN'
 
 class ModelExecution(str, Enum):
-    """Execution types of Model."""
-    ADD_PREDICT = '0'
-    ADD_BACKTEST = '1'
-    BATCH_PREDICT = '2'
+    """Execution types of Model.
+    
+    新增模型時預測 ADD_PREDICT = 'AP'
+    新增模型時回測 ADD_BACKTEST = 'AB'
+    批次執行預測 BATCH_PREDICT = 'BP'
+    新增模型時預測完成 ADD_PREDICT_FINISHED = 'APF'
+    新增模型時回測完成 ADD_BACKTEST_FINISHED = 'ABF'
+    批次執行預測完成 BATCH_PREDICT_FINISHED = 'BPF'
+    """
+    ADD_PREDICT = 'AP'
+    ADD_BACKTEST = 'AB'
+    BATCH_PREDICT = 'BP'
+    ADD_PREDICT_FINISHED = 'APF'
+    ADD_BACKTEST_FINISHED = 'ABF'
+    BATCH_PREDICT_FINISHED = 'BPF'
 
 class ModelStatus(int, Enum):
     """Status of Model on DB."""
