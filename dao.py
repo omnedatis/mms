@@ -4,6 +4,7 @@ import logging
 import os
 import numpy as np
 import pandas as pd
+import pickle
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
@@ -11,7 +12,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, Union
 from model import (ModelInfo, PatternInfo, 
                 pickle_dump, pickle_load, 
                 get_filed_name_of_future_return, set_model_execution_start)
-from const import (LOCAL_DB, MarketDistField, ModelExecution, PredictResultField, 
+from const import (LOCAL_DB, DATA_LOC,
+                   MarketDistField, ModelExecution, PredictResultField, 
                    PatternResultField, ModelExecution)
 # 設定 logging
 logging.basicConfig(
@@ -57,6 +59,99 @@ class MimosaDB:
                               port, db_name, charset))
       return engine
 
+    def _clean_market_data(self):
+        """ 清除當前本地端市場歷史資料
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/markets'):
+            files = os.listdir(f'{DATA_LOC}/markets')
+            for file in files:
+                os.remove(f'{DATA_LOC}/markets/{file}')
+            os.remove(f'{DATA_LOC}/markets')
+
+    def _clone_market_data(self):
+        """ 複製當前資料庫中的市場歷史資料至本地端
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if not os.path.exists(f'{DATA_LOC}/markets'):
+            logging.info('Clone market data from db')
+            os.makedirs(f'{DATA_LOC}/markets', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    MARKET_CODE, PRICE_DATE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE
+                FROM
+                    FCST_MKT_PRICE_HISTORY
+                ORDER BY
+                    PRICE_DATE ASC
+            """
+            data = pd.read_sql_query(sql, engine)
+            result = pd.DataFrame(
+                data[['OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values.astype(float),
+                index=data['PRICE_DATE'].values.astype('datetime64[D]'),
+                columns=['OP', 'HP', 'LP', 'CP']
+                )
+            market_groups = result.groupby('MARKET_CODE')
+            for market_id, market_group in market_groups:
+                with open(f'{DATA_LOC}/markets/{market_id}.pkl', 'wb') as fp:
+                    pickle.dump(market_group.sort_index(), fp)
+            logging.info('Clone market data from db finished')
+
+    def _clean_markets(self):
+        """ 清除當前本地端市場清單
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/market_list.pkl'):
+            os.remove(f'{DATA_LOC}/market_list.pkl')
+    
+    def _clone_markets(self):
+        """複製當前資料庫中的市場清單至本地端
+        
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/market_list.pkl'):
+            logging.info('Clone market list from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    MARKET_CODE
+                FROM
+                    FCST_MKT
+            """
+            data = pd.read_sql_query(sql, engine)['MARKET_CODE'].values.tolist()
+            with open(f'{DATA_LOC}/market_list.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone market list from db finished')
+
+    def clean_market_cache(self):
+        """ 清除本地市場資料快取
+        
+        Parameters
+        ----------
+        None.
+        
+        Returns
+        -------
+        None.
+        """
+        self._clean_market_data()
+        self._clean_markets()
+
     def get_markets(self):
         """get market IDs from DB.
         
@@ -65,14 +160,9 @@ class MimosaDB:
         list of str
         
         """
-        engine = self._engine()
-        sql = f"""
-            SELECT
-                MARKET_CODE
-            FROM
-                FCST_MKT
-        """
-        data = pd.read_sql_query(sql, engine)['MARKET_CODE'].values.tolist()
+        self._clone_markets()
+        with open(f'{DATA_LOC}/market_list.pkl', 'rb') as fp:
+            data = pickle.load(fp)
         return data
 
     def get_patterns(self):
@@ -496,26 +586,13 @@ class MimosaDB:
             A panel of floating with columns, 'OP', 'LP', 'HP', and 'CP'.
         
         """
-        engine = self._engine()
-        date_cond = ''
+        self._clone_market_data()
+        if not os.path.exists(f'{DATA_LOC}/markets/{market_id}.pkl'):
+            return pd.DataFrame(columns=['OP', 'LP', 'HP', 'CP'])
+        with open(f'{DATA_LOC}/markets/{market_id}.pkl', 'rb') as fp:
+            result = pickle.load(fp)
         if begin_date is not None:
-            date_cond =  f" AND PRICE_DATE>='{str(begin_date)}'"
-        sql = f"""
-            SELECT
-                PRICE_DATE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE
-            FROM
-                FCST_MKT_PRICE_HISTORY
-            WHERE
-                MARKET_CODE='{market_id}' {date_cond}
-            ORDER BY
-                PRICE_DATE ASC
-        """
-        data = pd.read_sql_query(sql, engine)
-        result = pd.DataFrame(
-            data[['OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values.astype(float),
-            index=data['PRICE_DATE'].values.astype('datetime64[D]'),
-            columns=['OP', 'HP', 'LP', 'CP']
-            )
+            result = result[result.index.values >= begin_date]
         return result
     
     def set_model_execution_start(self, model_id:str, exection:str) -> str:
