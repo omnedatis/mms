@@ -153,6 +153,7 @@ def get_filed_name_of_future_return(period: int) -> str:
 def gen_future_return(market: str, period: int):
     cps = get_market_data(market)['CP']
     ret = cps.shift(-period) / cps - 1
+    ret[cps.values <= 0] = np.nan
     name = get_filed_name_of_future_return(period)
     ret = ret.rename(name)
     return ret
@@ -217,7 +218,7 @@ def save_latest_pattern_distribution(data: pd.DataFrame):
     data: pd.DataFram
     """
     db = get_db()
-    db.save_latest_pasave_latest_pattern_distributionttern_occur(data)
+    db.save_latest_pattern_distribution(data)
 
 
 def get_latest_dates(model_id):
