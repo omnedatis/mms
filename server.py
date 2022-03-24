@@ -48,7 +48,6 @@ def api_batch():
     MT_MANAGER.release(BATCH_EXE_CODE)
     time.sleep(10)
     excute_id = datetime.datetime.now()
-    logger.info(f"api_batch {excute_id} start")
 
     t = mt.Thread(target=batch, arg=(excute_id, logger))
     t.start()

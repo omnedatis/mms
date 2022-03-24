@@ -121,6 +121,15 @@ def save_latest_pattern_results(data):
     result = db.save_latest_pattern_results(data)
     return result
 
+def clean_db_cache():
+    """Clean local cache."""
+    db = get_db()
+    db.clean_db_cache()
+
+def clone_db_cache():
+    """Build local cache from db."""
+    db = get_db()
+    db.clone_db_cache()
 
 def get_pattern_results(market_id, patterns, begin_date):
     """Get pattern results from begining date to the latest of given market from DB.
@@ -1415,11 +1424,15 @@ def init_db():
 def batch(excute_id, logger):
     controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     try:
-        pattern_update(controller)
-        for model in get_models():
-            model_update(model, controller)
-        logger.info(f"api_batch {excute_id} complete")
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        if controller.isactive:
+            logger.info(f"api_batch {excute_id} start")
+            clean_db_cache()
+            clone_db_cache()
+            pattern_update(controller)
+            for model in get_models():
+                model_update(model, controller)
+            logger.info(f"api_batch {excute_id} complete")
+            MT_MANAGER.release(BATCH_EXE_CODE)
 
     except Exception as esp:
         MT_MANAGER.release(BATCH_EXE_CODE)

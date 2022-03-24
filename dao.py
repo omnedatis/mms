@@ -328,7 +328,7 @@ class MimosaDB:
                 pickle.dump(data, fp)
             logging.info('Clone model markets from db finished')
 
-    def _clean_model_patters(self):
+    def _clean_model_patterns(self):
         """ 清除當前本地端觀點使用現象
         
         Returns
@@ -378,7 +378,26 @@ class MimosaDB:
         self._clean_models()
         self._clean_model_training_infos()
         self._clean_model_markets()
-        self._clean_model_patters
+        self._clean_model_patterns()
+
+    def clone_db_cache(self):
+        """ 從資料庫載入快取
+        
+        Parameters
+        ----------
+        None.
+        
+        Returns
+        -------
+        None.
+        """
+        self._clone_market_data()
+        self._clone_markets()
+        self._clone_patterns()
+        self._clone_models()
+        self._clone_model_training_infos()
+        self._clone_model_markets()
+        self._clone_model_patterns()
 
     def get_markets(self):
         """get market IDs from DB.
