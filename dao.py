@@ -90,19 +90,19 @@ class MimosaDB:
                     MARKET_CODE, PRICE_DATE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE
                 FROM
                     FCST_MKT_PRICE_HISTORY
-                ORDER BY
-                    PRICE_DATE ASC
             """
             data = pd.read_sql_query(sql, engine)
             result = pd.DataFrame(
-                data[['OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values.astype(float),
+                data[['MARKET_CODE', 'OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values,
                 index=data['PRICE_DATE'].values.astype('datetime64[D]'),
-                columns=['OP', 'HP', 'LP', 'CP']
+                columns=['MARKET_CODE', 'OP', 'HP', 'LP', 'CP']
                 )
             market_groups = result.groupby('MARKET_CODE')
             for market_id, market_group in market_groups:
                 with open(f'{DATA_LOC}/markets/{market_id}.pkl', 'wb') as fp:
-                    pickle.dump(market_group.sort_index(), fp)
+                    mkt = market_group.sort_index()[['OP', 'HP', 'LP', 'CP']]
+                    mkt = pd.DataFrame(mkt.values.astype(float), index=mkt.index, columns=mkt.columns)
+                    pickle.dump(mkt, fp)
             logging.info('Clone market data from db finished')
 
     def _clean_markets(self):
@@ -215,7 +215,7 @@ class MimosaDB:
                 result[pid] = PatternInfo(pid, func, params)
             result = [result[pid] for pid in result]
             with open(f'{DATA_LOC}/patterns.pkl', 'wb') as fp:
-                pickle.dump(data, fp)
+                pickle.dump(result, fp)
             logging.info('Clone patterns from db finished')
 
     def _clean_models(self):

@@ -8,6 +8,7 @@
 
 # python local db
 _local_db
+_data
 
 # python garbage
 __pycache__
