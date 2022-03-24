@@ -1331,12 +1331,15 @@ def pattern_update(controller: ThreadController):
     ret_market_occur = pd.concat(ret_market_occur, axis=0)
     if not controller.isactive:
         return
+    pickle_dump(ret, './latest_pattern_results.pkl')
     save_latest_pattern_results(ret)
     if not controller.isactive:
         return
+    pickle_dump(ret_market_occur, './latest_pattern_occur.pkl')
     save_latest_pattern_occur(ret_market_occur)
     if not controller.isactive:
         return
+    pickle_dump(ret_market_dist, './latest_pattern_distribution.pkl')
     save_latest_pattern_distribution(ret_market_dist)
     return ret
 
