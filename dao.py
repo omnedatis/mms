@@ -26,8 +26,8 @@ class MimosaDB:
     用來取得資料庫資料的物件，需在同資料夾下設置 config
     """
     config = {}
-    CREATE_BY='biadmin@softbi.com'
-    MODIFY_BY='biadmin@softbi.com'
+    CREATE_BY='SYS_BATCH'
+    MODIFY_BY='SYS_BATCH'
     
     def __init__(self, db_name='mimosa', mode='dev'):
         """
@@ -138,8 +138,231 @@ class MimosaDB:
                 pickle.dump(data, fp)
             logging.info('Clone market list from db finished')
 
-    def clean_market_cache(self):
-        """ 清除本地市場資料快取
+    def _clean_patterns(self):
+        """ 清除當前本地端現象資訊
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/patterns.pkl'):
+            os.remove(f'{DATA_LOC}/patterns.pkl')
+
+    def _clone_patterns(self):
+        """複製當前資料庫中的現象資料至本地端
+        
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/patterns.pkl'):
+            logging.info('Clone pattern from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    ptn.PATTERN_ID, mcr.FUNC_CODE, para.PARAM_CODE, para.PARAM_VALUE, mp.PARAM_TYPE
+                FROM
+                    FCST_PAT AS ptn
+                LEFT JOIN
+                    (
+                        SELECT 
+                            PATTERN_ID, MACRO_ID, PARAM_CODE, PARAM_VALUE
+                        FROM
+                            FCST_PAT_PARAM
+                    ) AS para
+                ON ptn.PATTERN_ID=para.PATTERN_ID
+                LEFT JOIN
+                    (
+                        SELECT
+                            MACRO_ID, FUNC_CODE
+                        FROM
+                            FCST_MACRO
+                    ) AS mcr
+                ON ptn.MACRO_ID=mcr.MACRO_ID
+                LEFT JOIN
+                    (
+                        SELECT
+                            MACRO_ID, PARAM_CODE, PARAM_TYPE
+                        FROM 
+                            FCST_MACRO_PARAM
+                    ) AS mp
+                ON ptn.MACRO_ID=mp.MACRO_ID AND para.PARAM_CODE=mp.PARAM_CODE
+                ORDER BY ptn.PATTERN_ID, mcr.FUNC_CODE ASC;
+            """
+            data = pd.read_sql_query(sql, engine)
+            result = {}
+            for i in range(len(data)):
+                record = data.iloc[i]
+                pid = record['PATTERN_ID']
+                if pid in result:
+                    continue
+                func = record['FUNC_CODE']
+                params = {}
+                ptn_record = data[data['PATTERN_ID'].values==pid]
+                for j in range(len(ptn_record)):
+                    param_record = ptn_record.iloc[j]
+                    param_type = param_record['PARAM_TYPE']
+                    param_val = param_record['PARAM_VALUE']
+                    if param_type == "int":
+                        param_val = int(param_record['PARAM_VALUE'])
+                    elif param_type == "float":
+                        param_val = float(param_record['PARAM_VALUE'])
+                    elif param_type == "string":
+                        param_val = str(param_record['PARAM_VALUE'])
+                    params[param_record['PARAM_CODE']] = param_val
+                result[pid] = PatternInfo(pid, func, params)
+            result = [result[pid] for pid in result]
+            with open(f'{DATA_LOC}/patterns.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone patterns from db finished')
+
+    def _clean_models(self):
+        """ 清除當前本地端市場清單
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/models.pkl'):
+            os.remove(f'{DATA_LOC}/models.pkl')
+
+    def _clone_models(self):
+        """複製當前資料庫中的觀點資訊至本地端
+        
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/models.pkl'):
+            logging.info('Clone models from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    model.MODEL_ID
+                FROM
+                    FCST_MODEL AS model
+                INNER JOIN
+                    (
+                        SELECT 
+                            MODEL_ID, STATUS_CODE, END_DT
+                        FROM
+                            FCST_MODEL_EXECUTION
+                        WHERE
+                            STATUS_CODE='{ModelExecution.ADD_PREDICT_FINISHED}' AND 
+                            END_DT IS NOT NULL
+                    ) AS me
+                ON model.MODEL_ID=me.MODEL_ID
+            """
+            data = pd.read_sql_query(sql, engine)['MODEL_ID'].values.tolist()
+            with open(f'{DATA_LOC}/models.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone models from db finished')
+
+    def _clean_model_training_infos(self):
+        """ 清除當前本地端觀點訓練資訊
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/model_training_infos.pkl'):
+            os.remove(f'{DATA_LOC}/model_training_infos.pkl')
+
+    def _clone_model_training_infos(self):
+        """複製當前資料庫中的觀點訓練資訊至本地端
+        
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/model_training_infos.pkl'):
+            logging.info('Clone model training infos from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    *
+                FROM
+                    FCST_MODEL
+            """
+            model_info = pd.read_sql_query(sql, engine)
+            with open(f'{DATA_LOC}/model_training_infos.pkl', 'wb') as fp:
+                pickle.dump(model_info, fp)
+            logging.info('Clone model training infos from db finished')
+
+    def _clean_model_markets(self):
+        """ 清除當前本地端觀點目標市場
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/model_markets.pkl'):
+            os.remove(f'{DATA_LOC}/model_markets.pkl')
+
+    def _clone_model_markets(self):
+        """複製當前資料庫中的觀點目標市場至本地端
+        
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/model_markets.pkl'):
+            logging.info('Clone model markets from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    *
+                FROM
+                    FCST_MODEL_MKT_MAP
+            """
+            data = pd.read_sql_query(sql, engine)
+            with open(f'{DATA_LOC}/model_markets.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone model markets from db finished')
+
+    def _clean_model_patters(self):
+        """ 清除當前本地端觀點使用現象
+        
+        Returns
+        -------
+        None.
+        
+        """
+        if os.path.exists(f'{DATA_LOC}/model_patterns.pkl'):
+            os.remove(f'{DATA_LOC}/model_patterns.pkl')
+
+    def _clone_model_patterns(self):
+        """複製當前資料庫中的觀點使用現象至本地端
+        
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/model_patterns.pkl'):
+            logging.info('Clone model patterns from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    *
+                FROM
+                    FCST_MODEL_PAT_MAP
+            """
+            data = pd.read_sql_query(sql, engine)
+            with open(f'{DATA_LOC}/model_patterns.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone model patterns from db finished')
+
+    def clean_db_cache(self):
+        """ 清除本地資料庫快取
         
         Parameters
         ----------
@@ -151,6 +374,11 @@ class MimosaDB:
         """
         self._clean_market_data()
         self._clean_markets()
+        self._clean_patterns()
+        self._clean_models()
+        self._clean_model_training_infos()
+        self._clean_model_markets()
+        self._clean_model_patters
 
     def get_markets(self):
         """get market IDs from DB.
@@ -173,62 +401,10 @@ class MimosaDB:
         list of PatternInfo
         
         """
-        engine = self._engine()
-        sql = f"""
-            SELECT
-                ptn.PATTERN_ID, mcr.FUNC_CODE, para.PARAM_CODE, para.PARAM_VALUE, mp.PARAM_TYPE
-            FROM
-                FCST_PAT AS ptn
-            LEFT JOIN
-                (
-                    SELECT 
-                        PATTERN_ID, MACRO_ID, PARAM_CODE, PARAM_VALUE
-                    FROM
-                        FCST_PAT_PARAM
-                ) AS para
-            ON ptn.PATTERN_ID=para.PATTERN_ID
-            LEFT JOIN
-                (
-                    SELECT
-                        MACRO_ID, FUNC_CODE
-                    FROM
-                        FCST_MACRO
-                ) AS mcr
-            ON ptn.MACRO_ID=mcr.MACRO_ID
-            LEFT JOIN
-                (
-                    SELECT
-                        MACRO_ID, PARAM_CODE, PARAM_TYPE
-                    FROM 
-                        FCST_MACRO_PARAM
-                ) AS mp
-            ON ptn.MACRO_ID=mp.MACRO_ID AND para.PARAM_CODE=mp.PARAM_CODE
-            ORDER BY ptn.PATTERN_ID, mcr.FUNC_CODE ASC;
-        """
-        data = pd.read_sql_query(sql, engine)
-        result = {}
-        for i in range(len(data)):
-            record = data.iloc[i]
-            pid = record['PATTERN_ID']
-            if pid in result:
-                continue
-            func = record['FUNC_CODE']
-            params = {}
-            ptn_record = data[data['PATTERN_ID'].values==pid]
-            for j in range(len(ptn_record)):
-                param_record = ptn_record.iloc[j]
-                param_type = param_record['PARAM_TYPE']
-                param_val = param_record['PARAM_VALUE']
-                if param_type == "int":
-                    param_val = int(param_record['PARAM_VALUE'])
-                elif param_type == "float":
-                    param_val = float(param_record['PARAM_VALUE'])
-                elif param_type == "string":
-                    param_val = str(param_record['PARAM_VALUE'])
-                params[param_record['PARAM_CODE']] = param_val
-            result[pid] = PatternInfo(pid, func, params)
-        result = [result[pid] for pid in result]
-        return result
+        self._clone_patterns()
+        with open(f'{DATA_LOC}/patterns.pkl', 'rb') as fp:
+            data = pickle.load(fp)
+        return data
 
     def _get_future_return_file(self, market_id: str) -> str:
         return f'{LOCAL_DB}/freturns/{market_id}.pkl'
@@ -397,25 +573,9 @@ class MimosaDB:
             IDs of models in DB
         
         """
-        engine = self._engine()
-        sql = f"""
-            SELECT
-                model.MODEL_ID
-            FROM
-                FCST_MODEL AS model
-            INNER JOIN
-                (
-                    SELECT 
-                        MODEL_ID, STATUS_CODE, END_DT
-                    FROM
-                        FCST_MODEL_EXECUTION
-                    WHERE
-                        STATUS_CODE='{ModelExecution.ADD_PREDICT}' AND 
-                        END_DT IS NOT NULL
-                ) AS me
-            ON model.MODEL_ID=me.MODEL_ID
-        """
-        data = pd.read_sql_query(sql, engine)['MODEL_ID'].values.tolist()
+        self._clone_models()
+        with open(f'{DATA_LOC}/models.pkl', 'rb') as fp:
+            data = pickle.load(fp)
         return data
 
     def get_model_info(self, model_id:str):
@@ -430,37 +590,29 @@ class MimosaDB:
         ModelInfo
         
         """
-        engine = self._engine()
-        sql = f"""
-            SELECT
-                MODEL_ID, TRAIN_START_DT, RETRAIN_CYCLE
-            FROM
-                FCST_MODEL
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        model_info = pd.read_sql_query(sql, engine)
+        self._clone_model_training_infos()
+        self._clone_model_markets()
+        self._clone_model_patterns()
         # TODO 若發生取不到資料的情況
-        train_begin = model_info.iloc[0]['TRAIN_START_DT']
-        train_gap = model_info.iloc[0]['RETRAIN_CYCLE']
-        sql = f"""
-            SELECT
-                MARKET_CODE
-            FROM
-                FCST_MODEL_MKT_MAP
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        markets = pd.read_sql_query(sql, engine)['MARKET_CODE'].values.tolist()
-        sql = f"""
-            SELECT
-                PATTERN_ID
-            FROM
-                FCST_MODEL_PAT_MAP
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        patterns = pd.read_sql_query(sql, engine)['PATTERN_ID'].values.tolist()
+        # 取得觀點的訓練資訊
+        with open(f'{DATA_LOC}/model_infos.pkl', 'rb') as fp:
+            model_info = pickle.load(fp)
+        m_cond = model_info['MODEL_ID'].values == model_id
+        train_begin = model_info[m_cond].iloc[0]['TRAIN_START_DT']
+        train_gap = model_info[m_cond].iloc[0]['RETRAIN_CYCLE']
+
+        # 取得觀點的所有標的市場
+        with open(f'{DATA_LOC}/model_markets.pkl', 'rb') as fp:
+            markets = pickle.load(fp)
+        m_cond = markets['MODEL_ID'].values == model_id
+        markets = markets[m_cond]['MARKET_CODE'].values.tolist()
+
+        # 取得觀點所有使用的現象 ID
+        with open(f'{DATA_LOC}/model_patterns.pkl', 'rb') as fp:
+            patterns = pickle.load(fp)
+        m_cond = patterns['MODEL_ID'].values == model_id
+        patterns = patterns[m_cond]['PATTERN_ID'].values.tolist()
+
         result = ModelInfo(model_id, patterns, markets, train_begin, train_gap)
         return result
 
