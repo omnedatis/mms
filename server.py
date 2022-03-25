@@ -59,7 +59,7 @@ def api_batch():
     
     return {"status":"ok"}
 
-@app.route("/model/", methods=["POST"])
+@app.route("/model", methods=["POST"])
 def api_add_model():
     """ Create new model. """
     excute_id = datetime.datetime.now()
@@ -73,7 +73,7 @@ def api_add_model():
     t.start()
     return {"status":"ok", "model_id":model_id}
 
-@app.route("/model/removal", methods=["POST"])
+@app.route("/model", methods=["DELETE"])
 def api_remove_model():
     """ Remove model. """
     excute_id = datetime.datetime.now()
