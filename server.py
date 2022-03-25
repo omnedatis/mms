@@ -35,6 +35,7 @@ from const import BATCH_EXE_CODE
 from dao import MimosaDB
 from flask import Flask, request
 from waitress import serve
+from werkzeug.exceptions import MethodNotAllowed, NotFound
 
 logger = logging.getLogger('waitress')
 logger.setLevel(logging.INFO)   
@@ -57,35 +58,55 @@ def api_batch():
     t = mt.Thread(target=batch, arg=(excute_id, logger))
     t.start()
     
-    return {"status":"ok"}
+    return {"status":202, "message":"accepted", "data":None, "request_form":None}
 
 @app.route("/model", methods=["POST"])
 def api_add_model():
     """ Create new model. """
     excute_id = datetime.datetime.now()
     logger.info(f"api_add_model {excute_id} start, receiving: {request.form}")
-    model_id = request.form.get('modelId')
+    try:
+        model_id = request.form['modelId']
+    except KeyError as esp:
+        return {"status":400, 
+                "request_form":request.form, 
+                "message":"Invalid request argument", 
+                "data":None}
     def _add_model(model_id):
         add_model(model_id)
         logger.info(f"api_add_model {excute_id} complete")
         return
     t = mt.Thread(target=_add_model, args=(model_id,))
     t.start()
-    return {"status":"ok", "model_id":model_id}
+    return {"status":202, "request_form":request.form, "message":"accepted", "data":None}
 
 @app.route("/model", methods=["DELETE"])
 def api_remove_model():
     """ Remove model. """
     excute_id = datetime.datetime.now()
     logger.info(f"api_remove_model {excute_id} receiving: {request.form}")
-    model_id = request.form.get('modelId')
+    try:
+        model_id = request.form['modelId']
+    except KeyError as esp:
+        return {"status":400, 
+                "request_form":request.form, 
+                "message":"Invalid request argument", 
+                "data":None}
     def _remove_model(model_id):
         remove_model(model_id)
         logger.info(f"api_remove_model {excute_id} complete")
         return
     t = mt.Thread(target=_remove_model, args=(model_id,))
     t.start()
-    return {"status":"ok", "model_id":model_id}
+    return {"status":202, "request_form":request.form, "message":"accepted", "data":None}
+
+@app.errorhandler(MethodNotAllowed)
+def handle_not_allow_request(e):
+    return {"status":405, "message":"Method not allowed", "request_form":request.form, "data":None}
+
+@app.errorhandler(NotFound)
+def handle_not_allow_request(e):
+    return {"status":404, "message":"Not Found", "request_form":request.form, "data":None}
 
 if __name__ == '__main__':
     set_db(MimosaDB())
