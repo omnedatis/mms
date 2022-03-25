@@ -1397,8 +1397,8 @@ def get_pattern_stats_info(pattern, freturn, market):
                 market_dist[MarketDistField.RETURN_MEAN.value].append(
                 np.mean(ret_occur))
             else:
-                market_dist[MarketDistField.RETURN_STD.value].append(None)
-                market_dist[MarketDistField.RETURN_MEAN.value].append(None)
+                market_dist[MarketDistField.RETURN_STD.value].append(np.nan)
+                market_dist[MarketDistField.RETURN_MEAN.value].append(np.nan)
             market_dist[MarketDistField.MARKET_ID.value].append(market)
             market_dist[MarketDistField.PATTERN_ID.value].append(pname)
             market_dist[MarketDistField.DATE_PERIOD.value].append(
