@@ -614,7 +614,7 @@ class MimosaDB:
         self._clone_model_patterns()
         # TODO 若發生取不到資料的情況
         # 取得觀點的訓練資訊
-        with open(f'{DATA_LOC}/model_infos.pkl', 'rb') as fp:
+        with open(f'{DATA_LOC}/model_training_infos.pkl', 'rb') as fp:
             model_info = pickle.load(fp)
         m_cond = model_info['MODEL_ID'].values == model_id
         train_begin = model_info[m_cond].iloc[0]['TRAIN_START_DT']
@@ -782,7 +782,23 @@ class MimosaDB:
             ID of model execution status
 
         """
+        # 檢查是否為合法的 exection
+        if exection not in ModelExecution:
+            raise Exception(f"Unknown excetion code {exection}")
+
         engine = self._engine()
+        # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB 
+        # 若是要儲存 AP 或是 AB, 那麼資料庫中就不應該已存在 AP 或 AB
+        # 因此要先清除原先的執行紀錄
+        if exection in [
+            ModelExecution.ADD_PREDICT.value,
+            ModelExecution.ADD_BACKTEST.value]:
+            sql = f"""
+                DELETE FROM FCST_MODEL_EXECUTION 
+                WHERE MODEL_ID='{model_id}' AND STATUS_CODE='{exection}'
+            """
+            engine.execute(sql)
+
         # 取得 EXEC_ID
         sql = f"CALL SP_GET_SERIAL_NO('EXEC_ID', @EXEC_ID)"
         with engine.begin() as db_conn:
