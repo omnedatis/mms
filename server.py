@@ -22,6 +22,7 @@ Batch api call could fail to execute if the previous controller
 
 has not yet being released.
 """
+import argparse
 import os
 import threading as mt
 import logging
@@ -39,7 +40,11 @@ logger = logging.getLogger('waitress')
 logger.setLevel(logging.INFO)   
 app =  Flask(__name__)
 
-
+parser = argparse.ArgumentParser(prog="Program start server")
+parser.add_argument("--init", action='store_true')
+parser.add_argument("--motionless", "-ml", action='store_true', default=False)
+parser.add_argument("--batchless", "-bl", action='store_true', default=False)
+args = parser.parse_args()
 
 @app.route("/model/batch", methods=["GET"])
 def api_batch():
@@ -85,10 +90,12 @@ def api_remove_model():
 if __name__ == '__main__':
     set_db(MimosaDB())
     set_market_data_provider(MarketDataFromDb())
-    if not os.path.exists('./_local_db'):
+    if not os.path.exists('./_local_db') or args.init:
         init_db()
-    excute_id = datetime.datetime.now()
-    t = mt.Thread(target=batch, args=(excute_id, logger))
-    t.start()
-    serve(app, port=5000)
+    if (not args.motionless) and (not args.batchless):
+        excute_id = datetime.datetime.now()
+        t = mt.Thread(target=batch, args=(excute_id, logger))
+        t.start()
+    if not args.motionless:
+        serve(app, port=5000)
     
