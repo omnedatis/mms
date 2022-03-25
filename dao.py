@@ -71,7 +71,7 @@ class MimosaDB:
             files = os.listdir(f'{DATA_LOC}/markets')
             for file in files:
                 os.remove(f'{DATA_LOC}/markets/{file}')
-            os.remove(f'{DATA_LOC}/markets')
+            os.rmdir(f'{DATA_LOC}/markets')
 
     def _clone_market_data(self):
         """ 複製當前資料庫中的市場歷史資料至本地端
@@ -1080,14 +1080,14 @@ class MimosaDB:
         create_dt = now
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
-        data_mean = data[MarketDistField.RETURN_MEAN].values * 100
-        data_std = data[MarketDistField.RETURN_STD].values * 100
+        data_mean = data[MarketDistField.RETURN_MEAN.value].values * 100
+        data_std = data[MarketDistField.RETURN_STD.value].values * 100
         
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketDistField.PATTERN_ID, 
-            MarketDistField.MARKET_ID, MarketDistField.DATE_PERIOD]]
-        data[MarketDistField.RETURN_MEAN] = data_mean
-        data[MarketDistField.RETURN_STD] = data_std
+            'CREATE_BY', 'CREATE_DT', MarketDistField.PATTERN_ID.value, 
+            MarketDistField.MARKET_ID.value, MarketDistField.DATE_PERIOD.value]]
+        data[MarketDistField.RETURN_MEAN.value] = data_mean
+        data[MarketDistField.RETURN_STD.value] = data_std
         
         # 刪除現有資料庫
         sql = "DELETE FROM FCST_PAT_MKT_DIST"
