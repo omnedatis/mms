@@ -718,8 +718,9 @@ class MimosaDB:
             PredictResultField.PERIOD.value])
         latest_data = []
         for group_i, group in group_data:
+            max_date = np.max(group[PredictResultField.DATE.value].values)
             latest_data.append(
-                group.sort_values(PredictResultField.DATE.value, ascending=False)[:1])
+                group[group[PredictResultField.DATE.value].values == max_date])
         latest_data = pd.concat(latest_data, axis=0)
         latest_data.to_sql(
             'FCST_MODEL_MKT_VALUE', 
