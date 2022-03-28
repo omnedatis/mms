@@ -578,7 +578,7 @@ class MimosaDB:
             SELECT
                 MARKET_CODE, MIN(DATA_DATE) AS DATA_DATE
             FROM
-                FCST_MODEL_MKT_VALUE
+                FCST_MODEL_MKT_VALUE_HISTORY
             WHERE
                 MODEL_ID='{model_id}'
             GROUP BY
@@ -666,54 +666,13 @@ class MimosaDB:
         """
         engine.execute(sql)
         
-        
-        # DEL FCST_MODEL_USER_MAP
+        # DEL FCST_MODEL_MKT_VALUE_HISTORY
         sql = f"""
-            DELETE FROM FCST_MODEL_USER_MAP
+            DELETE FROM FCST_MODEL_MKT_VALUE_HISTORY
             WHERE
                 MODEL_ID='{model_id}'
         """
-        # engine.execute(sql)
-
-        # DEL FCST_MODEL_PAT_MAP
-        sql = f"""
-            DELETE FROM FCST_MODEL_PAT_MAP
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        # engine.execute(sql)
-
-        # DEL FCST_MODEL_MKT_MAP
-        sql = f"""
-            DELETE FROM FCST_MODEL_MKT_MAP
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        # engine.execute(sql)
-
-        # DEL FCST_WATCHLIST_MODEL_MAP
-        sql = f"""
-            DELETE FROM FCST_WATCHLIST_MODEL_MAP
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        # engine.execute(sql)
-
-        # DEL FCST_MODEL_EXEC
-        sql = f"""
-            DELETE FROM FCST_MODEL_EXEC
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        # engine.execute(sql)
-
-        # DEL FCST_MODEL
-        sql = f"""
-            DELETE FROM FCST_MODEL
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        # engine.execute(sql)
+        engine.execute(sql)
 
     def save_model_results(self, model_id:str, data:pd.DataFrame):
         """Save modle predicting results to DB.
@@ -746,8 +705,23 @@ class MimosaDB:
         data['CREATE_BY'] = self.CREATE_BY
         data['CREATE_DT'] = create_dt
 
+        # 新增最新預測結果
+        sql = f"""
+            DELETE FROM FCST_MODEL_MKT_VALUE
+            WHERE
+                MODEL_ID='{model_id}'
+        """
+        engine.execute(sql)
         data.to_sql(
             'FCST_MODEL_MKT_VALUE', 
+            engine, 
+            if_exists='append', 
+            chunksize=1000,
+            index=False)
+
+        # 新增歷史預測結果
+        data.to_sql(
+            'FCST_MODEL_MKT_VALUE_HISTORY', 
             engine, 
             if_exists='append', 
             chunksize=1000,
