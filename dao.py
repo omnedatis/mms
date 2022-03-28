@@ -601,6 +601,7 @@ class MimosaDB:
             IDs of models in DB
         
         """
+        self._clean_models()
         self._clone_models()
         with open(f'{DATA_LOC}/models.pkl', 'rb') as fp:
             data = pickle.load(fp)
@@ -618,6 +619,9 @@ class MimosaDB:
         ModelInfo
         
         """
+        self._clean_model_training_infos()
+        self._clean_model_markets()
+        self._clean_model_patterns()
         self._clone_model_training_infos()
         self._clone_model_markets()
         self._clone_model_patterns()
