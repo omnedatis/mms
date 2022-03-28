@@ -5,6 +5,7 @@ Created on Tue March 8 17:07:36 2021
 """
 
 import datetime
+import logging
 import os
 import shutil
 from threading import Lock
@@ -19,6 +20,12 @@ from sklearn.tree import DecisionTreeClassifier as Dtc
 from const import *
 from utils import *
 from func._tp import *
+
+# 設定 logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(lineno)s - %(levelname)s - %(message)s')
+
 db = None
 
 
@@ -1422,6 +1429,7 @@ def init_db():
 
 
 def batch(excute_id, logger):
+    logging.info("batch start")
     controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     try:
         if controller.isactive:
@@ -1435,5 +1443,7 @@ def batch(excute_id, logger):
             MT_MANAGER.release(BATCH_EXE_CODE)
 
     except Exception as esp:
+        logging.info("batch failed")
         MT_MANAGER.release(BATCH_EXE_CODE)
         raise esp
+    logging.info("batch finished")
