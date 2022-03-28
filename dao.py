@@ -720,7 +720,7 @@ class MimosaDB:
         for group_i, group in group_data:
             latest_data.append(
                 group.sort_values(PredictResultField.DATE.value, ascending=False)[:1])
-        latest_data = pd.concat(latest_data, axis=0).reset_index()
+        latest_data = pd.concat(latest_data, axis=0)
         latest_data.to_sql(
             'FCST_MODEL_MKT_VALUE', 
             engine, 
