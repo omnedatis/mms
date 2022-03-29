@@ -1118,15 +1118,19 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
-
+    
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
         return
-    model = get_model_info(model_id)
-    model_create(model, controller)
-    model_backtest(model, controller)
-    MT_MANAGER.release(model_id)
+    try:
+        model = get_model_info(model_id)
+        model_create(model, controller)
+        model_backtest(model, controller)
+        MT_MANAGER.release(model_id)
+    except Exception as esp:
+        MT_MANAGER.release(model_id)
+        return
 
 
 def model_recover(model_id: str, status: ModelStatus):
