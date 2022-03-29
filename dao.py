@@ -5,6 +5,7 @@ import os
 import numpy as np
 import pandas as pd
 import pickle
+import traceback
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
@@ -674,7 +675,102 @@ class MimosaDB:
         """
         engine.execute(sql)
 
-    def save_model_results(self, model_id:str, data:pd.DataFrame):
+    def save_model_latest_results(self, model_id:str, data:pd.DataFrame):
+        """Save modle latest predicting results to DB.
+        
+        Parameters
+        ----------
+        model_id: str
+            ID of model.
+        data: Pandas's DataFrame
+            A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each 
+            predicting period as p.
+        
+        """
+        logging.info('start saving model latest results')
+        engine = self._engine()
+
+        # 製作儲存結構
+        now = datetime.datetime.now()
+        py = data[PredictResultField.PREDICT_VALUE.value].values * 100
+        upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
+        lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
+
+        data = data[[
+            PredictResultField.MODEL_ID.value,
+            PredictResultField.MARKET_ID.value,
+            PredictResultField.DATE.value,
+            PredictResultField.PERIOD.value
+            ]]
+        data[PredictResultField.PREDICT_VALUE.value] = py
+        data[PredictResultField.UPPER_BOUND.value] = upper_bound
+        data[PredictResultField.LOWER_BOUND.value] = lower_bound
+        create_dt = now
+        data['CREATE_BY'] = self.CREATE_BY
+        data['CREATE_DT'] = create_dt
+
+        # 移除傳入預測結果中較舊的預測結果
+        group_data = data.groupby([
+            PredictResultField.MODEL_ID.value, 
+            PredictResultField.MARKET_ID.value, 
+            PredictResultField.PERIOD.value])
+        latest_data = []
+        for group_i, group in group_data:
+            max_date = np.max(group[PredictResultField.DATE.value].values)
+            latest_data.append(
+                group[group[PredictResultField.DATE.value].values == max_date])
+        latest_data = pd.concat(latest_data, axis=0)
+
+        # 新增最新預測結果
+        # 合併現有的資料預測結果與當前的預測結果
+        sql = f"""
+            SELECT 
+                CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE, 
+                DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND 
+            FROM 
+                FCST_MODEL_MKT_VALUE
+            WHERE
+                MODEL_ID='{model_id}'
+        """
+        db_data = pd.read_sql_query(sql, engine)
+        union_data = pd.concat([db_data, latest_data], axis=0)
+
+        # 移除完全重複的預測結果
+        union_data.drop_duplicates(subset=[
+            PredictResultField.MODEL_ID.value,
+            PredictResultField.MARKET_ID.value,
+            PredictResultField.PERIOD.value,
+            PredictResultField.DATE.value
+            ])
+
+        # 移除較舊的預測結果
+        group_data = union_data.groupby([
+            PredictResultField.MODEL_ID.value, 
+            PredictResultField.MARKET_ID.value, 
+            PredictResultField.PERIOD.value])
+        latest_data = []
+        for group_i, group in group_data:
+            max_date = np.max(group[PredictResultField.DATE.value].values)
+            latest_data.append(
+                group[group[PredictResultField.DATE.value].values == max_date])
+        latest_data = pd.concat(latest_data, axis=0)
+
+        # 開始儲存
+        sql = f"""
+            DELETE FROM FCST_MODEL_MKT_VALUE
+            WHERE
+                MODEL_ID='{model_id}'
+        """
+        engine.execute(sql)
+        latest_data.to_sql(
+            'FCST_MODEL_MKT_VALUE', 
+            engine, 
+            if_exists='append', 
+            chunksize=1000,
+            index=False)
+        logging.info('Saving model latest results finished')
+
+    def save_model_results(self, model_id:str, data:pd.DataFrame, also_save_latest_results: bool=False):
         """Save modle predicting results to DB.
         
         Parameters
@@ -686,6 +782,10 @@ class MimosaDB:
             predicting period as p.
         
         """
+        if also_save_latest_results:
+            self.save_model_latest_results(model_id, data.copy())
+        logging.info('start saving model results')
+        # 製作儲存結構
         now = datetime.datetime.now()
         engine = self._engine()
         py = data[PredictResultField.PREDICT_VALUE.value].values * 100
@@ -705,37 +805,18 @@ class MimosaDB:
         data['CREATE_BY'] = self.CREATE_BY
         data['CREATE_DT'] = create_dt
 
-        # 新增最新預測結果
-        sql = f"""
-            DELETE FROM FCST_MODEL_MKT_VALUE
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        engine.execute(sql)
-        group_data = data.groupby([
-            PredictResultField.MODEL_ID.value, 
-            PredictResultField.MARKET_ID.value, 
-            PredictResultField.PERIOD.value])
-        latest_data = []
-        for group_i, group in group_data:
-            max_date = np.max(group[PredictResultField.DATE.value].values)
-            latest_data.append(
-                group[group[PredictResultField.DATE.value].values == max_date])
-        latest_data = pd.concat(latest_data, axis=0)
-        latest_data.to_sql(
-            'FCST_MODEL_MKT_VALUE', 
-            engine, 
-            if_exists='append', 
-            chunksize=1000,
-            index=False)
-
         # 新增歷史預測結果
-        data.to_sql(
-            'FCST_MODEL_MKT_VALUE_HISTORY', 
-            engine, 
-            if_exists='append', 
-            chunksize=1000,
-            index=False)
+        try:
+            data.to_sql(
+                'FCST_MODEL_MKT_VALUE_HISTORY', 
+                engine, 
+                if_exists='append', 
+                chunksize=1000,
+                index=False)
+        except Exception as e:
+            logging.info('Saving model results failed')
+            logging.error(traceback.format_exc())
+        logging.info('Saving model results finished')
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
         """Get market data from the designated date to the latest from DB.
