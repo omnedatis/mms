@@ -387,7 +387,7 @@ def del_model_data(model_id):
     return result
 
 
-def save_model_results(model_id, data):
+def save_model_results(model_id, data, also_save_latest=False):
     """Save modle predicting results to DB.
 
     Parameters
@@ -400,7 +400,7 @@ def save_model_results(model_id, data):
 
     """
     db = get_db()
-    result = db.save_model_results(model_id, data)
+    result = db.save_model_results(model_id, data, also_save_latest)
     return result
 
 
@@ -1095,7 +1095,7 @@ def model_update(model_id: str, batch_controller: ThreadController):
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
         if controller.isactive:
-            save_model_results(model.model_id, ret)
+            save_model_results(model.model_id, ret, True)
     if controller.isactive:
         set_model_execution_complete(exection_id)
     MT_MANAGER.release(model_id)
@@ -1225,7 +1225,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
         if controller.isactive:
-            save_model_results(model.model_id, ret)
+            save_model_results(model.model_id, ret, True)
     if controller.isactive:
         set_model_execution_complete(exection_id)
 
