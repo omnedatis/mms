@@ -56,7 +56,7 @@ def api_batch():
     time.sleep(10)
     excute_id = datetime.datetime.now()
 
-    t = mt.Thread(target=batch, arg=(excute_id, logger))
+    t = mt.Thread(target=batch, args=(excute_id, logger))
     t.start()
     
     return {"status":202, "message":"accepted", "data":None}
@@ -107,7 +107,7 @@ def handle_not_allow_request(e):
 
 @app.errorhandler(NotFound)
 def handle_not_allow_request(e):
-    return {"status":404, "message":"Not Found", "data":json.loads(request.data)}
+    return {"status":404, "message":"Not Found", "data":None}
 
 if __name__ == '__main__':
     set_db(MimosaDB())
