@@ -60,7 +60,7 @@ def _get_market_data(market_id: str):
     ret = MarketData(cp=cp, lp=lp, hp=hp, op=op)
     return ret
 
-def get_market_data(market_id: str, _cache={}):
+def get_market_data(market_id: str):
     """Get data of the designated market.
 
     Parameters
@@ -73,9 +73,7 @@ def get_market_data(market_id: str, _cache={}):
     MarketData
 
     """
-    if market_id not in _cache:
-        _cache[market_id] = _get_market_data(market_id)
-    return _cache[market_id]
+    return _get_market_data(market_id)
 
 def get_op(market_id: str):
     """Get opening price of the designated market.
