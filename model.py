@@ -14,6 +14,7 @@ from typing import Any, List, Optional, NamedTuple, Dict
 # from collections import namedtuple
 import numpy as np
 import pandas as pd
+from pexpect import ExceptionPexpect
 from scipy.stats.distributions import norm
 from sklearn.tree import DecisionTreeClassifier as Dtc
 
@@ -1158,12 +1159,15 @@ def model_recover(model_id: str, status: ModelStatus):
     if not controller.isactive:
         MT_MANAGER.release(model_id)
         return
-    model = get_model_info(model_id)
-    if status < ModelStatus.CREATED:
-        model_create(model, controller)
-    model_backtest(model, controller)
-    MT_MANAGER.release(model_id)
+    try:
+        model = get_model_info(model_id)
+        if status < ModelStatus.CREATED:
+            model_create(model, controller)
+        model_backtest(model, controller)
+        MT_MANAGER.release(model_id)
 
+    except Exception as esp:
+        MT_MANAGER.release(model_id)
 
 def remove_model(model_id):
     """移除模型
@@ -1443,6 +1447,7 @@ def batch(excute_id, logger):
             pattern_update(controller)
             for model in get_models():
                 model_update(model, controller)
+            model_execution_recover()
             logger.info(f"api_batch {excute_id} complete")
             MT_MANAGER.release(BATCH_EXE_CODE)
 
