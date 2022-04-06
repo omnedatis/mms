@@ -93,7 +93,7 @@ class MimosaDB:
                 SELECT
                     MARKET_CODE, PRICE_DATE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE
                 FROM
-                    FCST_MKT_PRICE_HISTORY
+                    FCST_MKT_PRICE_HISTORY_SWAP
             """
             data = pd.read_sql_query(sql, engine)
             result = pd.DataFrame(
