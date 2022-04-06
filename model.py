@@ -388,7 +388,7 @@ def del_model_data(model_id):
     return result
 
 
-def save_model_results(model_id, data, also_save_latest=False):
+def save_model_results(model_id, data, exec_type: ModelExecution):
     """Save modle predicting results to DB.
 
     Parameters
@@ -401,7 +401,7 @@ def save_model_results(model_id, data, also_save_latest=False):
 
     """
     db = get_db()
-    result = db.save_model_results(model_id, data, also_save_latest)
+    result = db.save_model_results(model_id, data, exec_type)
     return result
 
 
@@ -1096,7 +1096,7 @@ def model_update(model_id: str, batch_controller: ThreadController):
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
         if controller.isactive:
-            save_model_results(model.model_id, ret, True)
+            save_model_results(model.model_id, ret, ModelExecution.BATCH_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
     MT_MANAGER.release(model_id)
@@ -1233,7 +1233,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
         if controller.isactive:
-            save_model_results(model.model_id, ret, True)
+            save_model_results(model.model_id, ret, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
 
@@ -1308,7 +1308,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
             if not controller.isactive:
                 return
             # 將此輪所有市場的回測結果上傳至DB
-            save_model_results(model.model_id, ret)
+            save_model_results(model.model_id, ret, ModelExecution.ADD_BACKTEST)
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
