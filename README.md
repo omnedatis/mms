@@ -7,8 +7,8 @@ cd workspace_path
 conda activate py_cal
 python server.py [-bl] [-ml]
 ```
-bl: 啟動但不於啟動當下執行一次批次
-ml: 不啟動 Server
+bl: 啟動但不於啟動當下執行一次批次  
+ml: 不啟動 Server  
 
 ## Overview
 這個專案主要提供 Mimosa 的主網站後台運算服務, 其中包含
@@ -18,13 +18,13 @@ ml: 不啟動 Server
  - Python Server 的各項功能, 包含: 新增觀點, 刪除觀點
 
 ## Installation
-安裝的方法需搭配 [Miniconda](https://docs.conda.io/en/latest/miniconda.html) 進行安裝
-Mimoconda 安裝完成後, 使用以下指令建立 Pyhton 環境
+安裝的方法需搭配 [Miniconda](https://docs.conda.io/en/latest/miniconda.html) 進行安裝  
+Mimoconda 安裝完成後, 使用以下指令建立 Pyhton 環境  
 ```
 cd workspace_path
 conda env create --file requirements.yml
 ```
-預設建立的環境名稱為`py_cal`, 若有需要則可以更改
+預設建立的環境名稱為`py_cal`, 若有需要則可以更改  
 
 ## Copyright and Licenses
 Code and documentation copyright 2022 Softbi, Inc.
