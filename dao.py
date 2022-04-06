@@ -675,7 +675,8 @@ class MimosaDB:
         """
         engine.execute(sql)
 
-    def save_model_latest_results(self, model_id:str, data:pd.DataFrame):
+    def save_model_latest_results(self, model_id:str, data:pd.DataFrame, 
+                                  exec_type:ModelExecution):
         """Save modle latest predicting results to DB.
         
         Parameters
@@ -685,9 +686,19 @@ class MimosaDB:
         data: Pandas's DataFrame
             A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each 
             predicting period as p.
+        exec_type: ModelExecution
+            Allow enum: ADD_PREDICT, ADD_BACKTEST, BATCH_PREDICT
         
         """
         logging.info('start saving model latest results')
+        table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
+        if exec_type == ModelExecution.ADD_PREDICT:
+            table_name = 'FCST_MODEL_MKT_VALUE'
+        elif exec_type == ModelExecution.BATCH_PREDICT:
+            table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
+        else:
+            logging.error(f'Unknown execution type: {exec_type}')
+            return -1
         engine = self._engine()
 
         # 製作儲存結構
@@ -728,7 +739,7 @@ class MimosaDB:
                 CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE, 
                 DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND 
             FROM 
-                FCST_MODEL_MKT_VALUE
+                {table_name}
             WHERE
                 MODEL_ID='{model_id}'
         """
@@ -757,20 +768,41 @@ class MimosaDB:
 
         # 開始儲存
         sql = f"""
-            DELETE FROM FCST_MODEL_MKT_VALUE
+            DELETE FROM {table_name}
             WHERE
                 MODEL_ID='{model_id}'
         """
         engine.execute(sql)
         latest_data.to_sql(
-            'FCST_MODEL_MKT_VALUE', 
+            table_name, 
             engine, 
             if_exists='append', 
             chunksize=1000,
             index=False)
         logging.info('Saving model latest results finished')
+        if exec_type == ModelExecution.BATCH_PREDICT:
+            self._checkout_fcst_data()
 
-    def save_model_results(self, model_id:str, data:pd.DataFrame, also_save_latest_results: bool=False):
+    def _checkout_fcst_data(self):
+        """ 切換系統中的呈現資料位置
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        logging.info('start checkout FCST data')
+        engine = self._engine()
+        sql = f"CALL SP_SWAP_FCST()"
+        with engine.begin() as db_conn:
+            db_conn.execute(sql)
+        logging.info('Checkout FCST data finished')
+
+    def save_model_results(self, model_id:str, data:pd.DataFrame, 
+                           exec_type: ModelExecution=ModelExecution.ADD_BACKTEST):
         """Save modle predicting results to DB.
         
         Parameters
@@ -780,10 +812,13 @@ class MimosaDB:
         data: Pandas's DataFrame
             A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each 
             predicting period as p.
+        exec_type: ModelExecution
+            Allow enum: ADD_PREDICT, ADD_BACKTEST, BATCH_PREDICT
         
         """
-        if also_save_latest_results:
-            self.save_model_latest_results(model_id, data.copy())
+        if (exec_type == ModelExecution.ADD_PREDICT or 
+            exec_type == ModelExecution.BATCH_PREDICT):
+            self.save_model_latest_results(model_id, data.copy(), exec_type)
         logging.info('start saving model results')
         # 製作儲存結構
         now = datetime.datetime.now()
