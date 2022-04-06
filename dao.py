@@ -1077,7 +1077,7 @@ class MimosaDB:
             SELECT
                 {PatternResultField.PATTERN_ID.value}, {PatternResultField.MARKET_ID.value}
             FROM
-                FCST_PAT_MKT_EVENT
+                FCST_PAT_MKT_EVENT_SWAP
         """
         prev_records = pd.read_sql_query(sql, engine)
         deprecated_records = pd.concat([
@@ -1097,7 +1097,7 @@ class MimosaDB:
             
             sql = f"""
                 DELETE FROM
-                    FCST_PAT_MKT_EVENT
+                    FCST_PAT_MKT_EVENT_SWAP
                 WHERE
                     ({PatternResultField.PATTERN_ID.value}, {PatternResultField.MARKET_ID.value})
                 IN
@@ -1203,12 +1203,12 @@ class MimosaDB:
         data[MarketDistField.RETURN_STD.value] = data_std
         
         # 刪除現有資料庫
-        sql = "DELETE FROM FCST_PAT_MKT_DIST"
+        sql = "DELETE FROM FCST_PAT_MKT_DIST_SWAP"
         engine.execute(sql)
 
         # 新增最新資料
         data.to_sql(
-            'FCST_PAT_MKT_DIST', 
+            'FCST_PAT_MKT_DIST_SWAP', 
             engine, 
             if_exists='append', 
             chunksize=1000,
@@ -1238,12 +1238,12 @@ class MimosaDB:
         data['CREATE_DT'] = create_dt
         
         # 刪除現有資料庫
-        sql = "DELETE FROM FCST_PAT_MKT_OCCUR"
+        sql = "DELETE FROM FCST_PAT_MKT_OCCUR_SWAP"
         engine.execute(sql)
 
         # 新增最新資料
         data.to_sql(
-            'FCST_PAT_MKT_OCCUR', 
+            'FCST_PAT_MKT_OCCUR_SWAP', 
             engine, 
             if_exists='append', 
             chunksize=1000,
