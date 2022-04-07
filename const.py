@@ -15,6 +15,7 @@ DATA_LOC = '_data'
 MIN_Y_SAMPLES = 30
 Y_OUTLIER = 0.05
 BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
+QUEUE_LIMIT = 2
 
 class PredictResultField(Enum):
     """Fields of predict result table on DB.

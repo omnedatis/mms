@@ -8,7 +8,7 @@ import datetime
 import logging
 import os
 import shutil
-from threading import Lock
+from threading import Lock, Semaphore
 import time
 from typing import Any, List, Optional, NamedTuple, Dict
 # from collections import namedtuple
@@ -29,6 +29,7 @@ logging.basicConfig(
 
 db = None
 
+model_semaphore = Semaphore(QUEUE_LIMIT)
 
 def get_db():
     return db
@@ -1119,18 +1120,21 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
-    
+    model_semaphore.acquire()
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
+        model_semaphore.release()
         return
     try:
         model = get_model_info(model_id)
         model_create(model, controller)
         model_backtest(model, controller)
         MT_MANAGER.release(model_id)
+        model_semaphore.release()
     except Exception as esp:
         MT_MANAGER.release(model_id)
+        model_semaphore.release()
         return
 
 
