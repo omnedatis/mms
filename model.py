@@ -279,6 +279,16 @@ def get_earliest_dates(model_id):
     return result
 
 
+def checkout_fcst_data():
+    """Save pattern occured info
+
+    Parameters
+    ----------
+    None.
+    """
+    db = get_db()
+    db.checkout_fcst_data()
+
 class ModelInfo():
     """Model Info.
 
@@ -1448,6 +1458,7 @@ def batch(excute_id, logger):
             logger.info(f"api_batch {excute_id} start")
             clean_db_cache()
             clone_db_cache()
+            checkout_fcst_data()
             pattern_update(controller)
             for model in get_models():
                 model_update(model, controller)
