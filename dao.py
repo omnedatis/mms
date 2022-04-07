@@ -40,7 +40,7 @@ class MimosaDB:
             load the configuration
             """
             current_path = os.path.split(os.path.realpath(__file__))[0]
-            config = json.load(open('%s/config'%(current_path)))[db_name][mode]
+            config = json.load(open('%s/config.json'%(current_path)))[db_name][mode]
             return config
         self.config = init_config()
         self._local_db_lock = Lock()

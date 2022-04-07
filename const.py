@@ -17,6 +17,20 @@ Y_OUTLIER = 0.05
 BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
 QUEUE_LIMIT = 2
 
+class ExecMode(Enum):
+    """Fields of excution modes. """
+
+    DEV = "dev"
+    PROD = "prod"
+
+    @classmethod
+    def get(cls, value):
+        for each in cls:
+            if value == each.value:
+                return each
+        else:
+            return None
+            
 class PredictResultField(Enum):
     """Fields of predict result table on DB.
     

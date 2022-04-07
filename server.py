@@ -31,7 +31,7 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db,
  add_model, remove_model, MarketDataFromDb, MT_MANAGER)
-from const import BATCH_EXE_CODE
+from const import BATCH_EXE_CODE, ExecMode
 from dao import MimosaDB
 from flask import Flask, request
 from waitress import serve
@@ -46,6 +46,7 @@ parser = argparse.ArgumentParser(prog="Program start server")
 parser.add_argument("--init", action='store_true')
 parser.add_argument("--motionless", "-ml", action='store_true', default=False)
 parser.add_argument("--batchless", "-bl", action='store_true', default=False)
+parser.add_argument("--mode", "-md", action='store', default='dev')
 args = parser.parse_args()
 
 @app.route("/model/batch", methods=["GET"])
@@ -110,7 +111,11 @@ def handle_not_allow_request(e):
     return {"status":404, "message":"Not Found", "data":None}
 
 if __name__ == '__main__':
-    set_db(MimosaDB())
+    print(args)
+    mode = args.mode
+    if ExecMode.get(mode) is None:
+        raise RuntimeError(f'invalid execution mode {mode}')
+    set_db(MimosaDB(mode=mode))
     set_market_data_provider(MarketDataFromDb())
     if not os.path.exists('./_local_db') or args.init:
         init_db()

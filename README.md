@@ -5,10 +5,11 @@
 ```
 cd workspace_path
 conda activate py_cal
-python server.py [-bl] [-ml]
+python server.py [-bl] [-ml] [-md dev]
 ```
 bl: 啟動但不於啟動當下執行一次批次  
-ml: 不啟動 Server  
+ml: 不啟動 Server
+md: 執行環境參數 預設為 dev
 
 ## Overview
 這個專案主要提供 Mimosa 的主網站後台運算服務, 其中包含
