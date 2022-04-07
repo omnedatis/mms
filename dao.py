@@ -1041,13 +1041,13 @@ class MimosaDB:
             if (len(model_add_predict_info) == 0) and (len(model_add_predict_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_PREDICT))
             # ADD_PREDICT 未完成就掛掉
-            elif pd.isnull(model_add_predict_info.iloc[0]['END_DT']):
+            elif (len(model_add_predict_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_PREDICT))
             # ADD_BACKTEST 未建立就掛掉
             elif (len(model_add_backtest_info) == 0) and (len(model_add_backtest_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_BACKTEST))
             # ADD_BACKTEST 未完成就掛掉
-            elif pd.isnull(model_add_backtest_info.iloc[0]['END_DT']):
+            elif (len(model_add_backtest_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_BACKTEST))
         return results
 
