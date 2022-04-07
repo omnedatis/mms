@@ -780,10 +780,8 @@ class MimosaDB:
             chunksize=1000,
             index=False)
         logging.info('Saving model latest results finished')
-        if exec_type == ModelExecution.BATCH_PREDICT:
-            self._checkout_fcst_data()
 
-    def _checkout_fcst_data(self):
+    def checkout_fcst_data(self):
         """ 切換系統中的呈現資料位置
 
         Parameters
