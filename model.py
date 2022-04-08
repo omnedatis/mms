@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats.distributions import norm
 from sklearn.tree import DecisionTreeClassifier as Dtc
-
+import traceback
 from const import *
 from utils import *
 from func._tp import *
@@ -1144,6 +1144,8 @@ def add_model(model_id: str):
     except Exception as esp:
         MT_MANAGER.release(model_id)
         model_semaphore.release()
+        logging.error(f"add model failed ")
+        logging.error(traceback.format_exc())
         return
 
 
@@ -1180,6 +1182,8 @@ def model_recover(model_id: str, status: ModelStatus):
         MT_MANAGER.release(model_id)
 
     except Exception as esp:
+        logging.error(f"recover model failed")
+        logging.error(traceback.format_exc())
         MT_MANAGER.release(model_id)
 
 def remove_model(model_id):
@@ -1496,7 +1500,7 @@ def batch(excute_id):
             MT_MANAGER.release(BATCH_EXE_CODE)
 
     except Exception as esp:
-        logging.error(f"batch failed \n{esp}")
+        logging.error(f"batch failed")
+        logging.error(traceback.format_exc())
         MT_MANAGER.release(BATCH_EXE_CODE)
-        raise esp
     logging.info("batch finished")
