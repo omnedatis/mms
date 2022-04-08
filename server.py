@@ -25,9 +25,9 @@ has not yet being released.
 import argparse
 import os
 import threading as mt
-import logging
 import datetime
 import time
+from logkit import Logger
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db,
  add_model, remove_model, MarketDataFromDb, MT_MANAGER)
@@ -38,8 +38,12 @@ from waitress import serve
 from werkzeug.exceptions import MethodNotAllowed, NotFound
 import json
 
-logger = logging.getLogger('waitress')
-logger.setLevel(logging.INFO)   
+
+
+if not os.path.exists('./log'):
+    os.mkdir('./log')
+logging = Logger('./log/.log').logger
+
 app =  Flask(__name__)
 
 parser = argparse.ArgumentParser(prog="Program start server")
@@ -57,7 +61,7 @@ def api_batch():
     time.sleep(10)
     excute_id = datetime.datetime.now()
 
-    t = mt.Thread(target=batch, args=(excute_id, logger))
+    t = mt.Thread(target=batch, args=(excute_id,))
     t.start()
     
     return {"status":202, "message":"accepted", "data":None}
@@ -67,7 +71,7 @@ def api_add_model():
     """ Create new model. """
     excute_id = datetime.datetime.now()
     data = json.loads(request.data)
-    logger.info(f"api_add_model {excute_id} start, receiving: {data}")
+    logging.info(f"api_add_model {excute_id} start, receiving: {data}")
     try:
         model_id = data['modelId']
     except KeyError as esp:
@@ -76,7 +80,7 @@ def api_add_model():
                 "data":None}
     def _add_model(model_id):
         add_model(model_id)
-        logger.info(f"api_add_model {excute_id} complete")
+        logging.info(f"api_add_model {excute_id} complete")
         return
     t = mt.Thread(target=_add_model, args=(model_id,))
     t.start()
@@ -87,7 +91,7 @@ def api_remove_model():
     """ Remove model. """
     excute_id = datetime.datetime.now()
     data = json.loads(request.data)
-    logger.info(f"api_remove_model {excute_id} receiving: {data}")
+    logging.info(f"api_remove_model {excute_id} receiving: {data}")
     try:
         model_id = data['modelId']
     except KeyError as esp:
@@ -96,7 +100,7 @@ def api_remove_model():
                 "data":None}
     def _remove_model(model_id):
         remove_model(model_id)
-        logger.info(f"api_remove_model {excute_id} complete")
+        logging.info(f"api_remove_model {excute_id} complete")
         return
     t = mt.Thread(target=_remove_model, args=(model_id,))
     t.start()
@@ -111,7 +115,6 @@ def handle_not_allow_request(e):
     return {"status":404, "message":"Not Found", "data":None}
 
 if __name__ == '__main__':
-    print(args)
     mode = args.mode
     if ExecMode.get(mode) is None:
         raise RuntimeError(f'invalid execution mode {mode}')
@@ -121,7 +124,7 @@ if __name__ == '__main__':
         init_db()
     if (not args.motionless) and (not args.batchless):
         excute_id = datetime.datetime.now()
-        t = mt.Thread(target=batch, args=(excute_id, logger))
+        t = mt.Thread(target=batch, args=(excute_id,))
         t.start()
     if not args.motionless:
         serve(app, port=8080)

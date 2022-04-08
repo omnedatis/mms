@@ -1,6 +1,5 @@
 import datetime
 import json
-import logging
 import os
 import numpy as np
 import pandas as pd
@@ -16,10 +15,6 @@ from model import (ModelInfo, PatternInfo,
 from const import (LOCAL_DB, DATA_LOC,
                    MarketDistField, ModelExecution, PredictResultField, 
                    PatternResultField, ModelExecution)
-# 設定 logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(lineno)s - %(levelname)s - %(message)s')
 
     
 class MimosaDB:

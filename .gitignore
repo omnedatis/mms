@@ -11,6 +11,7 @@
 *.pickle
 _local_db
 _data
+log
 
 # python garbage
 __pycache__

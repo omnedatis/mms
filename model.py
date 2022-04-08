@@ -5,13 +5,11 @@ Created on Tue March 8 17:07:36 2021
 """
 
 import datetime
-import logging
 import os
 import shutil
 from threading import Lock, Semaphore
 import time
 from typing import Any, List, Optional, NamedTuple, Dict
-# from collections import namedtuple
 import numpy as np
 import pandas as pd
 from pexpect import ExceptionPexpect
@@ -21,11 +19,6 @@ from sklearn.tree import DecisionTreeClassifier as Dtc
 from const import *
 from utils import *
 from func._tp import *
-
-# 設定 logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(lineno)s - %(levelname)s - %(message)s')
 
 db = None
 
@@ -1081,22 +1074,27 @@ def model_update(model_id: str, batch_controller: ThreadController):
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
+        logging.info('model update terminated')
         return
     if not batch_controller.isactive:
         MT_MANAGER.release(model_id)
+        logging.info('batch terminated')
         return
     exection_id = set_model_execution_start(
         model_id, ModelExecution.BATCH_PREDICT)
     model = get_model_info(model_id)
+    logging.info(f'start model update on {model_id}')
     latest_dates = model.get_latest_dates()
     markets = model.markets if model.markets else get_markets()
     ret_buffer = []
     for mid in markets:
         if not controller.isactive:
             MT_MANAGER.release(model_id)
+            logging.info('model update terminated')
             return
         if not batch_controller.isactive:
             MT_MANAGER.release(model_id)
+            logging.info('batch terminated')
             return
         if mid in latest_dates:
             ret_buffer.append(model_predict(model, mid, latest_dates[mid],
@@ -1106,6 +1104,7 @@ def model_update(model_id: str, batch_controller: ThreadController):
     if ret_buffer and not _is_all_none(ret_buffer):
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
+        logging.info(f'finish model update on {model_id}')
         if controller.isactive:
             save_model_results(model.model_id, ret, ModelExecution.BATCH_PREDICT)
     if controller.isactive:
@@ -1232,7 +1231,9 @@ def model_create(model: ModelInfo, controller: ThreadController):
     ModelExecution, model_predict
 
     """
+    logging.info('start model create')
     if not controller.isactive:
+        logging.info('model create terminated')
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_PREDICT)
@@ -1240,17 +1241,19 @@ def model_create(model: ModelInfo, controller: ThreadController):
     ret_buffer = []
     for mid in markets:
         if not controller.isactive:
+            logging.info('model create terminated')
             return
         ret_buffer.append(model_predict(
             model, mid, max_len=1, controller=controller))
     if ret_buffer:
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
+        logging.info('finish model create')
         if controller.isactive:
             save_model_results(model.model_id, ret, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
-
+    
 
 def model_backtest(model: ModelInfo, controller: ThreadController):
     """執行模型回測
@@ -1275,7 +1278,9 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
     ModelExecution, model_predict
 
     """
+    logging.info('start model backtest')
     if not controller.isactive:
+        logging.info('model backtest terminated')
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_BACKTEST)
@@ -1293,6 +1298,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         tdate = model.get_cur_tdate(tdate - datetime.timedelta(1))
         for mid in list(x_data.keys()):
             if not controller.isactive:
+                logging.info('model backtest terminated')
                 return
             if len(x_data[mid]) <= 0:
                 # 該市場回測工作已完成
@@ -1308,6 +1314,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
             result_buffer = []
             for period in PREDICT_PERIODS:
                 if not controller.isactive:
+                    logging.info('model backtest terminated')
                     return
                 result = _model_predict(model, mid, tdate, period, cur_x)
                 if result is not None:
@@ -1320,8 +1327,10 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
             ret = pd.concat(ret_buffer, axis=0)
             ret.index = np.arange(len(ret))
             if not controller.isactive:
+                logging.info('model backtest terminated')
                 return
             # 將此輪所有市場的回測結果上傳至DB
+            logging.info('finish model backtest')
             save_model_results(model.model_id, ret, ModelExecution.ADD_BACKTEST)
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
@@ -1331,6 +1340,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
 def pattern_update(controller: ThreadController):
     patterns = get_patterns()
     markets = get_markets()
+    logging.info(f'get patterns: \n{patterns} get markets: \n{markets}')
     ret_buffer = []
     ret_market_dist = []
     ret_market_occur = []
@@ -1338,10 +1348,12 @@ def pattern_update(controller: ThreadController):
         result_buffer = []
         for pattern in patterns:
             if not controller.isactive:
+                logging.info('batch terminated')
                 return
             result_buffer.append(pattern.run(market).rename(pattern.pid))
         pattern_result = fast_concat(result_buffer)
         if not controller.isactive:
+            logging.info('batch terminated')
             return
         save_pattern_results(market, pattern_result)
         cur_ret = pd.DataFrame()
@@ -1355,6 +1367,7 @@ def pattern_update(controller: ThreadController):
         result_buffer = []
         for period in PREDICT_PERIODS:
             if not controller.isactive:
+                logging.info('batch terminated')
                 return
             result_buffer.append(gen_future_return(market, period))
         return_result = fast_concat(result_buffer)
@@ -1367,17 +1380,23 @@ def pattern_update(controller: ThreadController):
     ret = pd.concat(ret_buffer, axis=0)
     ret_market_dist = pd.concat(ret_market_dist, axis=0)
     ret_market_occur = pd.concat(ret_market_occur, axis=0)
+    logging.info('start writing db')
     if not controller.isactive:
+        logging.info('batch terminated')
         return
-    pickle_dump(ret, './latest_pattern_results.pkl')
+    # pickle_dump(ret, './latest_pattern_results.pkl')
     save_latest_pattern_results(ret)
     if not controller.isactive:
+        logging.info('batch terminated')
         return
-    pickle_dump(ret_market_occur, './latest_pattern_occur.pkl')
+    # pickle_dump(ret_market_occur, './latest_pattern_occur.pkl')
+    logging.info('start writing pattern occur')
     save_latest_pattern_occur(ret_market_occur)
     if not controller.isactive:
+        logging.info('batch terminated')
         return
-    pickle_dump(ret_market_dist, './latest_pattern_distribution.pkl')
+    # pickle_dump(ret_market_dist, './latest_pattern_distribution.pkl')
+    logging.info('start writing pattern dist')
     save_latest_pattern_distribution(ret_market_dist)
     return ret
 
@@ -1445,29 +1464,39 @@ def model_execution_recover():
 
 
 def init_db():
+    logging.info('start initiate db')
     controller = MT_MANAGER.acquire("init")
+    logging.info('start pattern update')
     pattern_update(controller)
+    logging.info('end pattern update')
+    logging.info('start model execution recover')
     model_execution_recover()
+    logging.info('end model execution recover')
 
 
-def batch(excute_id, logger):
-    logging.info("batch start")
+def batch(excute_id):
     controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     try:
         if controller.isactive:
-            logger.info(f"api_batch {excute_id} start")
+            logging.info(f"api_batch {excute_id} start")
             clean_db_cache()
             clone_db_cache()
             checkout_fcst_data()
+            logging.info("start pattern update")
             pattern_update(controller)
+            logging.info("end pattern update")
+            logging.info("start model update")
             for model in get_models():
                 model_update(model, controller)
+            logging.info("end model update")
+            logging.info('start model execution recover')
             model_execution_recover()
-            logger.info(f"api_batch {excute_id} complete")
+            logging.info('end model execution recover')
+            logging.info(f"api_batch {excute_id} complete")
             MT_MANAGER.release(BATCH_EXE_CODE)
 
     except Exception as esp:
-        logging.info("batch failed")
+        logging.error(f"batch failed \n{esp}")
         MT_MANAGER.release(BATCH_EXE_CODE)
         raise esp
     logging.info("batch finished")

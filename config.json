@@ -17,7 +17,7 @@
 			"Password": "apuser",
 			"Database name": "MIMOSA",
 			"charset": "utf8"
-		},
-	},
+		}
+	}
 
 }
