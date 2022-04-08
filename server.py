@@ -115,6 +115,8 @@ if __name__ == '__main__':
     if ExecMode.get(mode) is None:
         raise RuntimeError(f'invalid execution mode {mode}')
     stream_hdlr = logging.StreamHandler()
+    if not os.path.exists('./log'):
+        os.mkdir('./log')
     file_hdlr = handlers.TimedRotatingFileHandler(filename='./log/.log', when='D', backupCount=7)
     level = {ExecMode.DEV.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
     logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
