@@ -130,7 +130,7 @@ class MimosaDB:
                 SELECT
                     MARKET_CODE
                 FROM
-                    FCST_MKT
+                    FCST_MKT_SWAP
             """
             data = pd.read_sql_query(sql, engine)['MARKET_CODE'].values.tolist()
             with open(f'{DATA_LOC}/market_list.pkl', 'wb') as fp:
