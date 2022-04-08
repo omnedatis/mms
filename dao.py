@@ -1132,7 +1132,7 @@ class MimosaDB:
 
         sql = f"""
         INSERT INTO 
-            FCST_PAT_MKT_EVENT (
+            FCST_PAT_MKT_EVENT_SWAP (
                 CREATE_BY, CREATE_DT, MODIFY_BY, MODIFY_DT, 
                 PATTERN_ID, MARKET_CODE, DATA_DATE, OCCUR_YN
             ) 
