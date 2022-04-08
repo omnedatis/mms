@@ -12,13 +12,17 @@ import time
 from typing import Any, List, Optional, NamedTuple, Dict
 import numpy as np
 import pandas as pd
-from pexpect import ExceptionPexpect
 from scipy.stats.distributions import norm
 from sklearn.tree import DecisionTreeClassifier as Dtc
 
 from const import *
 from utils import *
 from func._tp import *
+from logkit import Logger
+
+if not os.path.exists('./log'):
+    os.mkdir('./log')
+logging = Logger('./log/.log').logger
 
 db = None
 
@@ -1481,7 +1485,6 @@ def batch(excute_id):
             logging.info(f"api_batch {excute_id} start")
             clean_db_cache()
             clone_db_cache()
-            checkout_fcst_data()
             logging.info("start pattern update")
             pattern_update(controller)
             logging.info("end pattern update")
@@ -1493,6 +1496,7 @@ def batch(excute_id):
             model_execution_recover()
             logging.info('end model execution recover')
             logging.info(f"api_batch {excute_id} complete")
+            checkout_fcst_data()
             MT_MANAGER.release(BATCH_EXE_CODE)
 
     except Exception as esp:

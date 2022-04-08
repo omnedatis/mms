@@ -7,7 +7,7 @@ import logging
 from logging import handlers
 class Logger:
     def __init__(self, fp, level=logging.INFO, when='D', backup_count=7,
-                 fmt='%(asctime)s - %(levelname)s : %(message)s'):
+                 fmt='%(asctime)s - %(levelname)s: %(thread)d - %(lineno)d: %(message)s'):
         self.logger = logging.getLogger(fp)
         format_str = logging.Formatter(fmt)
         self.logger.setLevel(level)
