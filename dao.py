@@ -15,11 +15,8 @@ from model import (ModelInfo, PatternInfo,
 from const import (LOCAL_DB, DATA_LOC,
                    MarketDistField, ModelExecution, PredictResultField, 
                    PatternResultField, ModelExecution)
-from logkit import Logger
+import logging
 
-if not os.path.exists('./log'):
-    os.mkdir('./log')
-logging = Logger('./log/.log').logger
 class MimosaDB:
     """
     用來取得資料庫資料的物件，需在同資料夾下設置 config

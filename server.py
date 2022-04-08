@@ -27,7 +27,6 @@ import os
 import threading as mt
 import datetime
 import time
-from logkit import Logger
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db,
  add_model, remove_model, MarketDataFromDb, MT_MANAGER)
@@ -36,13 +35,10 @@ from dao import MimosaDB
 from flask import Flask, request
 from waitress import serve
 from werkzeug.exceptions import MethodNotAllowed, NotFound
+import logging
+from logging import handlers
 import json
 
-
-
-if not os.path.exists('./log'):
-    os.mkdir('./log')
-logging = Logger('./log/.log').logger
 
 app =  Flask(__name__)
 
@@ -118,6 +114,10 @@ if __name__ == '__main__':
     mode = args.mode
     if ExecMode.get(mode) is None:
         raise RuntimeError(f'invalid execution mode {mode}')
+    stream_hdlr = logging.StreamHandler()
+    file_hdlr = handlers.TimedRotatingFileHandler(filename='./log/.log', when='D', backupCount=7)
+    level = {ExecMode.DEV.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
+    logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
     set_db(MimosaDB(mode=mode))
     set_market_data_provider(MarketDataFromDb())
     if not os.path.exists('./_local_db') or args.init:

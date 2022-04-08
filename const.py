@@ -27,7 +27,7 @@ class ExecMode(Enum):
     def get(cls, value):
         for each in cls:
             if value == each.value:
-                return each
+                return each.value
         else:
             return None
             

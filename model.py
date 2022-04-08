@@ -18,11 +18,7 @@ from sklearn.tree import DecisionTreeClassifier as Dtc
 from const import *
 from utils import *
 from func._tp import *
-from logkit import Logger
-
-if not os.path.exists('./log'):
-    os.mkdir('./log')
-logging = Logger('./log/.log').logger
+import logging
 
 db = None
 
@@ -1344,7 +1340,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
 def pattern_update(controller: ThreadController):
     patterns = get_patterns()
     markets = get_markets()
-    logging.info(f'get patterns: \n{patterns} get markets: \n{markets}')
+    logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
     ret_buffer = []
     ret_market_dist = []
     ret_market_occur = []
