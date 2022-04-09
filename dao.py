@@ -742,6 +742,7 @@ class MimosaDB:
                 MODEL_ID='{model_id}'
         """
         db_data = pd.read_sql_query(sql, engine)
+        db_data['DATA_DATE'] = db_data['DATA_DATE'].astype('datetime64[D]')
         union_data = pd.concat([db_data, latest_data], axis=0)
 
         # 移除完全重複的預測結果
