@@ -25,8 +25,9 @@ class MimosaDB:
     config = {}
     CREATE_BY='SYS_BATCH'
     MODIFY_BY='SYS_BATCH'
+    READ_ONLY=False
     
-    def __init__(self, db_name='mimosa', mode='dev'):
+    def __init__(self, db_name='mimosa', mode='dev', read_only=False):
         """
         根據傳入參數取得指定的資料庫設定
         """
@@ -41,6 +42,7 @@ class MimosaDB:
         self._local_db_lock = Lock()
         self.pattern_cache = Cache(size=400000)
         self.future_reture_cache = Cache(size=100000)
+        self.READ_ONLY = read_only
     
     def _engine(self):
       """
@@ -654,21 +656,22 @@ class MimosaDB:
             
         """
         engine = self._engine()
-        # DEL FCST_MODEL_MKT_VALUE
-        sql = f"""
-            DELETE FROM FCST_MODEL_MKT_VALUE
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        engine.execute(sql)
-        
-        # DEL FCST_MODEL_MKT_VALUE_HISTORY
-        sql = f"""
-            DELETE FROM FCST_MODEL_MKT_VALUE_HISTORY
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        engine.execute(sql)
+        if not self.READ_ONLY:
+            # DEL FCST_MODEL_MKT_VALUE
+            sql = f"""
+                DELETE FROM FCST_MODEL_MKT_VALUE
+                WHERE
+                    MODEL_ID='{model_id}'
+            """
+            engine.execute(sql)
+            
+            # DEL FCST_MODEL_MKT_VALUE_HISTORY
+            sql = f"""
+                DELETE FROM FCST_MODEL_MKT_VALUE_HISTORY
+                WHERE
+                    MODEL_ID='{model_id}'
+            """
+            engine.execute(sql)
 
     def save_model_latest_results(self, model_id:str, data:pd.DataFrame, 
                                   exec_type:ModelExecution):
@@ -762,18 +765,21 @@ class MimosaDB:
         latest_data = pd.concat(latest_data, axis=0)
 
         # 開始儲存
-        sql = f"""
-            DELETE FROM {table_name}
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        engine.execute(sql)
-        latest_data.to_sql(
-            table_name, 
-            engine, 
-            if_exists='append', 
-            chunksize=1000,
-            index=False)
+        if not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM {table_name}
+                WHERE
+                    MODEL_ID='{model_id}'
+            """
+            engine.execute(sql)
+        
+        if not self.READ_ONLY:
+            latest_data.to_sql(
+                table_name, 
+                engine, 
+                if_exists='append', 
+                chunksize=1000,
+                index=False)
         logging.info('Saving model latest results finished')
 
     def checkout_fcst_data(self):
@@ -787,12 +793,13 @@ class MimosaDB:
         -------
         None.
         """
-        logging.info('start checkout FCST data')
-        engine = self._engine()
-        sql = f"CALL SP_SWAP_FCST()"
-        with engine.begin() as db_conn:
-            db_conn.execute(sql)
-        logging.info('Checkout FCST data finished')
+        if not self.READ_ONLY:
+            logging.info('start checkout FCST data')
+            engine = self._engine()
+            sql = f"CALL SP_SWAP_FCST()"
+            with engine.begin() as db_conn:
+                db_conn.execute(sql)
+            logging.info('Checkout FCST data finished')
 
     def save_model_results(self, model_id:str, data:pd.DataFrame, 
                            exec_type: ModelExecution=ModelExecution.ADD_BACKTEST):
@@ -834,17 +841,18 @@ class MimosaDB:
         data['CREATE_DT'] = create_dt
 
         # 新增歷史預測結果
-        try:
-            data.to_sql(
-                'FCST_MODEL_MKT_VALUE_HISTORY', 
-                engine, 
-                if_exists='append', 
-                chunksize=1000,
-                index=False)
-        except Exception as e:
-            logging.info('Saving model results failed')
-            logging.error(traceback.format_exc())
-        logging.info('Saving model results finished')
+        if not self.READ_ONLY:
+            try:
+                data.to_sql(
+                    'FCST_MODEL_MKT_VALUE_HISTORY', 
+                    engine, 
+                    if_exists='append', 
+                    chunksize=1000,
+                    index=False)
+            except Exception as e:
+                logging.info('Saving model results failed')
+                logging.error(traceback.format_exc())
+            logging.info('Saving model results finished')
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
         """Get market data from the designated date to the latest from DB.
@@ -888,51 +896,54 @@ class MimosaDB:
             ID of model execution status
 
         """
-        # 檢查是否為合法的 exection
-        if exection not in ModelExecution:
-            raise Exception(f"Unknown excetion code {exection}")
+        exec_id = 'READ_ONLY_MODE'
+        if not self.READ_ONLY:
+            # 檢查是否為合法的 exection
+            if exection not in ModelExecution:
+                raise Exception(f"Unknown excetion code {exection}")
 
-        engine = self._engine()
-        # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB 
-        # 若是要儲存 AP 或是 AB, 那麼資料庫中就不應該已存在 AP 或 AB
-        # 因此要先清除原先的執行紀錄
-        if exection in [
-            ModelExecution.ADD_PREDICT.value,
-            ModelExecution.ADD_BACKTEST.value]:
-            sql = f"""
-                DELETE FROM FCST_MODEL_EXECUTION 
-                WHERE MODEL_ID='{model_id}' AND STATUS_CODE='{exection}'
-            """
-            engine.execute(sql)
+            engine = self._engine()
+            # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB 
+            # 若是要儲存 AP 或是 AB, 那麼資料庫中就不應該已存在 AP 或 AB
+            # 因此要先清除原先的執行紀錄
+            if exection in [
+                ModelExecution.ADD_PREDICT.value,
+                ModelExecution.ADD_BACKTEST.value]:
+                sql = f"""
+                    DELETE FROM FCST_MODEL_EXECUTION 
+                    WHERE MODEL_ID='{model_id}' AND STATUS_CODE='{exection}'
+                """
+                engine.execute(sql)
 
-        # 取得 EXEC_ID
-        sql = f"CALL SP_GET_SERIAL_NO('EXEC_ID', @EXEC_ID)"
-        with engine.begin() as db_conn:
-            db_conn.execute(sql)
-            results = db_conn.execute('SELECT @EXEC_ID').fetchone()
-            exec_id = results[0]
-        logging.info(exec_id)
+            # 取得 EXEC_ID
+            logging.info('Call SP_GET_SERIAL_NO')
+            sql = f"CALL SP_GET_SERIAL_NO('EXEC_ID', @EXEC_ID)"
+            with engine.begin() as db_conn:
+                db_conn.execute(sql)
+                results = db_conn.execute('SELECT @EXEC_ID').fetchone()
+                exec_id = results[0]
+            logging.info(f"Get SERIAL_NO: {exec_id}")
 
-        # 建立 status
-        COLUMNS = [
-            'CREATE_BY', 'CREATE_DT', 'EXEC_ID',
-            'MODEL_ID', 'STATUS_CODE', 'START_DT', 'END_DT'
-            ]
-        now = datetime.datetime.now()
-        create_by = self.CREATE_BY
-        create_dt = now
-        start_dt = now
-        end_dt = None
-        data = [[
-            create_by, create_dt, exec_id, 
-            model_id, exection, start_dt, end_dt]]
-        data = pd.DataFrame(data, columns=COLUMNS)
-        data.to_sql(
-            'FCST_MODEL_EXECUTION', 
-            engine, 
-            if_exists='append', 
-            chunksize=1000,
-            index=False)
+            # 建立 status
+            COLUMNS = [
+                'CREATE_BY', 'CREATE_DT', 'EXEC_ID',
+                'MODEL_ID', 'STATUS_CODE', 'START_DT', 'END_DT'
+                ]
+            now = datetime.datetime.now()
+            create_by = self.CREATE_BY
+            create_dt = now
+            start_dt = now
+            end_dt = None
+            data = [[
+                create_by, create_dt, exec_id, 
+                model_id, exection, start_dt, end_dt]]
+            data = pd.DataFrame(data, columns=COLUMNS)
+            data.to_sql(
+                'FCST_MODEL_EXECUTION', 
+                engine, 
+                if_exists='append', 
+                chunksize=1000,
+                index=False)
         return exec_id
 
     def set_model_execution_complete(self, exec_id:str):
@@ -970,15 +981,16 @@ class MimosaDB:
             raise Exception('call set_model_execution_complete before set_model_execution_start')
 
         status = finished_status[exec_data.values[0]]
-        sql = f"""
-        UPDATE
-            FCST_MODEL_EXECUTION
-        SET
-            END_DT='{now}', MODIFY_DT='{now}', STATUS_CODE='{status}'
-        WHERE
-            EXEC_ID='{exec_id}';
-        """
-        engine.execute(sql)
+        if not self.READ_ONLY:
+            sql = f"""
+            UPDATE
+                FCST_MODEL_EXECUTION
+            SET
+                END_DT='{now}', MODIFY_DT='{now}', STATUS_CODE='{status}'
+            WHERE
+                EXEC_ID='{exec_id}';
+            """
+            engine.execute(sql)
         
     def get_recover_model_execution(self):
         """ 取得模型最新執行狀態
@@ -1088,15 +1100,16 @@ class MimosaDB:
                 pat_id, market_id = deprecated_pks[i]
                 pk_sets += f", ('{pat_id}', '{market_id}')"
             
-            sql = f"""
-                DELETE FROM
-                    FCST_PAT_MKT_EVENT_SWAP
-                WHERE
-                    ({PatternResultField.PATTERN_ID.value}, {PatternResultField.MARKET_ID.value})
-                IN
-                    ({pk_sets})
-            """
-            engine.execute(sql)
+            if not self.READ_ONLY:
+                sql = f"""
+                    DELETE FROM
+                        FCST_PAT_MKT_EVENT_SWAP
+                    WHERE
+                        ({PatternResultField.PATTERN_ID.value}, {PatternResultField.MARKET_ID.value})
+                    IN
+                        ({pk_sets})
+                """
+                engine.execute(sql)
         logging.info('delete deprecated records finished')
         
         logging.info(f'saving start')
@@ -1161,7 +1174,8 @@ class MimosaDB:
                                 OCCUR_YN = VALUES(OCCUR_YN)
         ;
         """
-        engine.execute(sql)
+        if not self.READ_ONLY:
+            engine.execute(sql)
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
         """ 儲存最新現象統計分布統計量
@@ -1197,15 +1211,17 @@ class MimosaDB:
         
         # 刪除現有資料庫
         sql = "DELETE FROM FCST_PAT_MKT_DIST_SWAP"
-        engine.execute(sql)
+        if not self.READ_ONLY:
+            engine.execute(sql)
 
-        # 新增最新資料
-        data.to_sql(
-            'FCST_PAT_MKT_DIST_SWAP', 
-            engine, 
-            if_exists='append', 
-            chunksize=1000,
-            index=False)
+        if not self.READ_ONLY:
+            # 新增最新資料
+            data.to_sql(
+                'FCST_PAT_MKT_DIST_SWAP', 
+                engine, 
+                if_exists='append', 
+                chunksize=1000,
+                index=False)
     
     def save_latest_pattern_occur(self, data: pd.DataFrame):
         """ 儲存最新現象發生後次數統計
@@ -1232,15 +1248,17 @@ class MimosaDB:
         
         # 刪除現有資料庫
         sql = "DELETE FROM FCST_PAT_MKT_OCCUR_SWAP"
-        engine.execute(sql)
+        if not self.READ_ONLY:
+            engine.execute(sql)
 
+        if not self.READ_ONLY:
         # 新增最新資料
-        data.to_sql(
-            'FCST_PAT_MKT_OCCUR_SWAP', 
-            engine, 
-            if_exists='append', 
-            chunksize=1000,
-            index=False)
+            data.to_sql(
+                'FCST_PAT_MKT_OCCUR_SWAP', 
+                engine, 
+                if_exists='append', 
+                chunksize=1000,
+                index=False)
 
 class _CacheElement:
     def __init__(self, prev: int, next_: int, key: str, value: Any):
