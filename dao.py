@@ -762,7 +762,7 @@ class MimosaDB:
             union_data[PredictResultField.MARKET_ID.value] = union_data[PredictResultField.MARKET_ID.value].astype(str)
             union_data[PredictResultField.PERIOD.value] = union_data[PredictResultField.PERIOD.value].astype(np.int64)
             union_data[PredictResultField.DATE.value] = union_data[PredictResultField.DATE.value].astype('datetime64[D]')
-            union_data.drop_duplicates(subset=[
+            union_data = union_data.drop_duplicates(subset=[
                 PredictResultField.MODEL_ID.value,
                 PredictResultField.MARKET_ID.value,
                 PredictResultField.PERIOD.value,
