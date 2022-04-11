@@ -691,10 +691,13 @@ class MimosaDB:
         try:
             # 發生錯誤時需要看資料用
             except_catch = {
-                'input': {},
+                'input': {
+                    'model_id': model_id,
+                    'data': data,
+                    'exec_type': exec_type
+                },
                 'process': {}
             }
-            except_catch['input']['data'] = data
             logging.info('start saving model latest results')
             table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
             if exec_type == ModelExecution.ADD_PREDICT:
@@ -798,8 +801,14 @@ class MimosaDB:
         except Exception as e:
             logging.error('Save model latest results failed, save except data')
             os.makedirs(f'{EXCEPT_DATA_LOC}', exist_ok=True)
-            pickle_dump(except_catch, f'{EXCEPT_DATA_LOC}/save_model_latest_results.pkl')
+            EXCPT_DATA_PATH = f'{EXCEPT_DATA_LOC}/save_model_latest_results.pkl'
+            except_catches = []
+            if os.path.exists(EXCPT_DATA_PATH):
+                except_catches = pickle_load(EXCPT_DATA_PATH)
+            except_catches.append(except_catch)
+            pickle_dump(except_catches, EXCPT_DATA_PATH)
             logging.error(traceback.format_exc())
+            raise e
 
     def checkout_fcst_data(self):
         """ 切換系統中的呈現資料位置
