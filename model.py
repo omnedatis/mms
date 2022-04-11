@@ -1293,54 +1293,57 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_BACKTEST)
-    earliest_dates = model.get_earliest_dates()
-    # 取得所有市場的目標回測資料
-    x_data = {mid: get_xdata(mid, model.patterns, end_date=edate
-                             ).dropna()[-MIN_BACKTEST_LEN:]
-              for mid, edate in earliest_dates.items()}
-    tdate = max(earliest_dates.values())
-    while x_data:
-        ret_buffer = []
-        # 在每輪迴圈開始時，tdate是上輪迴圈模型可預測的最小日期
-        # 故 -1 後，即為本輪迴圈模型可預測的最大日期，
-        # 送入 get_cur_tdate 後可以取得此輪迴圈模型的Target-date(可預測的最小日期)
-        tdate = model.get_cur_tdate(tdate - datetime.timedelta(1))
-        for mid in list(x_data.keys()):
-            if not controller.isactive:
-                logging.info('model backtest terminated')
-                return
-            if len(x_data[mid]) <= 0:
-                # 該市場回測工作已完成
-                del x_data[mid]
-                continue
-            # 取得該市場此輪的回測長度
-            blen = (x_data[mid].index.values.astype(
-                'datetime64[D]') >= tdate).sum()
-            if blen <= 0:
-                continue
-            # 擷取該市場此輪的回測資料
-            cur_x = x_data[mid][-blen:]
-            result_buffer = []
-            for period in PREDICT_PERIODS:
+    markets = model.markets if model.markets else get_markets()
+    if len(markets) > 0:
+        earliest_dates = model.get_earliest_dates()
+        # 取得所有市場的目標回測資料
+        x_data = {mid: get_xdata(mid, model.patterns, 
+                                 end_date=earliest_dates[mid] if mid in earliest_dates else None
+                                 ).dropna()[-MIN_BACKTEST_LEN:]
+                  for mid in markets}
+        tdate = max(earliest_dates.values()) if earliest_dates else datetime.date.today()        
+        while x_data:
+            ret_buffer = []
+            # 在每輪迴圈開始時，tdate是上輪迴圈模型可預測的最小日期
+            # 故 -1 後，即為本輪迴圈模型可預測的最大日期，
+            # 送入 get_cur_tdate 後可以取得此輪迴圈模型的Target-date(可預測的最小日期)
+            tdate = model.get_cur_tdate(tdate - datetime.timedelta(1))
+            for mid in list(x_data.keys()):
                 if not controller.isactive:
                     logging.info('model backtest terminated')
                     return
-                result = _model_predict(model, mid, tdate, period, cur_x)
-                if result is not None:
-                    result_buffer.append(result)
-            # 將該市場此輪的回測資料自回測資料中移除
-            x_data[mid] = x_data[mid][:-blen]
-            if result_buffer:
-                ret_buffer.append(pd.concat(result_buffer, axis=0))
-        if ret_buffer:
-            ret = pd.concat(ret_buffer, axis=0)
-            ret.index = np.arange(len(ret))
-            if not controller.isactive:
-                logging.info('model backtest terminated')
-                return
-            # 將此輪所有市場的回測結果上傳至DB
-            logging.info('finish model backtest')
-            save_model_results(model.model_id, ret, ModelExecution.ADD_BACKTEST)
+                if len(x_data[mid]) <= 0:
+                    # 該市場回測工作已完成
+                    del x_data[mid]
+                    continue
+                # 取得該市場此輪的回測長度
+                blen = (x_data[mid].index.values.astype(
+                    'datetime64[D]') >= tdate).sum()
+                if blen <= 0:
+                    continue
+                # 擷取該市場此輪的回測資料
+                cur_x = x_data[mid][-blen:]
+                result_buffer = []
+                for period in PREDICT_PERIODS:
+                    if not controller.isactive:
+                        logging.info('model backtest terminated')
+                        return
+                    result = _model_predict(model, mid, tdate, period, cur_x)
+                    if result is not None:
+                        result_buffer.append(result)
+                # 將該市場此輪的回測資料自回測資料中移除
+                x_data[mid] = x_data[mid][:-blen]
+                if result_buffer:
+                    ret_buffer.append(pd.concat(result_buffer, axis=0))
+            if ret_buffer:
+                ret = pd.concat(ret_buffer, axis=0)
+                ret.index = np.arange(len(ret))
+                if not controller.isactive:
+                    logging.info('model backtest terminated')
+                    return
+                # 將此輪所有市場的回測結果上傳至DB
+                logging.info('finish model backtest')
+                save_model_results(model.model_id, ret, ModelExecution.ADD_BACKTEST)
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
