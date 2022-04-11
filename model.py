@@ -885,6 +885,9 @@ def model_train(model: ModelInfo, tdate: datetime.date):
 
     """
     markets = model.markets if model.markets else get_markets()
+    if len(markets) <= 0:
+        pickle_dump(None, _get_model_file(model.model_id, tdate, period))
+        return
     # Step1: 取得各市場的x_data
     x_data = {mid: get_xdata(mid, model.patterns,
                              begin_date=model.train_begin,
@@ -959,6 +962,8 @@ def _model_predict(model: ModelInfo, market: str, tdate: datetime.date,
     # 3. 若Y-coder is fitted，則用x-data進行預測後，再用Y-coder取得預測結果對應
     #    之預測報酬下界、預測報酬下界、預測報酬率與預測趨勢觀點
     tree = get_model(model, tdate, period)
+    if tree is None:
+        return None
     ycoder = get_ycoder(model, market, tdate, period)
     if ycoder.isfitted:
         y_result = tree.predict(x_data.values)
@@ -1344,6 +1349,8 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
 def pattern_update(controller: ThreadController):
     patterns = get_patterns()
     markets = get_markets()
+    if len(patterns) <= 0 or len(markets) <= 0:
+        return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
     ret_buffer = []
     ret_market_dist = []
