@@ -758,10 +758,10 @@ class MimosaDB:
             union_data = pd.concat([db_data, latest_data], axis=0)
 
             # 移除完全重複的預測結果
-            union_data[PredictResultField.MODEL_ID.value] = db_data[PredictResultField.MODEL_ID.value].astype(str)
-            union_data[PredictResultField.MARKET_ID.value] = db_data[PredictResultField.MARKET_ID.value].astype(str)
-            union_data[PredictResultField.PERIOD.value] = db_data[PredictResultField.PERIOD.value].astype(np.int64)
-            union_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
+            union_data[PredictResultField.MODEL_ID.value] = union_data[PredictResultField.MODEL_ID.value].astype(str)
+            union_data[PredictResultField.MARKET_ID.value] = union_data[PredictResultField.MARKET_ID.value].astype(str)
+            union_data[PredictResultField.PERIOD.value] = union_data[PredictResultField.PERIOD.value].astype(np.int64)
+            union_data[PredictResultField.DATE.value] = union_data[PredictResultField.DATE.value].astype('datetime64[D]')
             union_data.drop_duplicates(subset=[
                 PredictResultField.MODEL_ID.value,
                 PredictResultField.MARKET_ID.value,
