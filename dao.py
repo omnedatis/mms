@@ -693,7 +693,7 @@ class MimosaDB:
             except_catch = {
                 'input': {
                     'model_id': model_id,
-                    'data': data,
+                    'data': data.copy(),
                     'exec_type': exec_type
                 },
                 'process': {}
@@ -753,7 +753,7 @@ class MimosaDB:
                     MODEL_ID='{model_id}'
             """
             db_data = pd.read_sql_query(sql, engine)
-            except_catch['process']['db_data'] = db_data
+            except_catch['process']['db_data'] = db_data.copy()
             db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
             union_data = pd.concat([db_data, latest_data], axis=0)
 
