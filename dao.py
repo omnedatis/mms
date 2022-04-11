@@ -12,7 +12,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Union
 from model import (ModelInfo, PatternInfo, 
                 pickle_dump, pickle_load, 
                 get_filed_name_of_future_return, set_model_execution_start)
-from const import (LOCAL_DB, DATA_LOC,
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, 
                    MarketDistField, ModelExecution, PredictResultField, 
                    PatternResultField, ModelExecution)
 import logging
@@ -688,100 +688,118 @@ class MimosaDB:
             Allow enum: ADD_PREDICT, ADD_BACKTEST, BATCH_PREDICT
         
         """
-        logging.info('start saving model latest results')
-        table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
-        if exec_type == ModelExecution.ADD_PREDICT:
-            table_name = 'FCST_MODEL_MKT_VALUE'
-        elif exec_type == ModelExecution.BATCH_PREDICT:
+        try:
+            # 發生錯誤時需要看資料用
+            except_catch = {
+                'input': {},
+                'process': {}
+            }
+            except_catch['input']['data'] = data
+            logging.info('start saving model latest results')
             table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
-        else:
-            logging.error(f'Unknown execution type: {exec_type}')
-            return -1
-        engine = self._engine()
+            if exec_type == ModelExecution.ADD_PREDICT:
+                table_name = 'FCST_MODEL_MKT_VALUE'
+            elif exec_type == ModelExecution.BATCH_PREDICT:
+                table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
+            else:
+                logging.error(f'Unknown execution type: {exec_type}')
+                return -1
+            engine = self._engine()
 
-        # 製作儲存結構
-        now = datetime.datetime.now()
-        py = data[PredictResultField.PREDICT_VALUE.value].values * 100
-        upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
-        lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
+            # 製作儲存結構
+            now = datetime.datetime.now()
+            py = data[PredictResultField.PREDICT_VALUE.value].values * 100
+            upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
+            lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
 
-        data = data[[
-            PredictResultField.MODEL_ID.value,
-            PredictResultField.MARKET_ID.value,
-            PredictResultField.DATE.value,
-            PredictResultField.PERIOD.value
-            ]]
-        data[PredictResultField.PREDICT_VALUE.value] = py
-        data[PredictResultField.UPPER_BOUND.value] = upper_bound
-        data[PredictResultField.LOWER_BOUND.value] = lower_bound
-        create_dt = now
-        data['CREATE_BY'] = self.CREATE_BY
-        data['CREATE_DT'] = create_dt
+            data = data[[
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.DATE.value,
+                PredictResultField.PERIOD.value
+                ]]
+            data[PredictResultField.PREDICT_VALUE.value] = py
+            data[PredictResultField.UPPER_BOUND.value] = upper_bound
+            data[PredictResultField.LOWER_BOUND.value] = lower_bound
+            create_dt = now
+            data['CREATE_BY'] = self.CREATE_BY
+            data['CREATE_DT'] = create_dt
 
-        # 移除傳入預測結果中較舊的預測結果
-        group_data = data.groupby([
-            PredictResultField.MODEL_ID.value, 
-            PredictResultField.MARKET_ID.value, 
-            PredictResultField.PERIOD.value])
-        latest_data = []
-        for group_i, group in group_data:
-            max_date = np.max(group[PredictResultField.DATE.value].values)
-            latest_data.append(
-                group[group[PredictResultField.DATE.value].values == max_date])
-        latest_data = pd.concat(latest_data, axis=0)
+            # 移除傳入預測結果中較舊的預測結果
+            group_data = data.groupby([
+                PredictResultField.MODEL_ID.value, 
+                PredictResultField.MARKET_ID.value, 
+                PredictResultField.PERIOD.value])
+            latest_data = []
+            for group_i, group in group_data:
+                max_date = np.max(group[PredictResultField.DATE.value].values)
+                latest_data.append(
+                    group[group[PredictResultField.DATE.value].values == max_date])
+            latest_data = pd.concat(latest_data, axis=0)
 
-        # 新增最新預測結果
-        # 合併現有的資料預測結果與當前的預測結果
-        sql = f"""
-            SELECT 
-                CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE, 
-                DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND 
-            FROM 
-                {table_name}
-            WHERE
-                MODEL_ID='{model_id}'
-        """
-        db_data = pd.read_sql_query(sql, engine)
-        db_data['DATA_DATE'] = db_data['DATA_DATE'].astype('datetime64[D]')
-        union_data = pd.concat([db_data, latest_data], axis=0)
-
-        # 移除完全重複的預測結果
-        union_data.drop_duplicates(subset=[
-            PredictResultField.MODEL_ID.value,
-            PredictResultField.MARKET_ID.value,
-            PredictResultField.PERIOD.value,
-            PredictResultField.DATE.value
-            ])
-
-        # 移除較舊的預測結果
-        group_data = union_data.groupby([
-            PredictResultField.MODEL_ID.value, 
-            PredictResultField.MARKET_ID.value, 
-            PredictResultField.PERIOD.value])
-        latest_data = []
-        for group_i, group in group_data:
-            max_date = np.max(group[PredictResultField.DATE.value].values)
-            latest_data.append(
-                group[group[PredictResultField.DATE.value].values == max_date])
-        latest_data = pd.concat(latest_data, axis=0)
-
-        # 開始儲存
-        if not self.READ_ONLY:
+            # 新增最新預測結果
+            # 合併現有的資料預測結果與當前的預測結果
+            db_data = None
             sql = f"""
-                DELETE FROM {table_name}
+                SELECT 
+                    CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE, 
+                    DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND 
+                FROM 
+                    {table_name}
                 WHERE
                     MODEL_ID='{model_id}'
             """
-            engine.execute(sql)
-        
-        if not self.READ_ONLY:
-            latest_data.to_sql(
-                table_name, 
-                engine, 
-                if_exists='append', 
-                chunksize=1000,
-                index=False)
-        logging.info('Saving model latest results finished')
+            db_data = pd.read_sql_query(sql, engine)
+            except_catch['process']['db_data'] = db_data
+            db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
+            union_data = pd.concat([db_data, latest_data], axis=0)
+
+            # 移除完全重複的預測結果
+            union_data[PredictResultField.MODEL_ID.value] = db_data[PredictResultField.MODEL_ID.value].astype(str)
+            union_data[PredictResultField.MARKET_ID.value] = db_data[PredictResultField.MARKET_ID.value].astype(str)
+            union_data[PredictResultField.PERIOD.value] = db_data[PredictResultField.PERIOD.value].astype(np.int64)
+            union_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
+            union_data.drop_duplicates(subset=[
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.PERIOD.value,
+                PredictResultField.DATE.value
+                ])
+
+            # 移除較舊的預測結果
+            group_data = union_data.groupby([
+                PredictResultField.MODEL_ID.value, 
+                PredictResultField.MARKET_ID.value, 
+                PredictResultField.PERIOD.value])
+            latest_data = []
+            for group_i, group in group_data:
+                max_date = np.max(group[PredictResultField.DATE.value].values)
+                latest_data.append(
+                    group[group[PredictResultField.DATE.value].values == max_date])
+            latest_data = pd.concat(latest_data, axis=0)
+
+            # 開始儲存
+            if not self.READ_ONLY:
+                sql = f"""
+                    DELETE FROM {table_name}
+                    WHERE
+                        MODEL_ID='{model_id}'
+                """
+                engine.execute(sql)
+            
+            if not self.READ_ONLY:
+                latest_data.to_sql(
+                    table_name, 
+                    engine, 
+                    if_exists='append', 
+                    chunksize=1000,
+                    index=False)
+            logging.info('Saving model latest results finished')
+        except Exception as e:
+            logging.error('Save model latest results failed, save except data')
+            os.makedirs(f'{EXCEPT_DATA_LOC}', exist_ok=True)
+            pickle_dump(except_catch, f'{EXCEPT_DATA_LOC}/save_model_latest_results.pkl')
+            logging.error(traceback.format_exc())
 
     def checkout_fcst_data(self):
         """ 切換系統中的呈現資料位置
