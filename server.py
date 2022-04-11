@@ -24,6 +24,7 @@ has not yet being released.
 """
 import argparse
 import os
+import traceback
 import threading as mt
 import datetime
 import time
@@ -113,15 +114,21 @@ def handle_not_allow_request(e):
 if __name__ == '__main__':
     mode = args.mode
     if ExecMode.get(mode) is None:
+        logging.error(f'invalid execution mode {mode}')
         raise RuntimeError(f'invalid execution mode {mode}')
-    stream_hdlr = logging.StreamHandler()
+
     if not os.path.exists('./log'):
         os.mkdir('./log')
-    file_hdlr = handlers.TimedRotatingFileHandler(filename='./log/.log', when='D', backupCount=7)
-    level = {ExecMode.DEV.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
-    logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
-    set_db(MimosaDB(mode=mode))
-    set_market_data_provider(MarketDataFromDb())
+    try:
+        stream_hdlr = logging.StreamHandler()
+        file_hdlr = handlers.TimedRotatingFileHandler(filename='./log/.log', when='D', backupCount=7)
+        level = {ExecMode.DEV.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
+        logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
+        set_db(MimosaDB(mode=mode))
+        set_market_data_provider(MarketDataFromDb())
+    except Exception as esp:
+        logging.error(f"setting up failed")
+        logging.error(traceback.format_exc())     
     if not os.path.exists('./_local_db') or args.init:
         init_db()
     if (not args.motionless) and (not args.batchless):

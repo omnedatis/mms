@@ -1468,14 +1468,20 @@ def model_execution_recover():
 
 
 def init_db():
-    logging.info('start initiate db')
-    controller = MT_MANAGER.acquire("init")
-    logging.info('start pattern update')
-    pattern_update(controller)
-    logging.info('end pattern update')
-    logging.info('start model execution recover')
-    model_execution_recover()
-    logging.info('end model execution recover')
+    try:
+        logging.info('start initiate db')
+        controller = MT_MANAGER.acquire("init")
+        clean_db_cache()
+        clone_db_cache()
+        logging.info('start pattern update')
+        pattern_update(controller)
+        logging.info('end pattern update')
+        logging.info('start model execution recover')
+        model_execution_recover()
+        logging.info('end model execution recover')
+    except Exception as esp:
+        logging.error(f"init db failed")
+        logging.error(traceback.format_exc())     
 
 
 def batch(excute_id):
