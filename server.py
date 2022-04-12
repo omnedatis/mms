@@ -60,7 +60,7 @@ def api_batch():
 
     t = mt.Thread(target=batch, args=(excute_id,))
     t.start()
-    
+
     return {"status":202, "message":"accepted", "data":None}
 
 @app.route("/model", methods=["POST"])
@@ -72,8 +72,8 @@ def api_add_model():
     try:
         model_id = data['modelId']
     except KeyError as esp:
-        return {"status":400, 
-                "message":"Invalid request argument", 
+        return {"status":400,
+                "message":"Invalid request argument",
                 "data":None}
     def _add_model(model_id):
         add_model(model_id)
@@ -92,8 +92,8 @@ def api_remove_model():
     try:
         model_id = data['modelId']
     except KeyError as esp:
-        return {"status":400, 
-                "message":"Invalid request argument", 
+        return {"status":400,
+                "message":"Invalid request argument",
                 "data":None}
     def _remove_model(model_id):
         remove_model(model_id)
@@ -128,7 +128,7 @@ if __name__ == '__main__':
         set_market_data_provider(MarketDataFromDb())
     except Exception as esp:
         logging.error(f"setting up failed")
-        logging.error(traceback.format_exc())     
+        logging.error(traceback.format_exc())
     if not os.path.exists('./_local_db') or args.init:
         init_db()
     if (not args.motionless) and (not args.batchless):
@@ -137,4 +137,3 @@ if __name__ == '__main__':
         t.start()
     if not args.motionless:
         serve(app, port=8080)
-    

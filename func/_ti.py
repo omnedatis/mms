@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Union
 
 from ._td import (get_cp, get_hp, get_lp, get_op,
-                  MarketData, NumericTimeSeries, TimeUnit)
+                  MarketData, NumericTimeSeries, TimeUnit, MD_CACHE)
 
 class _CandleStick:
     def __init__(self, data: MarketData, name: str, tunit: Union[int, TimeUnit]):
@@ -15,20 +15,22 @@ class _CandleStick:
 
     def _shift(self, period: int) -> '_CandleStick':
         name = f'{self._name}.shift({period})'
-        if isinstance(self._tunit, TimeUnit):
-            op_ = self.open.shift(period, self._tunit)
-            hp_ = self.high.shift(period, self._tunit)
-            lp_ = self.low.shift(period, self._tunit)
-            cp_ = self.close.shift(period, self._tunit)
-        else:
-            period = period * self._tunit
-            op_ = self.open.shift(period)
-            hp_ = self.high.shift(period)
-            lp_ = self.low.shift(period)
-            cp_ = self.close.shift(period)
-        ret = self.__class__(MarketData(cp=cp_, lp=lp_, hp=hp_, op=op_),
-                             name=name, tunit=self._tunit)
-        return ret
+        if name not in MD_CACHE:      
+            if isinstance(self._tunit, TimeUnit):
+                op_ = self.open.shift(period, self._tunit)
+                hp_ = self.high.shift(period, self._tunit)
+                lp_ = self.low.shift(period, self._tunit)
+                cp_ = self.close.shift(period, self._tunit)
+            else:
+                period = period * self._tunit
+                op_ = self.open.shift(period)
+                hp_ = self.high.shift(period)
+                lp_ = self.low.shift(period)
+                cp_ = self.close.shift(period)
+            ret = self.__class__(MarketData(cp=cp_, lp=lp_, hp=hp_, op=op_),
+                                 name=name, tunit=self._tunit)
+            MD_CACHE[name] = ret
+        return MD_CACHE[name]  
 
     def shift(self, period: int) -> '_CandleStick':
         ret = self._shift(period)

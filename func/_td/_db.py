@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """Financial Market DataBase."""
 
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Any, List
 
 from ._series import NumericTimeSeries, TimeIndex
-
+from utils import Cache
+from const import FUNC_CACHE_SIZE
 
 _DB = None
+
+MD_CACHE = Cache(FUNC_CACHE_SIZE)
 
 def set_market_data_provider(db_):
     """
@@ -73,7 +76,9 @@ def get_market_data(market_id: str):
     MarketData
 
     """
-    return _get_market_data(market_id)
+    if market_id not in MD_CACHE:
+        MD_CACHE[market_id] = _get_market_data(market_id)
+    return MD_CACHE[market_id]
 
 def get_op(market_id: str):
     """Get opening price of the designated market.

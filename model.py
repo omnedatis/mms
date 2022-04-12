@@ -9,6 +9,7 @@ import os
 import shutil
 from threading import Lock, Semaphore
 import time
+import threading as mt
 from typing import Any, List, Optional, NamedTuple, Dict
 import numpy as np
 import pandas as pd
@@ -40,7 +41,7 @@ class PatternInfo(NamedTuple):
     ------
     pid: pattern ID
     func: macro function
-    kwargs: a dict mapping the name of parameters of macro function to 
+    kwargs: a dict mapping the name of parameters of macro function to
             corresponding values given by the pattern.
 
     """
@@ -104,6 +105,10 @@ def save_pattern_results(market_id, data):
     result = db.save_pattern_results(market_id, data)
     return result
 
+def dump_pattern_results():
+    """Dump pattern results to DB. """
+    db = get_db()
+    db.dump_pattern_results()
 
 def save_latest_pattern_results(data):
     """Save latest pattern results to DB.
@@ -111,7 +116,7 @@ def save_latest_pattern_results(data):
     Parameters
     ----------
     data: Pandas's DataFrame
-        A table of pattern results with columns for market_id, pattern_id, 
+        A table of pattern results with columns for market_id, pattern_id,
         price_date and value.
 
     See Also
@@ -209,6 +214,10 @@ def save_future_return(market_id, data):
     result = db.save_future_return(market_id, data)
     return result
 
+def dump_future_returns():
+    """Dump future returns to DB. """
+    db = get_db()
+    db.dump_future_returns()
 
 def save_latest_pattern_occur(data: pd.DataFrame):
     """Save pattern occured info
@@ -243,7 +252,7 @@ def get_latest_dates(model_id):
     Returns
     -------
     dict from str to datetime.date
-        a dict mapping from marketID to the corresponding latest predicting 
+        a dict mapping from marketID to the corresponding latest predicting
         date.
 
     """
@@ -263,7 +272,7 @@ def get_earliest_dates(model_id):
     Returns
     -------
     dict from str to datetime.date
-        a dict mapping from marketID to the corresponding earliest predicting 
+        a dict mapping from marketID to the corresponding earliest predicting
         date.
 
     """
@@ -400,7 +409,7 @@ def save_model_results(model_id, data, exec_type: ModelExecution):
     model_id: str
         ID of model.
     data: Pandas's DataFrame
-        A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each 
+        A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each
         predicting period as p.
 
     """
@@ -463,7 +472,7 @@ def set_model_execution_complete(exection_id):
     Parameters
     ----------
     exection_id: str
-        ID of this model execution.        
+        ID of this model execution.
 
     """
     db = get_db()
@@ -539,7 +548,7 @@ class ModelThreadManager:
     -------
     exists: 詢問指定模型是否還有未完成的操作正在執行中
     acquire: 請求指定模型的控制器
-    release: 釋出指定模型的控制器    
+    release: 釋出指定模型的控制器
 
     Notes
     -----
@@ -824,9 +833,9 @@ def get_xdata(market: str, patterns: List[str],
     patterns: list of str
         List of IDs of the designated pattern set.
     begin_date: datetime.date, optional
-        The including begining of the designated interval. 
+        The including begining of the designated interval.
     end_date: datetime.date, optional
-        The excluding end of the designated interval.  
+        The excluding end of the designated interval.
 
     Returns
     -------
@@ -856,9 +865,9 @@ def get_ydata(market: str, period: int,
     period: int
         The designated period of future return.
     begin_date: datetime.date, optional
-        The including begining of the designated interval. 
+        The including begining of the designated interval.
     end_date: datetime.date, optional
-        The excluding end of the designated interval.  
+        The excluding end of the designated interval.
 
     Returns
     -------
@@ -881,7 +890,7 @@ def model_train(model: ModelInfo, tdate: datetime.date):
     model: ModelInfo
         Information of the designated model.
     tdate: datetime.date
-        Target-date of the designated model.       
+        Target-date of the designated model.
 
     """
     markets = model.markets if model.markets else get_markets()
@@ -929,7 +938,7 @@ def _model_predict(model: ModelInfo, market: str, tdate: datetime.date,
     market: str
         ID of the designated market.
     tdate: datetime.date
-        Target-date of the designated model.       
+        Target-date of the designated model.
     period: int
         Predicting period of the designated model.
     x_data: Pandas's DataFrame
@@ -1262,7 +1271,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
             save_model_results(model.model_id, ret, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
-    
+
 
 def model_backtest(model: ModelInfo, controller: ThreadController):
     """執行模型回測
@@ -1297,11 +1306,11 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
     if len(markets) > 0:
         earliest_dates = model.get_earliest_dates()
         # 取得所有市場的目標回測資料
-        x_data = {mid: get_xdata(mid, model.patterns, 
+        x_data = {mid: get_xdata(mid, model.patterns,
                                  end_date=earliest_dates[mid] if mid in earliest_dates else None
                                  ).dropna()[-MIN_BACKTEST_LEN:]
                   for mid in markets}
-        tdate = max(earliest_dates.values()) if earliest_dates else datetime.date.today()        
+        tdate = max(earliest_dates.values()) if earliest_dates else datetime.date.today()
         while x_data:
             ret_buffer = []
             # 在每輪迴圈開始時，tdate是上輪迴圈模型可預測的最小日期
@@ -1391,6 +1400,10 @@ def pattern_update(controller: ThreadController):
             pattern_result, return_result, market)
         ret_market_dist.append(market_dist)
         ret_market_occur.append(market_occur)
+    t = mt.Thread(target=dump_future_returns)
+    t.start()
+    t = mt.Thread(target=dump_pattern_results)
+    t.start()
     ret = pd.concat(ret_buffer, axis=0)
     ret_market_dist = pd.concat(ret_market_dist, axis=0)
     ret_market_occur = pd.concat(ret_market_occur, axis=0)
@@ -1491,7 +1504,7 @@ def init_db():
         logging.info('end model execution recover')
     except Exception as esp:
         logging.error(f"init db failed")
-        logging.error(traceback.format_exc())     
+        logging.error(traceback.format_exc())
 
 
 def batch(excute_id):

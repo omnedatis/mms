@@ -17,6 +17,7 @@ MIN_Y_SAMPLES = 30
 Y_OUTLIER = 0.05
 BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
 QUEUE_LIMIT = 2
+FUNC_CACHE_SIZE = 2000
 
 class BatchType(str, Enum):
     """Batch 的執行型態

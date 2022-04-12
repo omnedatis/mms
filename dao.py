@@ -9,13 +9,14 @@ from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
-from model import (ModelInfo, PatternInfo, 
-                pickle_dump, pickle_load, 
+from model import (ModelInfo, PatternInfo,
+                pickle_dump, pickle_load,
                 get_filed_name_of_future_return, set_model_execution_start)
-from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, 
-                   MarketDistField, ModelExecution, PredictResultField, 
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC,
+                   MarketDistField, ModelExecution, PredictResultField,
                    PatternResultField, ModelExecution, BatchType)
 import logging
+from utils import Cache
 
 class MimosaDB:
     """
@@ -26,7 +27,7 @@ class MimosaDB:
     CREATE_BY='SYS_BATCH'
     MODIFY_BY='SYS_BATCH'
     READ_ONLY=False
-    
+
     def __init__(self, db_name='mimosa', mode='dev', read_only=False):
         """
         根據傳入參數取得指定的資料庫設定
@@ -43,7 +44,7 @@ class MimosaDB:
         self.pattern_cache = Cache(size=400000)
         self.future_reture_cache = Cache(size=100000)
         self.READ_ONLY = read_only
-    
+
     def _engine(self):
       """
       透過資料庫設定取得資料庫連線引擎物件
@@ -56,17 +57,17 @@ class MimosaDB:
       db_name = self.config['Database name']
       charset = self.config['charset']
       engine = create_engine('%s://%s:%s@%s:%s/%s?charset=%s'%
-                              (engine_conf, user, password, ip_addr, 
+                              (engine_conf, user, password, ip_addr,
                               port, db_name, charset))
       return engine
 
     def _clean_market_data(self):
         """ 清除當前本地端市場歷史資料
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/markets'):
             files = os.listdir(f'{DATA_LOC}/markets')
@@ -81,11 +82,11 @@ class MimosaDB:
         ----------
         batch_type: BatchType
             指定批次的執行狀態為初始化還是服務呼叫
-        
+
         Returns
         -------
         None.
-        
+
         """
         table_name = ''
         if batch_type == BatchType.INIT_BATCH:
@@ -120,15 +121,15 @@ class MimosaDB:
 
     def _clean_markets(self):
         """ 清除當前本地端市場清單
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/market_list.pkl'):
             os.remove(f'{DATA_LOC}/market_list.pkl')
-    
+
     def _clone_markets(self, batch_type: BatchType=BatchType.SERVICE_BATCH):
         """複製當前資料庫中的市場清單至本地端
 
@@ -136,7 +137,7 @@ class MimosaDB:
         ----------
         batch_type: BatchType
             指定批次的執行狀態為初始化還是服務呼叫
-        
+
         Returns
         -------
         None.
@@ -165,18 +166,18 @@ class MimosaDB:
 
     def _clean_patterns(self):
         """ 清除當前本地端現象資訊
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/patterns.pkl'):
             os.remove(f'{DATA_LOC}/patterns.pkl')
 
     def _clone_patterns(self):
         """複製當前資料庫中的現象資料至本地端
-        
+
         Returns
         -------
         None.
@@ -192,7 +193,7 @@ class MimosaDB:
                     FCST_PAT AS ptn
                 LEFT JOIN
                     (
-                        SELECT 
+                        SELECT
                             PATTERN_ID, MACRO_ID, PARAM_CODE, PARAM_VALUE
                         FROM
                             FCST_PAT_PARAM
@@ -210,7 +211,7 @@ class MimosaDB:
                     (
                         SELECT
                             MACRO_ID, PARAM_CODE, PARAM_TYPE
-                        FROM 
+                        FROM
                             FCST_MACRO_PARAM
                     ) AS mp
                 ON ptn.MACRO_ID=mp.MACRO_ID AND para.PARAM_CODE=mp.PARAM_CODE
@@ -245,18 +246,18 @@ class MimosaDB:
 
     def _clean_models(self):
         """ 清除當前本地端市場清單
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/models.pkl'):
             os.remove(f'{DATA_LOC}/models.pkl')
 
     def _clone_models(self):
         """複製當前資料庫中的觀點資訊至本地端
-        
+
         Returns
         -------
         None.
@@ -272,12 +273,12 @@ class MimosaDB:
                     FCST_MODEL AS model
                 INNER JOIN
                     (
-                        SELECT 
+                        SELECT
                             MODEL_ID, STATUS_CODE, END_DT
                         FROM
                             FCST_MODEL_EXECUTION
                         WHERE
-                            STATUS_CODE='{ModelExecution.ADD_PREDICT_FINISHED}' AND 
+                            STATUS_CODE='{ModelExecution.ADD_PREDICT_FINISHED}' AND
                             END_DT IS NOT NULL
                     ) AS me
                 ON model.MODEL_ID=me.MODEL_ID
@@ -289,18 +290,18 @@ class MimosaDB:
 
     def _clean_model_training_infos(self):
         """ 清除當前本地端觀點訓練資訊
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/model_training_infos.pkl'):
             os.remove(f'{DATA_LOC}/model_training_infos.pkl')
 
     def _clone_model_training_infos(self):
         """複製當前資料庫中的觀點訓練資訊至本地端
-        
+
         Returns
         -------
         None.
@@ -322,18 +323,18 @@ class MimosaDB:
 
     def _clean_model_markets(self):
         """ 清除當前本地端觀點目標市場
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/model_markets.pkl'):
             os.remove(f'{DATA_LOC}/model_markets.pkl')
 
     def _clone_model_markets(self):
         """複製當前資料庫中的觀點目標市場至本地端
-        
+
         Returns
         -------
         None.
@@ -355,18 +356,18 @@ class MimosaDB:
 
     def _clean_model_patterns(self):
         """ 清除當前本地端觀點使用現象
-        
+
         Returns
         -------
         None.
-        
+
         """
         if os.path.exists(f'{DATA_LOC}/model_patterns.pkl'):
             os.remove(f'{DATA_LOC}/model_patterns.pkl')
 
     def _clone_model_patterns(self):
         """複製當前資料庫中的觀點使用現象至本地端
-        
+
         Returns
         -------
         None.
@@ -388,11 +389,11 @@ class MimosaDB:
 
     def clean_db_cache(self):
         """ 清除本地資料庫快取
-        
+
         Parameters
         ----------
         None.
-        
+
         Returns
         -------
         None.
@@ -407,12 +408,12 @@ class MimosaDB:
 
     def clone_db_cache(self, batch_type:BatchType=BatchType.SERVICE_BATCH):
         """ 從資料庫載入快取
-        
+
         Parameters
         ----------
         batch_type: BatchType
             指定批次的執行狀態為初始化還是服務呼叫
-        
+
         Returns
         -------
         None.
@@ -427,11 +428,11 @@ class MimosaDB:
 
     def get_markets(self):
         """get market IDs from DB.
-        
+
         Returns
         -------
         list of str
-        
+
         """
         self._clone_markets()
         with open(f'{DATA_LOC}/market_list.pkl', 'rb') as fp:
@@ -440,11 +441,11 @@ class MimosaDB:
 
     def get_patterns(self):
         """get patterns from DB.
-        
+
         Returns
         -------
         list of PatternInfo
-        
+
         """
         self._clone_patterns()
         with open(f'{DATA_LOC}/patterns.pkl', 'rb') as fp:
@@ -453,27 +454,33 @@ class MimosaDB:
 
     def _get_future_return_file(self, market_id: str) -> str:
         return f'{LOCAL_DB}/freturns/{market_id}.pkl'
-    
+
     def save_future_return(self, market_id:str, data:pd.DataFrame):
         """Save future return results to DB.
-        
+
         Parameters
         ----------
         market_id: str
             Id of market.
         data: Pandas's DataFrame
-            A panel of float which columns TF(d) for each predicting period as 
+            A panel of float which columns TF(d) for each predicting period as
             d.
-        
+
         """
-        self._local_db_lock.acquire()
-        pickle_dump(data, self._get_future_return_file(market_id))
-        self._local_db_lock.release()
         self.future_reture_cache[market_id] = data
+
+    def dump_future_returns(self):
+        """Dump future returns to DB. """
+        logging.info('Dump future returns to db')
+        for market_id in self.get_markets():
+            self._local_db_lock.acquire()
+            pickle_dump(self.future_reture_cache[market_id], self._get_future_return_file(market_id))
+            self._local_db_lock.release()
+        logging.info('Dump future returns finished')
 
     def get_future_return(self, market_id:str, period: int, begin_date:datetime.date):
         """Get future return results from begining date to the latest of given market from DB.
-        
+
         Parameters
         ----------
         market_id: str
@@ -483,12 +490,12 @@ class MimosaDB:
         begin_date: datetime.date, optional
             The begin date of the designated data range. If it is not set, get all
             history results.
-            
+
         Returns
         -------
         Pandas's Series
             A timeseries of float.
-        
+
         """
         field = get_filed_name_of_future_return(period)
         if market_id not in self.future_reture_cache:
@@ -499,29 +506,35 @@ class MimosaDB:
         if begin_date:
             ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
         return ret
-    
+
     def _get_pattern_file(self, market_id: str) -> str:
         return f'{LOCAL_DB}/patterns/{market_id}.pkl'
-    
+
     def save_pattern_results(self, market_id:str, data:pd.DataFrame):
         """Save pattern results to DB.
-        
+
         Parameters
         ----------
         market_id: str
             Id of market.
         data: Pandas's DataFrame
             A panel of boolean which columns are the pattern IDs.
-        
+
         """
-        self._local_db_lock.acquire()
-        pickle_dump(data, self._get_pattern_file(market_id))
-        self._local_db_lock.release()
         self.pattern_cache[market_id] = data
+
+    def dump_pattern_results(self):
+        """Dump pattern results to DB. """
+        logging.info('Dump pattern results to db')
+        for market_id in self.get_markets():
+            self._local_db_lock.acquire()
+            pickle_dump(self.pattern_cache[market_id], self._get_pattern_file(market_id))
+            self._local_db_lock.release()
+        logging.info('Dump pattern results finished')
 
     def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:datetime.date):
         """Get pattern results from begining date to the latest of given market from DB.
-        
+
         Parameters
         ----------
         market_id: str
@@ -531,12 +544,12 @@ class MimosaDB:
         begin_date: datetime.date, optional
             The begin date of the designated data range. If it is not set, get all
             history results.
-            
+
         Returns
         -------
         Pandas's DataFrame
             A panel of boolean with all id of patterns as columns.
-        
+
         """
         if market_id not in self.pattern_cache:
             self._local_db_lock.acquire()
@@ -549,18 +562,18 @@ class MimosaDB:
 
     def get_latest_dates(self, model_id:str):
         """get dates of the latest predict results of markets for given model.
-        
+
         Paratmeters
         -----------
         model_id: str
             ID of model.
-        
+
         Returns
         -------
         dict from str to datetime.date
-            a dict mapping from marketID to the corresponding latest predicting 
+            a dict mapping from marketID to the corresponding latest predicting
             date.
-        
+
         """
         engine = self._engine()
         sql = f"""
@@ -583,18 +596,18 @@ class MimosaDB:
 
     def get_earliest_dates(self, model_id:str):
         """get dates of the earliest predict results of markets for given model.
-        
+
         Paratmeters
         -----------
         model_id: str
             ID of model.
-        
+
         Returns
         -------
         dict from str to datetime.date
-            a dict mapping from marketID to the corresponding earliest predicting 
+            a dict mapping from marketID to the corresponding earliest predicting
             date.
-        
+
         """
         engine = self._engine()
         sql = f"""
@@ -617,12 +630,12 @@ class MimosaDB:
 
     def get_models(self):
         """Get models from DB which complete ADD_PREDICT.
-        
+
         Returns
         -------
         list of str
             IDs of models in DB
-        
+
         """
         self._clean_models()
         self._clone_models()
@@ -632,15 +645,15 @@ class MimosaDB:
 
     def get_model_info(self, model_id:str):
         """Get model info from DB.
-        
+
         Parameters
         ----------
         model_id: str
-        
+
         Returns
         -------
         ModelInfo
-        
+
         """
         self._clean_model_training_infos()
         self._clean_model_markets()
@@ -648,7 +661,7 @@ class MimosaDB:
         self._clone_model_training_infos()
         self._clone_model_markets()
         self._clone_model_patterns()
-        
+
         # 取得觀點的訓練資訊
         with open(f'{DATA_LOC}/model_training_infos.pkl', 'rb') as fp:
             model_info = pickle.load(fp)
@@ -684,7 +697,7 @@ class MimosaDB:
         ----------
         model_id: str
             ID of model to delete.
-            
+
         """
         engine = self._engine()
         if not self.READ_ONLY:
@@ -695,7 +708,7 @@ class MimosaDB:
                     MODEL_ID='{model_id}'
             """
             engine.execute(sql)
-            
+
             # DEL FCST_MODEL_MKT_VALUE_HISTORY
             sql = f"""
                 DELETE FROM FCST_MODEL_MKT_VALUE_HISTORY
@@ -704,20 +717,20 @@ class MimosaDB:
             """
             engine.execute(sql)
 
-    def save_model_latest_results(self, model_id:str, data:pd.DataFrame, 
+    def save_model_latest_results(self, model_id:str, data:pd.DataFrame,
                                   exec_type:ModelExecution):
         """Save modle latest predicting results to DB.
-        
+
         Parameters
         ----------
         model_id: str
             ID of model.
         data: Pandas's DataFrame
-            A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each 
+            A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each
             predicting period as p.
         exec_type: ModelExecution
             Allow enum: ADD_PREDICT, ADD_BACKTEST, BATCH_PREDICT
-        
+
         """
         try:
             # 發生錯誤時需要看資料用
@@ -761,8 +774,8 @@ class MimosaDB:
 
             # 移除傳入預測結果中較舊的預測結果
             group_data = data.groupby([
-                PredictResultField.MODEL_ID.value, 
-                PredictResultField.MARKET_ID.value, 
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
                 PredictResultField.PERIOD.value])
             latest_data = []
             for group_i, group in group_data:
@@ -775,10 +788,10 @@ class MimosaDB:
             # 合併現有的資料預測結果與當前的預測結果
             db_data = None
             sql = f"""
-                SELECT 
-                    CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE, 
-                    DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND 
-                FROM 
+                SELECT
+                    CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE,
+                    DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND
+                FROM
                     {table_name}
                 WHERE
                     MODEL_ID='{model_id}'
@@ -802,8 +815,8 @@ class MimosaDB:
 
             # 移除較舊的預測結果
             group_data = union_data.groupby([
-                PredictResultField.MODEL_ID.value, 
-                PredictResultField.MARKET_ID.value, 
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
                 PredictResultField.PERIOD.value])
             latest_data = []
             for group_i, group in group_data:
@@ -820,12 +833,12 @@ class MimosaDB:
                         MODEL_ID='{model_id}'
                 """
                 engine.execute(sql)
-            
+
             if not self.READ_ONLY:
                 latest_data.to_sql(
-                    table_name, 
-                    engine, 
-                    if_exists='append', 
+                    table_name,
+                    engine,
+                    if_exists='append',
                     chunksize=1000,
                     index=False)
             logging.info('Saving model latest results finished')
@@ -860,22 +873,22 @@ class MimosaDB:
                 db_conn.execute(sql)
             logging.info('Checkout FCST data finished')
 
-    def save_model_results(self, model_id:str, data:pd.DataFrame, 
+    def save_model_results(self, model_id:str, data:pd.DataFrame,
                            exec_type: ModelExecution=ModelExecution.ADD_BACKTEST):
         """Save modle predicting results to DB.
-        
+
         Parameters
         ----------
         model_id: str
             ID of model.
         data: Pandas's DataFrame
-            A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each 
+            A panel of floating with columns, 'lb_p', 'ub_p', 'pr_p' for each
             predicting period as p.
         exec_type: ModelExecution
             Allow enum: ADD_PREDICT, ADD_BACKTEST, BATCH_PREDICT
-        
+
         """
-        if (exec_type == ModelExecution.ADD_PREDICT or 
+        if (exec_type == ModelExecution.ADD_PREDICT or
             exec_type == ModelExecution.BATCH_PREDICT):
             self.save_model_latest_results(model_id, data.copy(), exec_type)
         logging.info('start saving model results')
@@ -903,9 +916,9 @@ class MimosaDB:
         if not self.READ_ONLY:
             try:
                 data.to_sql(
-                    'FCST_MODEL_MKT_VALUE_HISTORY', 
-                    engine, 
-                    if_exists='append', 
+                    'FCST_MODEL_MKT_VALUE_HISTORY',
+                    engine,
+                    if_exists='append',
                     chunksize=1000,
                     index=False)
             except Exception as e:
@@ -915,7 +928,7 @@ class MimosaDB:
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
         """Get market data from the designated date to the latest from DB.
-        
+
         Parameters
         ----------
         market_id: str
@@ -923,12 +936,12 @@ class MimosaDB:
         begin_date: datetime.date, optional
             The begin date of the designated data range. If it is not set, get all
             historical data.
-        
+
         Returns
         -------
         Pandas's DataFrame
             A panel of floating with columns, 'OP', 'LP', 'HP', and 'CP'.
-        
+
         """
         self._clone_market_data()
         if not os.path.exists(f'{DATA_LOC}/markets/{market_id}.pkl'):
@@ -938,10 +951,10 @@ class MimosaDB:
         if begin_date is not None:
             result = result[result.index.values >= begin_date]
         return result
-    
+
     def set_model_execution_start(self, model_id:str, exection:str) -> str:
         """ create model exec
-        
+
         Parameters
         ----------
         model_id: str
@@ -962,14 +975,14 @@ class MimosaDB:
                 raise Exception(f"Unknown excetion code {exection}")
 
             engine = self._engine()
-            # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB 
+            # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB
             # 若是要儲存 AP 或是 AB, 那麼資料庫中就不應該已存在 AP 或 AB
             # 因此要先清除原先的執行紀錄
             if exection in [
                 ModelExecution.ADD_PREDICT.value,
                 ModelExecution.ADD_BACKTEST.value]:
                 sql = f"""
-                    DELETE FROM FCST_MODEL_EXECUTION 
+                    DELETE FROM FCST_MODEL_EXECUTION
                     WHERE MODEL_ID='{model_id}' AND STATUS_CODE='{exection}'
                 """
                 engine.execute(sql)
@@ -994,20 +1007,20 @@ class MimosaDB:
             start_dt = now
             end_dt = None
             data = [[
-                create_by, create_dt, exec_id, 
+                create_by, create_dt, exec_id,
                 model_id, exection, start_dt, end_dt]]
             data = pd.DataFrame(data, columns=COLUMNS)
             data.to_sql(
-                'FCST_MODEL_EXECUTION', 
-                engine, 
-                if_exists='append', 
+                'FCST_MODEL_EXECUTION',
+                engine,
+                if_exists='append',
                 chunksize=1000,
                 index=False)
         return exec_id
 
     def set_model_execution_complete(self, exec_id:str):
         """Set model execution complete on DB.
-        
+
         Parameters
         ----------
         exec_id: str
@@ -1016,7 +1029,7 @@ class MimosaDB:
             status code set to this model
         model_id: str
             ID of model
-        
+
         """
         now = datetime.datetime.now()
         engine = self._engine()
@@ -1050,7 +1063,7 @@ class MimosaDB:
                 EXEC_ID='{exec_id}';
             """
             engine.execute(sql)
-        
+
     def get_recover_model_execution(self):
         """ 取得模型最新執行狀態
         取得新增模型預測與新增模型回測的最新更新狀態，這兩個狀態對於任一模型而言
@@ -1059,7 +1072,7 @@ class MimosaDB:
         當新增模型狀態找到了但沒有結束時間時，狀態為需要新增預測
         當新增模型完成找到但新增回測且新增回測完成狀態沒有沒找到時，狀態為需要新增回測
         當新增回測狀態找到但沒有結束時間時，狀態為需要新增回測
-        
+
         Parameters
         ----------
         None.
@@ -1078,7 +1091,7 @@ class MimosaDB:
                 FCST_MODEL AS model
             LEFT JOIN
                 (
-                    SELECT 
+                    SELECT
                         MODEL_ID, STATUS_CODE, END_DT
                     FROM
                         FCST_MODEL_EXECUTION
@@ -1100,7 +1113,7 @@ class MimosaDB:
                 ModelExecution.ADD_BACKTEST.value]
             model_add_backtest_finished_info = model_state_info[
                 model_state_info['STATUS_CODE'].values==
-                ModelExecution.ADD_BACKTEST_FINISHED.value]    
+                ModelExecution.ADD_BACKTEST_FINISHED.value]
             # ADD_PREDICT 未建立就掛掉
             if (len(model_add_predict_info) == 0) and (len(model_add_predict_finished_info) == 0):
                 results.append((model_id, ModelExecution.ADD_PREDICT))
@@ -1117,24 +1130,24 @@ class MimosaDB:
 
     def save_latest_pattern_results(self, data:pd.DataFrame, block_size: int=100000):
         """Save latest pattern results to DB.
-        
+
         Parameters
         ----------
         data: Pandas's DataFrame
-            A table of pattern results with columns for market_id, pattern_id, 
+            A table of pattern results with columns for market_id, pattern_id,
             price_date and value.
         block_size: int
             Save each data_block that size is block_size in data until finished
-            
+
         See Also
         --------
         PatternResultField
-        
+
         """
         logging.info('delete deprecated records')
         engine = self._engine()
         cur_records = data[[
-            PatternResultField.PATTERN_ID.value, 
+            PatternResultField.PATTERN_ID.value,
             PatternResultField.MARKET_ID.value
             ]]
         sql = f"""
@@ -1158,7 +1171,7 @@ class MimosaDB:
             for i in range(1, len(deprecated_pks)):
                 pat_id, market_id = deprecated_pks[i]
                 pk_sets += f", ('{pat_id}', '{market_id}')"
-            
+
             if not self.READ_ONLY:
                 sql = f"""
                     DELETE FROM
@@ -1170,7 +1183,7 @@ class MimosaDB:
                 """
                 engine.execute(sql)
         logging.info('delete deprecated records finished')
-        
+
         logging.info(f'saving start')
         for idx in range(0, len(data), block_size):
             self._save_latest_pattern_results(data[idx: idx+block_size])
@@ -1178,40 +1191,40 @@ class MimosaDB:
 
     def _save_latest_pattern_results(self, data:pd.DataFrame):
         """Save latest pattern results to DB.
-        
+
         Parameters
         ----------
         data: Pandas's DataFrame
-            A table of pattern results with columns for market_id, pattern_id, 
+            A table of pattern results with columns for market_id, pattern_id,
             price_date and value.
-            
+
         See Also
         --------
         PatternResultField
-        
+
         """
         engine = self._engine()
-        
+
         now = datetime.datetime.now()
         create_by = self.CREATE_BY
         create_dt = now
         modify_by = self.MODIFY_BY
 
         sql = f"""
-        INSERT INTO 
+        INSERT INTO
             FCST_PAT_MKT_EVENT_SWAP (
-                CREATE_BY, CREATE_DT, MODIFY_BY, MODIFY_DT, 
+                CREATE_BY, CREATE_DT, MODIFY_BY, MODIFY_DT,
                 PATTERN_ID, MARKET_CODE, DATA_DATE, OCCUR_YN
-            ) 
+            )
         VALUES """
         if len(data) > 0:
             ptn_event = data.iloc[0]
             sql += f"""
             (
                 '{create_by}', '{str(create_dt)}', null, null,
-                '{ptn_event[PatternResultField.PATTERN_ID.value]}', 
-                '{ptn_event[PatternResultField.MARKET_ID.value]}', 
-                '{str(ptn_event[PatternResultField.DATE.value])}', 
+                '{ptn_event[PatternResultField.PATTERN_ID.value]}',
+                '{ptn_event[PatternResultField.MARKET_ID.value]}',
+                '{str(ptn_event[PatternResultField.DATE.value])}',
                 '{'Y' if ptn_event[PatternResultField.VALUE.value] > 0 else 'N'}'
             )
             """
@@ -1220,9 +1233,9 @@ class MimosaDB:
             sql += f"""
             , (
                 '{create_by}', '{str(create_dt)}', null, null,
-                '{ptn_event[PatternResultField.PATTERN_ID.value]}', 
-                '{ptn_event[PatternResultField.MARKET_ID.value]}', 
-                '{str(ptn_event[PatternResultField.DATE.value])}', 
+                '{ptn_event[PatternResultField.PATTERN_ID.value]}',
+                '{ptn_event[PatternResultField.MARKET_ID.value]}',
+                '{str(ptn_event[PatternResultField.DATE.value])}',
                 '{'Y' if ptn_event[PatternResultField.VALUE.value] > 0 else 'N'}'
             )
             """
@@ -1253,7 +1266,7 @@ class MimosaDB:
 
         """
         engine = self._engine()
-        
+
         now = datetime.datetime.now()
         create_by = self.CREATE_BY
         create_dt = now
@@ -1261,13 +1274,13 @@ class MimosaDB:
         data['CREATE_DT'] = create_dt
         data_mean = data[MarketDistField.RETURN_MEAN.value].values * 100
         data_std = data[MarketDistField.RETURN_STD.value].values * 100
-        
+
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketDistField.PATTERN_ID.value, 
+            'CREATE_BY', 'CREATE_DT', MarketDistField.PATTERN_ID.value,
             MarketDistField.MARKET_ID.value, MarketDistField.DATE_PERIOD.value]]
         data[MarketDistField.RETURN_MEAN.value] = data_mean
         data[MarketDistField.RETURN_STD.value] = data_std
-        
+
         # 刪除現有資料庫
         sql = "DELETE FROM FCST_PAT_MKT_DIST_SWAP"
         if not self.READ_ONLY:
@@ -1276,15 +1289,15 @@ class MimosaDB:
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
-                'FCST_PAT_MKT_DIST_SWAP', 
-                engine, 
-                if_exists='append', 
+                'FCST_PAT_MKT_DIST_SWAP',
+                engine,
+                if_exists='append',
                 chunksize=1000,
                 index=False)
-    
+
     def save_latest_pattern_occur(self, data: pd.DataFrame):
         """ 儲存最新現象發生後次數統計
-        儲存發生指定現象後, 指定市場, 指定天期下的發生與未發生總數, 
+        儲存發生指定現象後, 指定市場, 指定天期下的發生與未發生總數,
         上漲總數, 持平總數與下跌總數
 
         Parameters
@@ -1298,13 +1311,13 @@ class MimosaDB:
 
         """
         engine = self._engine()
-        
+
         now = datetime.datetime.now()
         create_by = self.CREATE_BY
         create_dt = now
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
-        
+
         # 刪除現有資料庫
         sql = "DELETE FROM FCST_PAT_MKT_OCCUR_SWAP"
         if not self.READ_ONLY:
@@ -1313,9 +1326,9 @@ class MimosaDB:
         if not self.READ_ONLY:
         # 新增最新資料
             data.to_sql(
-                'FCST_PAT_MKT_OCCUR_SWAP', 
-                engine, 
-                if_exists='append', 
+                'FCST_PAT_MKT_OCCUR_SWAP',
+                engine,
+                if_exists='append',
                 chunksize=1000,
                 index=False)
 
@@ -1325,44 +1338,44 @@ class _CacheElement:
         self._next = next_
         self._key = key
         self._value = value
-        
+
     @property
     def key(self) -> str:
         return self._key
-    
+
     @property
     def value(self) -> Any:
         return self._value
-    
+
     @value.setter
     def value(self, value: Any):
         self._value = value
-        
+
     @property
     def prev(self) -> int:
         return self._prev
-    
+
     @prev.setter
     def prev(self, key: int):
         self._prev = key
-        
+
     @property
     def next_(self) -> int:
         return self._next
-    
+
     @next_.setter
     def next_(self, key: int):
-        self._next = key     
-        
+        self._next = key
+
 class Cache:
-    # 這邊建立了一個記憶體空間做快取, 
+    # 這邊建立了一個記憶體空間做快取,
     # 並強迫快取僅能在該空間中保存
-    # 
+    #
     # 使用dict紀錄key與節點的對應關係
     # 使用link list管理資料間的置換順序
     # 使用list作為cache buffer，提高link-list操作的速度
     # 若要使用FIFO置換策略，`lru`設定為False，
-    # 否則將採用預設的LRU置換策略    
+    # 否則將採用預設的LRU置換策略
     #
     # Examples:
     #     c = Cache(3)
@@ -1372,7 +1385,7 @@ class Cache:
     #     print(c.keys())
     #     print(c['a'])
     #     print(c.keys())
-    #     c['c'] = 3       
+    #     c['c'] = 3
     #     c['d'] = 4
     #     print(c.keys())
 
@@ -1383,30 +1396,30 @@ class Cache:
         self._buffer = [None for i in range(size)]
         self._head = -1
         self._tail = -1
-    
+
     def clear(self):
         self._map = {}
         self._head = -1
         self._tail = -1
         # Note: clean buffer to free memory sapce
         self._buffer = [None for i in range(self._size)]
-    
+
     def __contains__(self, key) -> bool:
         return key in self._map
-    
+
     def __getitem__(self, key) -> Any:
         return self.get(key)
-    
+
     def __setitem__(self, key, value):
         if key in self:
             self.update(key, value)
         else:
             self.add(key, value)
-    
+
     def reset(self, size: int):
         self._size = size
         self.clear()
-        
+
     def _set_tail(self, idx: int):
         if idx == self._tail:
             return
@@ -1421,13 +1434,13 @@ class Cache:
         tar.prev = self._tail
         tar.next_ = -1
         self._tail = idx
-            
+
     def update(self, key: str, value: Any):
         idx = self._map[key]
         self._buffer[idx].value = value
         if self._lru:
             self._set_tail(idx)
-    
+
     def get(self, key: str) -> Any:
         if key not in self._map:
             return None
@@ -1435,7 +1448,7 @@ class Cache:
         if self._lru:
             self._set_tail(idx)
         return self._buffer[idx].value
-           
+
     def add(self, key: str, value: Any):
         if key in self._map:
             return self.update(key, value)
@@ -1456,7 +1469,7 @@ class Cache:
                 self._buffer[idx] = _CacheElement(self._tail, -1, key, value)
                 self._tail = idx
             self._map[key] = idx
-        
+
     def keys(self) -> List[str]:
         ret = []
         idx = self._head
@@ -1465,10 +1478,10 @@ class Cache:
             ret.append(cur.key)
             idx = cur.next_
         return ret
-    
+
     def info(self):
         logging.info(f"""
-            head: {self._buffer[self._head].key if self._head >= 0 else ""}; 
-            tail: {self._buffer[self._tail].key if self._tail >= 0 else ""}; 
+            head: {self._buffer[self._head].key if self._head >= 0 else ""};
+            tail: {self._buffer[self._tail].key if self._tail >= 0 else ""};
             keys: {self.keys()}
         """)

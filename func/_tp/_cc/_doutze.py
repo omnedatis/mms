@@ -4,7 +4,7 @@ from typing import Union
 
 from .._context import TechnicalIndicator as TI
 from .._context import (TimeUnit, _CandleStick, BooleanTimeSeries,
-                        NumericTimeSeries, MarketData, ts_min, ts_max)
+                        NumericTimeSeries, MarketData, ts_min, ts_max, MD_CACHE)                  
 
 def _is_close(tar: NumericTimeSeries, ref: NumericTimeSeries,
               close_zero_threshold: float) -> BooleanTimeSeries:
@@ -15,9 +15,9 @@ class DoutzeCandleStick(_CandleStick):
     """Doutze's CandleStick."""
 
     @classmethod
-    def make(cls, candle: _CandleStick):
+    def make(cls, candle: _CandleStick, name: str):
         """Generate instance from another."""
-        return cls(candle._data, name=candle._name, tunit=candle._tunit)
+        return cls(candle._data, name=name, tunit=candle._tunit)
 
     @property
     def real_body(self) -> NumericTimeSeries:
@@ -257,16 +257,16 @@ class DoutzeCandleStick(_CandleStick):
 
 def get_candle(market_id: str, period_type: Union[int, TimeUnit]) -> _CandleStick:
     if period_type == TimeUnit.DAY:
-        name = f'{market_id}.DailyCandleStick'
+        name = f'{market_id}.DailyDoutzeCandleStick'
     elif period_type == TimeUnit.WEEK:
-        name = f'{market_id}.WeeklyCandleStick'
+        name = f'{market_id}.WeeklyDoutzeCandleStick'
     elif period_type == TimeUnit.MONTH:
-        name = f'{market_id}.MonthlyCandleStick'
+        name = f'{market_id}.MonthlyDoutzeCandleStick'
     else:
-        name = f'{market_id}.CandleStick({period_type})'
-    ret = DoutzeCandleStick.make(TI.Candle(market_id, period_type))
-    return ret
-
+        name = f'{market_id}.DoutzeCandleStick({period_type})'
+    if name not in MD_CACHE:      
+        MD_CACHE[name] = DoutzeCandleStick.make(TI.Candle(market_id, period_type), name)
+    return MD_CACHE[name] 
 
 def _is_long_white(cct: DoutzeCandleStick,
                    shadow_ignore_threshold: float,
