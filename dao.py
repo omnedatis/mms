@@ -648,11 +648,14 @@ class MimosaDB:
         self._clone_model_training_infos()
         self._clone_model_markets()
         self._clone_model_patterns()
-        # TODO 若發生取不到資料的情況
+        
         # 取得觀點的訓練資訊
         with open(f'{DATA_LOC}/model_training_infos.pkl', 'rb') as fp:
             model_info = pickle.load(fp)
         m_cond = model_info['MODEL_ID'].values == model_id
+        if len(model_info[m_cond]) == 0:
+            # 若發生取不到資料的情況
+            raise Exception(f"get_model_info: model not found: {model_id}")
         train_begin = model_info[m_cond].iloc[0]['TRAIN_START_DT']
         train_gap = model_info[m_cond].iloc[0]['RETRAIN_CYCLE']
 
@@ -666,6 +669,9 @@ class MimosaDB:
         with open(f'{DATA_LOC}/model_patterns.pkl', 'rb') as fp:
             patterns = pickle.load(fp)
         m_cond = patterns['MODEL_ID'].values == model_id
+        if len(patterns[m_cond]) == 0:
+            # 若觀點下沒有任何現象, 則回傳例外
+            raise Exception(f"get_model_info: 0 model pattern exception: {model_id}")
         patterns = patterns[m_cond]['PATTERN_ID'].values.tolist()
 
         result = ModelInfo(model_id, patterns, markets, train_begin, train_gap)
