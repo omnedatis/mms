@@ -20,11 +20,6 @@ QUEUE_LIMIT = 2
 PORT = 8080
 FUNC_CACHE_SIZE = 2000
 
-class ModelLockState(Enum):
-    """ Fields of model lock states """
-
-    LOCK = 'lock'
-    UNLOCK = 'unlock'
 
 class BatchType(str, Enum):
     """Batch 的執行型態

@@ -55,7 +55,8 @@ def api_batch():
     """ Run batch. """
     MT_MANAGER.acquire(BATCH_EXE_CODE).switch_off()
     MT_MANAGER.release(BATCH_EXE_CODE)
-    time.sleep(10)
+    while MT_MANAGER.exists(BATCH_EXE_CODE):
+        time.sleep(1)
     excute_id = datetime.datetime.now()
 
     t = mt.Thread(target=batch, args=(excute_id,))
@@ -132,6 +133,7 @@ if __name__ == '__main__':
         logging.error(traceback.format_exc())     
     if not os.path.exists(LOCAL_DB) or args.init:
         t = mt.Thread(target=init_db)
+        t.start()
         serve(app, port=PORT)
     else:
         if (not args.motionless) and (not args.batchless):

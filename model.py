@@ -133,10 +133,10 @@ def clean_db_cache():
     db = get_db()
     db.clean_db_cache()
 
-def clone_db_cache():
+def clone_db_cache(batch_type):
     """Build local cache from db."""
     db = get_db()
-    db.clone_db_cache()
+    db.clone_db_cache(batch_type)
 
 def get_pattern_results(market_id, patterns, begin_date):
     """Get pattern results from begining date to the latest of given market from DB.
@@ -1070,7 +1070,7 @@ def _is_all_none(recv: List[Any]) -> bool:
     return True
 
 
-def model_update(model_id: str, batch_controller: ThreadController):
+def model_update(model_id: str, batch_controller: ThreadController, batch_type:BatchType):
     """更新模型預測結果
 
     此函數目的為更新模型的預測結果：
@@ -1126,7 +1126,7 @@ def model_update(model_id: str, batch_controller: ThreadController):
     MT_MANAGER.release(model_id)
 
 
-def add_model(model_id: str, lock_state:Union[ModelLockState, None] = None):
+def add_model(model_id: str):
     """新增模型
 
     此函數目的為新增模型：
@@ -1137,24 +1137,12 @@ def add_model(model_id: str, lock_state:Union[ModelLockState, None] = None):
     ----------
     model_id: str
         ID of the designated model.
-    lock_state: 
-        State of whether add model api is locked
 
     See Also
     --------
     model_create, model_backtest
 
     """
-    # to lock add model api
-    if lock_state == ModelLockState.LOCK:
-        for each in range(QUEUE_LIMIT):
-            model_semaphore.acquire()
-        return
-    # to release add model api
-    elif lock_state == ModelLockState.UNLOCK:
-        for each in range(QUEUE_LIMIT):
-            model_semaphore.release()
-        return
     
     model_semaphore.acquire()
     controller = MT_MANAGER.acquire(model_id)
@@ -1371,7 +1359,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         set_model_execution_complete(exection_id)
 
 
-def pattern_update(controller: ThreadController):
+def pattern_update(controller: ThreadController, batch_type: BatchType):
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
@@ -1417,28 +1405,28 @@ def pattern_update(controller: ThreadController):
     t.start()
     t = mt.Thread(target=dump_pattern_results)
     t.start()
-    ret = pd.concat(ret_buffer, axis=0)
-    ret_market_dist = pd.concat(ret_market_dist, axis=0)
-    ret_market_occur = pd.concat(ret_market_occur, axis=0)
-    logging.info('start writing db')
-    if not controller.isactive:
-        logging.info('batch terminated')
-        return
-    # pickle_dump(ret, './latest_pattern_results.pkl')
-    save_latest_pattern_results(ret)
-    if not controller.isactive:
-        logging.info('batch terminated')
-        return
-    # pickle_dump(ret_market_occur, './latest_pattern_occur.pkl')
-    logging.info('start writing pattern occur')
-    save_latest_pattern_occur(ret_market_occur)
-    if not controller.isactive:
-        logging.info('batch terminated')
-        return
-    # pickle_dump(ret_market_dist, './latest_pattern_distribution.pkl')
-    logging.info('start writing pattern dist')
-    save_latest_pattern_distribution(ret_market_dist)
-    return ret
+    if batch_type == BatchType.SERVICE_BATCH:
+        ret = pd.concat(ret_buffer, axis=0)
+        ret_market_dist = pd.concat(ret_market_dist, axis=0)
+        ret_market_occur = pd.concat(ret_market_occur, axis=0)
+        logging.info('start writing db')
+        if not controller.isactive:
+            logging.info('batch terminated')
+            return
+        # pickle_dump(ret, './latest_pattern_results.pkl')
+        save_latest_pattern_results(ret)
+        if not controller.isactive:
+            logging.info('batch terminated')
+            return
+        # pickle_dump(ret_market_occur, './latest_pattern_occur.pkl')
+        logging.info('start writing pattern occur')
+        save_latest_pattern_occur(ret_market_occur)
+        if not controller.isactive:
+            logging.info('batch terminated')
+            return
+        # pickle_dump(ret_market_dist, './latest_pattern_distribution.pkl')
+        logging.info('start writing pattern dist')
+        save_latest_pattern_distribution(ret_market_dist)
 
 
 def get_pattern_stats_info(pattern, freturn, market):
@@ -1506,16 +1494,15 @@ def model_execution_recover():
 def init_db():
     try:
         logging.info('start initiate db')
-        controller = MT_MANAGER.acquire("init")
-        add_model(ModelLockState.LOCK)
+        for each in range(QUEUE_LIMIT):
+            model_semaphore.acquire()
         batch("init", BatchType.INIT_BATCH)
-        add_model(ModelLockState.UNLOCK)
-        MT_MANAGER.release("init")
+        for each in range(QUEUE_LIMIT):
+            model_semaphore.release()
         logging.info('init finished')
     except Exception as esp:
-        add_model(ModelLockState.UNLOCK)
-        MT_MANAGER.release("init")
-    except Exception as esp:
+        for each in range(QUEUE_LIMIT):
+            model_semaphore.release()
         logging.error(f"init db failed")
         logging.error(traceback.format_exc())
 
@@ -1524,25 +1511,28 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
     controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     try:
         if controller.isactive:
-            logging.info(f"api_batch {excute_id} start")
+            logging.info(f"Start batch {excute_id}")
             clean_db_cache()
             clone_db_cache(batch_type)
-            logging.info("start pattern update")
-            pattern_update(controller)
-            logging.info("end pattern update")
-            logging.info("start model update")
-            for model in get_models():
-                model_update(model, controller)
-            logging.info("end model update")
-            logging.info('start model execution recover')
-            model_execution_recover()
-            logging.info('end model execution recover')
-            logging.info(f"api_batch {excute_id} complete")
-            checkout_fcst_data()
+            logging.info("Start pattern update")
+            pattern_update(controller, batch_type)
+            logging.info("End pattern update")
+            if controller.isactive:
+                logging.info('Start model execution recover')
+                model_execution_recover()
+                logging.info('End model execution recover')
+            if batch_type == BatchType.SERVICE_BATCH:            
+                logging.info("Start model update")
+                for model in get_models():
+                    model_update(model, controller, batch_type)
+                logging.info("End model update")
+                if controller.isactive:
+                    checkout_fcst_data()
             MT_MANAGER.release(BATCH_EXE_CODE)
+            logging.info(f"End batch {excute_id}")
 
     except Exception as esp:
         logging.error(f"batch failed")
         logging.error(traceback.format_exc())
         MT_MANAGER.release(BATCH_EXE_CODE)
-    logging.info("batch finished")
+    
