@@ -10,14 +10,21 @@ PREDICT_PERIODS = [5, 10, 20, 40, 60, 120]
 DEFAULT_TRAIN_BEGIN_DATE = datetime.date(2007, 7, 1)
 DEFAULT_TGAP = 3
 MIN_BACKTEST_LEN = 180
-LOCAL_DB = '_local_db'
+LOCAL_DB = '../_local_db'
 DATA_LOC = '_data'
 EXCEPT_DATA_LOC = '_except'
 MIN_Y_SAMPLES = 30
 Y_OUTLIER = 0.05
 BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
 QUEUE_LIMIT = 2
+PORT = 8080
 FUNC_CACHE_SIZE = 2000
+
+class ModelLockState(Enum):
+    """ Fields of model lock states """
+
+    LOCK = 'lock'
+    UNLOCK = 'unlock'
 
 class BatchType(str, Enum):
     """Batch 的執行型態

@@ -31,7 +31,7 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db,
  add_model, remove_model, MarketDataFromDb, MT_MANAGER)
-from const import BATCH_EXE_CODE, ExecMode
+from const import BATCH_EXE_CODE, ExecMode, PORT, LOCAL_DB
 from dao import MimosaDB
 from flask import Flask, request
 from waitress import serve
@@ -39,7 +39,7 @@ from werkzeug.exceptions import MethodNotAllowed, NotFound
 import logging
 from logging import handlers
 import json
-
+import warnings
 
 app =  Flask(__name__)
 
@@ -116,24 +116,28 @@ if __name__ == '__main__':
     if ExecMode.get(mode) is None:
         logging.error(f'invalid execution mode {mode}')
         raise RuntimeError(f'invalid execution mode {mode}')
-
+    if ExecMode.get(mode) == ExecMode.PROD.value:
+        warnings.filterwarnings("ignore")
     if not os.path.exists('./log'):
         os.mkdir('./log')
     try:
         stream_hdlr = logging.StreamHandler()
         file_hdlr = handlers.TimedRotatingFileHandler(filename='./log/.log', when='D', backupCount=7)
-        level = {ExecMode.DEV.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
+        level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.PROD.value:logging.INFO}[ExecMode.get(mode)]
         logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
         set_db(MimosaDB(mode=mode))
         set_market_data_provider(MarketDataFromDb())
     except Exception as esp:
         logging.error(f"setting up failed")
-        logging.error(traceback.format_exc())
-    if not os.path.exists('./_local_db') or args.init:
-        init_db()
-    if (not args.motionless) and (not args.batchless):
-        excute_id = datetime.datetime.now()
-        t = mt.Thread(target=batch, args=(excute_id,))
-        t.start()
-    if not args.motionless:
-        serve(app, port=8080)
+        logging.error(traceback.format_exc())     
+    if not os.path.exists(LOCAL_DB) or args.init:
+        t = mt.Thread(target=init_db)
+        serve(app, port=PORT)
+    else:
+        if (not args.motionless) and (not args.batchless):
+            excute_id = datetime.datetime.now()
+            t = mt.Thread(target=batch, args=(excute_id,))
+            t.start()
+        if not args.motionless:
+            serve(app, port=PORT)
+    

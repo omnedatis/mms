@@ -1126,7 +1126,7 @@ def model_update(model_id: str, batch_controller: ThreadController):
     MT_MANAGER.release(model_id)
 
 
-def add_model(model_id: str):
+def add_model(model_id: str, lock_state:Union[ModelLockState, None] = None):
     """新增模型
 
     此函數目的為新增模型：
@@ -1137,12 +1137,25 @@ def add_model(model_id: str):
     ----------
     model_id: str
         ID of the designated model.
+    lock_state: 
+        State of whether add model api is locked
 
     See Also
     --------
     model_create, model_backtest
 
     """
+    # to lock add model api
+    if lock_state == ModelLockState.LOCK:
+        for each in range(QUEUE_LIMIT):
+            model_semaphore.acquire()
+        return
+    # to release add model api
+    elif lock_state == ModelLockState.UNLOCK:
+        for each in range(QUEUE_LIMIT):
+            model_semaphore.release()
+        return
+    
     model_semaphore.acquire()
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
@@ -1494,26 +1507,26 @@ def init_db():
     try:
         logging.info('start initiate db')
         controller = MT_MANAGER.acquire("init")
-        clean_db_cache()
-        clone_db_cache()
-        logging.info('start pattern update')
-        pattern_update(controller)
-        logging.info('end pattern update')
-        logging.info('start model execution recover')
-        model_execution_recover()
-        logging.info('end model execution recover')
+        add_model(ModelLockState.LOCK)
+        batch("init", BatchType.INIT_BATCH)
+        add_model(ModelLockState.UNLOCK)
+        MT_MANAGER.release("init")
+        logging.info('init finished')
+    except Exception as esp:
+        add_model(ModelLockState.UNLOCK)
+        MT_MANAGER.release("init")
     except Exception as esp:
         logging.error(f"init db failed")
         logging.error(traceback.format_exc())
 
 
-def batch(excute_id):
+def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
     controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     try:
         if controller.isactive:
             logging.info(f"api_batch {excute_id} start")
             clean_db_cache()
-            clone_db_cache()
+            clone_db_cache(batch_type)
             logging.info("start pattern update")
             pattern_update(controller)
             logging.info("end pattern update")
