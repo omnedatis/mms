@@ -903,8 +903,8 @@ class MimosaDB:
                     chunksize=1000,
                     index=False)
             except Exception as e:
-                logging.info('Saving model results failed')
-                logging.error(traceback.format_exc())
+                logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
+                logging.debug(traceback.format_exc())
             logging.info('Saving model results finished')
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
