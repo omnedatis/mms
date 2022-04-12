@@ -18,6 +18,18 @@ Y_OUTLIER = 0.05
 BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
 QUEUE_LIMIT = 2
 
+class BatchType(str, Enum):
+    """Batch 的執行型態
+
+    Membors
+    -------
+    INIT_BATCH: 初始化時的批次執行.
+    SERVICE_BATCH: 對外部提供的批次執行.
+
+    """
+    INIT_BATCH = 'init'
+    SERVICE_BATCH = 'service'
+
 class ExecMode(Enum):
     """Fields of excution modes. """
 

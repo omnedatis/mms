@@ -14,7 +14,7 @@ from model import (ModelInfo, PatternInfo,
                 get_filed_name_of_future_return, set_model_execution_start)
 from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, 
                    MarketDistField, ModelExecution, PredictResultField, 
-                   PatternResultField, ModelExecution)
+                   PatternResultField, ModelExecution, BatchType)
 import logging
 
 class MimosaDB:
@@ -74,14 +74,26 @@ class MimosaDB:
                 os.remove(f'{DATA_LOC}/markets/{file}')
             os.rmdir(f'{DATA_LOC}/markets')
 
-    def _clone_market_data(self):
+    def _clone_market_data(self, batch_type:BatchType=BatchType.SERVICE_BATCH):
         """ 複製當前資料庫中的市場歷史資料至本地端
+
+        Parameters
+        ----------
+        batch_type: BatchType
+            指定批次的執行狀態為初始化還是服務呼叫
         
         Returns
         -------
         None.
         
         """
+        table_name = ''
+        if batch_type == BatchType.INIT_BATCH:
+            table_name = 'FCST_MKT_PRICE_HISTORY'
+        elif batch_type == BatchType.SERVICE_BATCH:
+            table_name = 'FCST_MKT_PRICE_HISTORY_SWAP'
+        else:
+            raise Exception(f'_clone_market_data: Unknown batch type: {batch_type}')
         if not os.path.exists(f'{DATA_LOC}/markets'):
             logging.info('Clone market data from db')
             os.makedirs(f'{DATA_LOC}/markets', exist_ok=True)
@@ -90,7 +102,7 @@ class MimosaDB:
                 SELECT
                     MARKET_CODE, PRICE_DATE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE
                 FROM
-                    FCST_MKT_PRICE_HISTORY_SWAP
+                    {table_name}
             """
             data = pd.read_sql_query(sql, engine)
             result = pd.DataFrame(
@@ -117,13 +129,25 @@ class MimosaDB:
         if os.path.exists(f'{DATA_LOC}/market_list.pkl'):
             os.remove(f'{DATA_LOC}/market_list.pkl')
     
-    def _clone_markets(self):
+    def _clone_markets(self, batch_type: BatchType=BatchType.SERVICE_BATCH):
         """複製當前資料庫中的市場清單至本地端
+
+        Parameters
+        ----------
+        batch_type: BatchType
+            指定批次的執行狀態為初始化還是服務呼叫
         
         Returns
         -------
         None.
         """
+        table_name = ''
+        if batch_type == BatchType.INIT_BATCH:
+            table_name = 'FCST_MKT'
+        elif batch_type == BatchType.SERVICE_BATCH:
+            table_name = 'FCST_MKT_SWAP'
+        else:
+            raise Exception(f'_clone_markets: Unknown batch type: {batch_type}')
         if not os.path.exists(f'{DATA_LOC}/market_list.pkl'):
             logging.info('Clone market list from db')
             os.makedirs(f'{DATA_LOC}', exist_ok=True)
@@ -132,7 +156,7 @@ class MimosaDB:
                 SELECT
                     MARKET_CODE
                 FROM
-                    FCST_MKT_SWAP
+                    {table_name}
             """
             data = pd.read_sql_query(sql, engine)['MARKET_CODE'].values.tolist()
             with open(f'{DATA_LOC}/market_list.pkl', 'wb') as fp:
@@ -381,19 +405,20 @@ class MimosaDB:
         self._clean_model_markets()
         self._clean_model_patterns()
 
-    def clone_db_cache(self):
+    def clone_db_cache(self, batch_type:BatchType=BatchType.SERVICE_BATCH):
         """ 從資料庫載入快取
         
         Parameters
         ----------
-        None.
+        batch_type: BatchType
+            指定批次的執行狀態為初始化還是服務呼叫
         
         Returns
         -------
         None.
         """
-        self._clone_market_data()
-        self._clone_markets()
+        self._clone_market_data(batch_type)
+        self._clone_markets(batch_type)
         self._clone_patterns()
         self._clone_models()
         self._clone_model_training_infos()
