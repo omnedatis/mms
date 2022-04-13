@@ -1469,6 +1469,7 @@ class HistoryReturnWriter:
     def _run(self, stime):
         self._active = True
         logging.info('start writing lreturn values')
+        tlen = 0
         while self._controller.isactive:
             if self._pool:
                 self._lock.acquire()
@@ -1481,7 +1482,8 @@ class HistoryReturnWriter:
                     else:
                         pickle_dump(data, self._pfile)
                 save_mkt_period(data)
-                logging.info(f'writing lreturn values: {len(data} records')
+                logging.info(f'writing lreturn values: #{tlen} ~ #{tlen + len(data)} records')
+                tlen = tlen + len(data)
             else:
                 if self._active:
                     time.sleep(stime)
