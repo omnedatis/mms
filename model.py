@@ -63,6 +63,29 @@ class PatternInfo(NamedTuple):
         """
         return eval(f"{self.func}('{market_id}', **{self.kwargs})").to_pandas()
 
+def save_mkt_score(data):
+    """save mkt score to DB."""
+    db = get_db()
+    result = db.save_mkt_score()
+    return result
+
+def save_mkt_period(data):
+    """save mkt period to DB."""
+    db = get_db()
+    result = db.save_mkt_period()
+    return result
+
+def save_mkt_dist(data):
+    """save mkt dist to DB."""
+    db = get_db()
+    result = db.save_mkt_dist()
+    return result
+
+def get_score_meta_info():
+    """get score meta info from DB."""
+    db = get_db()
+    result = db.get_score_meta_info()
+    return result
 
 def get_markets():
     """get market IDs from DB.
@@ -1362,6 +1385,106 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         set_model_execution_complete(exection_id)
 
 
+class HistoryReturnWriter:
+    def __init__(self, controller: ThreadController, stime=1, pfile=None):
+        self._controller = controller
+        self._active = False
+        self._pool = []
+        self._pfile = pfile
+        self._lock = Lock()
+        t = mt.Thread(target=self._run, args=(stime,))
+        t.start()
+
+    def add(self, mid: str):
+        cps = get_market_data(mid)['CP'].dropna()
+        ds = cps.index.values
+        vs = cps.values
+        mis = []
+        dps = []
+        pds = []
+        dds = []
+        ncs = []
+        ncrs = []
+        rms = []
+        rss = []
+        rcs = []
+        for p in PREDICT_PERIODS:
+            mis.append(np.full(len(vs) - p, p))
+            dps.append(np.full(len(vs) - p, p))
+            pds.append(ds[p:])
+            dds.append(ds[:-p])
+            nc = vs[p:] - vs[:-p]
+            ncs.append(nc)
+            ncr = nc / vs[:-p]
+            ncrs.append(ncr)
+            rms.append(ncr.mean())
+            rss.append(ncr.std())
+            rcs.append(len(ncr))
+        data = pd.DataFrame()
+        data[MarketPeriodField.DATE_PERIOD.value] = np.concatenate(dps)
+        data[MarketPeriodField.PRICE_DATE.value] = np.concatenate(pds)
+        data[MarketPeriodField.DATA_DATE.value] = np.concatenate(dds)
+        data[MarketPeriodField.NET_CHANGE.value] = np.concatenate(ncs)
+        data[MarketPeriodField.NET_CHANGE_RATE.value] = np.concatenate(ncrs)
+        data[MarketPeriodField.MARKET_ID.value] = mid
+        self._lock.acquire()
+        self._pool.append(data)
+        self._lock.release()
+
+        ret_1 = pd.DataFrame()
+        ret_1[MarketStatField.DATE_PERIOD.value] = PREDICT_PERIODS
+        ret_1[MarketStatField.RETURN_MEAN.value] = rms
+        ret_1[MarketStatField.RETURN_STD.value] = rss
+        ret_1[MarketStatField.RETURN_CNT.value] = rcs
+        ret_1[MarketStatField.MARKET_ID.value] = mid
+
+        dps = []
+        mss = []
+        ubs = []
+        lbs = []
+
+        s_, l_, u_ = list(zip(*get_score_meta_info()))
+        s_ = np.array(s_)
+        l_ = np.array(l_)
+        u_ = np.array(u_)
+        for p, m, s in zip(PREDICT_PERIODS, rms, rss):
+            dps.append(np.full(len(s_), p))
+            mss.append(s_)
+            ubs.append(m + s * u_)
+            lbs.append(m + s * l_)
+        ret_2 = pd.DataFrame()
+        ret_2[MarketScoreField.DATE_PERIOD.value] = np.concatenate(dps)
+        ret_2[MarketScoreField.MARKET_SCORE.value] = np.concatenate(mss)
+        ret_2[MarketScoreField.UPPER_BOUND.value] = np.concatenate(ubs)
+        ret_2[MarketScoreField.LOWER_BOUND.value] = np.concatenate(lbs)
+        ret_2[MarketScoreField.MARKET_ID.value] = mid
+        return ret_1, ret_2
+
+    def _run(self, stime):
+        self._active = True
+        logging.info('start writing lreturn values')
+        while self._controller.isactive:
+            if self._pool:
+                self._lock.acquire()
+                data = pd.concat(self._pool, axis=0)
+                self._pool = []
+                self._lock.release()
+                if self._pfile is not None:
+                    if os.path.exists(self._pfile):
+                        pickle_dump(pd.concat([data, pickle_load(self._pfile)], axis=0), self._pfile)
+                    else:
+                        pickle_dump(data, self._pfile)
+                save_mkt_period(data)
+            else:
+                if self._active:
+                    time.sleep(stime)
+                else:
+                    break
+        logging.info('Writing return values finished')
+
+    def stop(self):
+        self._active = False
+
 def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
     patterns = get_patterns()
     markets = get_markets()
@@ -1371,7 +1494,15 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     ret_buffer = []
     ret_market_dist = []
     ret_market_occur = []
+    if batch_type == BatchType.SERVICE_BATCH:
+        hrw = HistoryReturnWriter(controller)
+        ret_mstats = []
+        ret_mscores = []
     for market in markets:
+        if batch_type == BatchType.SERVICE_BATCH:
+            r1, r2 = hrw.add(market)
+            ret_mstats.append(r1)
+            ret_mscores.append(r2)
         result_buffer = []
         for pattern in patterns:
             if not controller.isactive:
@@ -1410,6 +1541,27 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     t = mt.Thread(target=dump_pattern_results)
     t.start()
     if batch_type == BatchType.SERVICE_BATCH:
+        hrw.stop()
+        def save_market_return_scores(data, controller, pfile=None):
+            if not controller.isactive:
+                logging.info('batch terminated')
+                return
+            ret = pd.concat(data, axis=0)
+            if pfile:
+                pickle_dump(ret, pfile)
+            logging.info('start writing market return stats')
+            save_mkt_score(ret)
+            logging.info('Writing market return stats finished')
+        def save_market_return_dists(data, controller, pfile=None):
+            if not controller.isactive:
+                logging.info('batch terminated')
+                return
+            ret = pd.concat(data, axis=0)
+            if pfile:
+                pickle_dump(ret, pfile)
+            logging.info('start writing market return dists')
+            save_mkt_dist(ret)
+            logging.info('Writing market return dists finished')
         def save_latest_pattern(data, controller, pfile=None):
             if not controller.isactive:
                 logging.info('batch terminated')
@@ -1441,7 +1593,9 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             save_latest_pattern_distribution(ret)
             logging.info('Writing pattern dist finished')
         #logging.info('start writing db')
-        ts = [mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller)),
+        ts = [mt.Thread(target=save_market_return_scores, args=(ret_mscores, controller)),
+              mt.Thread(target=save_market_return_dists, args=(ret_mstats, controller)),
+              mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller)),
               mt.Thread(target=save_market_dist, args=(ret_market_dist, controller)),
               mt.Thread(target=save_market_occur, args=(ret_market_occur, controller))]
         for t in ts:
@@ -1580,7 +1734,7 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                 logging.info('Start model execution recover')
                 model_execution_recover()
                 logging.info('End model execution recover')
-            if batch_type == BatchType.SERVICE_BATCH:            
+            if batch_type == BatchType.SERVICE_BATCH:
                 logging.info("Start model update")
                 for model in get_models():
                     t = model_update(model, controller, batch_type)
