@@ -1404,7 +1404,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
                 pattern_result, return_result, market)
             ret_market_dist.append(market_dist)
             ret_market_occur.append(market_occur)
-        logging.info(f'update patterns: {market}')
+        logging.debug(f'update patterns: {market}')
     t = mt.Thread(target=dump_future_returns)
     t.start()
     t = mt.Thread(target=dump_pattern_results)
