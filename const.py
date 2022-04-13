@@ -148,3 +148,56 @@ class MarketDistField(Enum):
     DATE_PERIOD = 'DATE_PERIOD'
     RETURN_MEAN = 'RETURN_MEAN'
     RETURN_STD = 'RETURN_STD'
+
+class MarketScoreField(Enum):
+    """市場分數標籤表的欄位資訊
+    
+    Membors
+    -------
+    MARKET_ID: ID of market.
+    DATE_PERIOD: date Period.
+    MARKET_SCORE: 分數標籤
+    UPPER_BOUND: 分數標籤對應的報酬上界
+    LOWER_BOUND: 分數標籤對應的報酬下界
+    """
+    MARKET_ID = 'MARKET_CODE'
+    DATE_PERIOD = 'DATE_PERIOD'
+    MARKET_SCORE = 'MARKET_SCORE'
+    UPPER_BOUND = 'UPPER_BOUND'
+    LOWER_BOUND = 'LOWER_BOUND'
+
+class MarketPeriodField(Enum):
+    """市場各天期歷史報酬的欄位資訊
+    
+    Membors
+    -------
+    MARKET_ID: ID of market.
+    DATE_PERIOD: date Period.
+    PRICE_DATE: 價格日期
+    DATA_DATE: 計算報酬的計算日期
+    NET_CHANGE: 漲跌幅
+    NET_CHANGE_RATE: 報酬率 
+    """
+    MARKET_ID = 'MARKET_CODE'
+    DATE_PERIOD = 'DATE_PERIOD'
+    PRICE_DATE = 'PRICE_DATE'
+    DATA_DATE = 'DATA_DATE'
+    NET_CHANGE = 'NET_CHANGE'
+    NET_CHANGE_RATE = 'NET_CHANGE_RATE'
+
+class MarketStatField(Enum):
+    """市場統計資訊的欄位資訊
+    
+    Membors
+    -------
+    MARKET_ID: ID of market.
+    DATE_PERIOD: date Period.
+    RETURN_MEAN: return mean.
+    RETURN_STD: return standard deviation.
+    RETURN_CNT: 所有報酬的樣本個數
+    """
+    MARKET_ID = 'MARKET_CODE'
+    DATE_PERIOD = 'DATE_PERIOD'
+    RETURN_MEAN = 'RETURN_MEAN'
+    RETURN_STD = 'RETURN_STD'
+    RETURN_CNT = 'RETURN_CNT'
