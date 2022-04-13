@@ -1409,6 +1409,8 @@ class HistoryReturnWriter:
         rss = []
         rcs = []
         for p in PREDICT_PERIODS:
+            if len(vs) <= p:
+                continue
             mis.append(np.full(len(vs) - p, p))
             dps.append(np.full(len(vs) - p, p))
             pds.append(ds[p:])
@@ -1420,44 +1422,48 @@ class HistoryReturnWriter:
             rms.append(ncr.mean())
             rss.append(ncr.std())
             rcs.append(len(ncr))
-        data = pd.DataFrame()
-        data[MarketPeriodField.DATE_PERIOD.value] = np.concatenate(dps)
-        data[MarketPeriodField.PRICE_DATE.value] = np.concatenate(pds)
-        data[MarketPeriodField.DATA_DATE.value] = np.concatenate(dds)
-        data[MarketPeriodField.NET_CHANGE.value] = np.concatenate(ncs)
-        data[MarketPeriodField.NET_CHANGE_RATE.value] = np.concatenate(ncrs)
-        data[MarketPeriodField.MARKET_ID.value] = mid
-        self._lock.acquire()
-        self._pool.append(data)
-        self._lock.release()
+        if dps:
+            data = pd.DataFrame()
+            data[MarketPeriodField.DATE_PERIOD.value] = np.concatenate(dps)
+            data[MarketPeriodField.PRICE_DATE.value] = np.concatenate(pds)
+            data[MarketPeriodField.DATA_DATE.value] = np.concatenate(dds)
+            data[MarketPeriodField.NET_CHANGE.value] = np.concatenate(ncs)
+            data[MarketPeriodField.NET_CHANGE_RATE.value] = np.concatenate(ncrs)
+            data[MarketPeriodField.MARKET_ID.value] = mid
+            self._lock.acquire()
+            self._pool.append(data)
+            self._lock.release()
 
         ret_1 = pd.DataFrame()
-        ret_1[MarketStatField.DATE_PERIOD.value] = PREDICT_PERIODS
-        ret_1[MarketStatField.RETURN_MEAN.value] = rms
-        ret_1[MarketStatField.RETURN_STD.value] = rss
-        ret_1[MarketStatField.RETURN_CNT.value] = rcs
-        ret_1[MarketStatField.MARKET_ID.value] = mid
-
-        dps = []
-        mss = []
-        ubs = []
-        lbs = []
-
-        s_, l_, u_ = list(zip(*get_score_meta_info()))
-        s_ = np.array(s_)
-        l_ = np.array(l_)
-        u_ = np.array(u_)
-        for p, m, s in zip(PREDICT_PERIODS, rms, rss):
-            dps.append(np.full(len(s_), p))
-            mss.append(s_)
-            ubs.append(m + s * u_)
-            lbs.append(m + s * l_)
         ret_2 = pd.DataFrame()
-        ret_2[MarketScoreField.DATE_PERIOD.value] = np.concatenate(dps)
-        ret_2[MarketScoreField.MARKET_SCORE.value] = np.concatenate(mss)
-        ret_2[MarketScoreField.UPPER_BOUND.value] = np.concatenate(ubs)
-        ret_2[MarketScoreField.LOWER_BOUND.value] = np.concatenate(lbs)
-        ret_2[MarketScoreField.MARKET_ID.value] = mid
+        if rms:
+            
+            ret_1[MarketStatField.DATE_PERIOD.value] = PREDICT_PERIODS
+            ret_1[MarketStatField.RETURN_MEAN.value] = rms
+            ret_1[MarketStatField.RETURN_STD.value] = rss
+            ret_1[MarketStatField.RETURN_CNT.value] = rcs
+            ret_1[MarketStatField.MARKET_ID.value] = mid
+
+            dps = []
+            mss = []
+            ubs = []
+            lbs = []
+
+            s_, l_, u_ = list(zip(*get_score_meta_info()))
+            s_ = np.array(s_)
+            l_ = np.array(l_)
+            u_ = np.array(u_)
+            for p, m, s in zip(PREDICT_PERIODS, rms, rss):
+                dps.append(np.full(len(s_), p))
+                mss.append(s_)
+                ubs.append(m + s * u_)
+                lbs.append(m + s * l_)
+            
+            ret_2[MarketScoreField.DATE_PERIOD.value] = np.concatenate(dps)
+            ret_2[MarketScoreField.MARKET_SCORE.value] = np.concatenate(mss)
+            ret_2[MarketScoreField.UPPER_BOUND.value] = np.concatenate(ubs)
+            ret_2[MarketScoreField.LOWER_BOUND.value] = np.concatenate(lbs)
+            ret_2[MarketScoreField.MARKET_ID.value] = mid
         return ret_1, ret_2
 
     def _run(self, stime):
