@@ -131,15 +131,8 @@ if __name__ == '__main__':
     except Exception as esp:
         logging.error(f"setting up failed")
         logging.error(traceback.format_exc())     
-    if not os.path.exists(LOCAL_DB) or args.init:
+    if not args.motionless:
         t = mt.Thread(target=init_db)
         t.start()
         serve(app, port=PORT)
-    else:
-        if (not args.motionless) and (not args.batchless):
-            excute_id = datetime.datetime.now()
-            t = mt.Thread(target=batch, args=(excute_id,))
-            t.start()
-        if not args.motionless:
-            serve(app, port=PORT)
     
