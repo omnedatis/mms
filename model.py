@@ -1504,7 +1504,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     ret_market_dist = []
     ret_market_occur = []
     if batch_type == BatchType.SERVICE_BATCH:
-        hrw = HistoryReturnWriter(controller)
+        hrw = HistoryReturnWriter(controller, pfile='D:/lreturns.pkl')
         ret_mstats = []
         ret_mscores = []
     for market in markets:
@@ -1539,7 +1539,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             result_buffer.append(gen_future_return(market, period))
         return_result = fast_concat(result_buffer)
         save_future_return(market, return_result)
-        if batch_type == BatchType.SERVICE_BATCH and len(market_dist) > 0:
+        if batch_type == BatchType.SERVICE_BATCH and len(pattern_result) > 0:
             market_dist, market_occur = get_pattern_stats_info_v2(
                 pattern_result, return_result, market)
             ret_market_dist.append(market_dist)
@@ -1602,11 +1602,11 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             save_latest_pattern_distribution(ret)
             logging.info('Writing pattern dist finished')
         #logging.info('start writing db')
-        ts = [mt.Thread(target=save_market_return_scores, args=(ret_mscores, controller)),
-              mt.Thread(target=save_market_return_dists, args=(ret_mstats, controller)),
-              mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller)),
-              mt.Thread(target=save_market_dist, args=(ret_market_dist, controller)),
-              mt.Thread(target=save_market_occur, args=(ret_market_occur, controller))]
+        ts = [mt.Thread(target=save_market_return_scores, args=(ret_mscores, controller, 'D:/save_market_return_scores')),
+              mt.Thread(target=save_market_return_dists, args=(ret_mstats, controller, 'D:/save_market_return_dists')),
+              mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller, 'D:/save_latest_pattern')),
+              mt.Thread(target=save_market_dist, args=(ret_market_dist, controller, 'D:/save_market_dist')),
+              mt.Thread(target=save_market_occur, args=(ret_market_occur, controller, 'D:/save_market_occur'))]
         for t in ts:
             t.start()
         ts.append(hrw.thread)
