@@ -1392,8 +1392,8 @@ class HistoryReturnWriter:
         self._pool = []
         self._pfile = pfile
         self._lock = Lock()
-        t = mt.Thread(target=self._run, args=(stime,))
-        t.start()
+        self.thread = mt.Thread(target=self._run, args=(stime,))
+        self.thread.start()
 
     def add(self, mid: str):
         cps = get_market_data(mid)['CP'].dropna()
@@ -1600,6 +1600,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
               mt.Thread(target=save_market_occur, args=(ret_market_occur, controller))]
         for t in ts:
             t.start()
+        ts.append(hrw.thread)
         return ts
 
 def get_pattern_stats_info(pattern, freturn, market):
