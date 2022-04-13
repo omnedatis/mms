@@ -1481,6 +1481,7 @@ class HistoryReturnWriter:
                     else:
                         pickle_dump(data, self._pfile)
                 save_mkt_period(data)
+                logging.info(f'writing lreturn values: {len(data} records')
             else:
                 if self._active:
                     time.sleep(stime)
@@ -1536,7 +1537,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             result_buffer.append(gen_future_return(market, period))
         return_result = fast_concat(result_buffer)
         save_future_return(market, return_result)
-        if batch_type == BatchType.SERVICE_BATCH:
+        if batch_type == BatchType.SERVICE_BATCH and len(market_dist) > 0:
             market_dist, market_occur = get_pattern_stats_info_v2(
                 pattern_result, return_result, market)
             ret_market_dist.append(market_dist)
