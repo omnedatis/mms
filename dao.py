@@ -1164,7 +1164,7 @@ class MimosaDB:
                 results.append((model_id, ModelExecution.ADD_BACKTEST))
         return results
 
-    def save_latest_pattern_results(self, data:pd.DataFrame, block_size: int=100000):
+    def save_latest_pattern_results(self, data:pd.DataFrame):
         """Save latest pattern results to DB.
 
         Parameters
@@ -1180,110 +1180,20 @@ class MimosaDB:
         PatternResultField
 
         """
-        logging.info('delete deprecated records')
         engine = self._engine()
-        cur_records = data[[
-            PatternResultField.PATTERN_ID.value,
-            PatternResultField.MARKET_ID.value
-            ]]
-        sql = f"""
-            SELECT
-                {PatternResultField.PATTERN_ID.value}, {PatternResultField.MARKET_ID.value}
-            FROM
-                FCST_PAT_MKT_EVENT_SWAP
-        """
-        prev_records = pd.read_sql_query(sql, engine)
-        deprecated_records = pd.concat([
-            prev_records, cur_records, cur_records
-            ]).drop_duplicates(keep=False)
-        if len(deprecated_records) > 0:
-            # 若有需要刪除的資料
-            deprecated_pks = [
-                (
-                    deprecated_records.iloc[i][PatternResultField.PATTERN_ID.value],
-                    deprecated_records.iloc[i][PatternResultField.MARKET_ID.value]
-                ) for i in range(len(deprecated_records))]
-            pk_sets = f"('{deprecated_pks[0][0]}', '{deprecated_pks[0][1]}')"
-            for i in range(1, len(deprecated_pks)):
-                pat_id, market_id = deprecated_pks[i]
-                pk_sets += f", ('{pat_id}', '{market_id}')"
-
-            if not self.READ_ONLY:
-                sql = f"""
-                    DELETE FROM
-                        FCST_PAT_MKT_EVENT_SWAP
-                    WHERE
-                        ({PatternResultField.PATTERN_ID.value}, {PatternResultField.MARKET_ID.value})
-                    IN
-                        ({pk_sets})
-                """
-                engine.execute(sql)
-        logging.info('delete deprecated records finished')
+        now = datetime.datetime.now()
+        create_dt = now
+        data['CREATE_BY'] = self.CREATE_BY
+        data['CREATE_DT'] = create_dt
 
         logging.info(f'saving start')
-        for idx in range(0, len(data), block_size):
-            self._save_latest_pattern_results(data[idx: idx+block_size])
-            logging.info(f'save {idx} records')
-
-    def _save_latest_pattern_results(self, data:pd.DataFrame):
-        """Save latest pattern results to DB.
-
-        Parameters
-        ----------
-        data: Pandas's DataFrame
-            A table of pattern results with columns for market_id, pattern_id,
-            price_date and value.
-
-        See Also
-        --------
-        PatternResultField
-
-        """
-        engine = self._engine()
-
-        now = datetime.datetime.now()
-        create_by = self.CREATE_BY
-        create_dt = now
-        modify_by = self.MODIFY_BY
-
-        sql = f"""
-        INSERT INTO
-            FCST_PAT_MKT_EVENT_SWAP (
-                CREATE_BY, CREATE_DT, MODIFY_BY, MODIFY_DT,
-                PATTERN_ID, MARKET_CODE, DATA_DATE, OCCUR_YN
-            )
-        VALUES """
-        if len(data) > 0:
-            ptn_event = data.iloc[0]
-            sql += f"""
-            (
-                '{create_by}', '{str(create_dt)}', null, null,
-                '{ptn_event[PatternResultField.PATTERN_ID.value]}',
-                '{ptn_event[PatternResultField.MARKET_ID.value]}',
-                '{str(ptn_event[PatternResultField.DATE.value])}',
-                '{'Y' if ptn_event[PatternResultField.VALUE.value] > 0 else 'N'}'
-            )
-            """
-        for i in range(1, len(data)):
-            ptn_event = data.iloc[i]
-            sql += f"""
-            , (
-                '{create_by}', '{str(create_dt)}', null, null,
-                '{ptn_event[PatternResultField.PATTERN_ID.value]}',
-                '{ptn_event[PatternResultField.MARKET_ID.value]}',
-                '{str(ptn_event[PatternResultField.DATE.value])}',
-                '{'Y' if ptn_event[PatternResultField.VALUE.value] > 0 else 'N'}'
-            )
-            """
-        sql += f"""
-        ON DUPLICATE KEY UPDATE DATA_DATE = VALUES(DATA_DATE),
-                                MODIFY_BY = '{modify_by}',
-                                MODIFY_DT = CURRENT_TIMESTAMP(),
-                                OCCUR_YN = VALUES(OCCUR_YN)
-        ;
-        """
         if not self.READ_ONLY:
-            engine.execute(sql)
+            data.to_sql(
+                'FCST_PAT_MKT_EVENT_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=1000,
+                index=False)
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
         """ 儲存最新現象統計分布統計量
