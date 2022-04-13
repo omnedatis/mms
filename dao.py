@@ -1317,11 +1317,6 @@ class MimosaDB:
         data[MarketDistField.RETURN_MEAN.value] = data_mean
         data[MarketDistField.RETURN_STD.value] = data_std
 
-        # 刪除現有資料庫
-        sql = "DELETE FROM FCST_PAT_MKT_DIST_SWAP"
-        if not self.READ_ONLY:
-            engine.execute(sql)
-
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
@@ -1353,11 +1348,6 @@ class MimosaDB:
         create_dt = now
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
-
-        # 刪除現有資料庫
-        sql = "DELETE FROM FCST_PAT_MKT_OCCUR_SWAP"
-        if not self.READ_ONLY:
-            engine.execute(sql)
 
         if not self.READ_ONLY:
         # 新增最新資料
