@@ -44,7 +44,6 @@ import warnings
 app =  Flask(__name__)
 
 parser = argparse.ArgumentParser(prog="Program start server")
-parser.add_argument("--init", action='store_true')
 parser.add_argument("--motionless", "-ml", action='store_true', default=False)
 parser.add_argument("--batchless", "-bl", action='store_true', default=False)
 parser.add_argument("--mode", "-md", action='store', default='dev')
@@ -131,8 +130,9 @@ if __name__ == '__main__':
     except Exception as esp:
         logging.error(f"setting up failed")
         logging.error(traceback.format_exc())     
-    if not args.motionless:
+    if (not args.motionless) and (not args.batchless):
         t = mt.Thread(target=init_db)
         t.start()
+    if (not args.motionless):
         serve(app, port=PORT)
     
