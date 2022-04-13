@@ -1115,16 +1115,19 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
                                             controller=controller))
         else:
             ret_buffer.append(model_predict(model, mid, controller=controller))
-    if ret_buffer and not _is_all_none(ret_buffer):
-        ret = pd.concat(ret_buffer, axis=0)
-        ret.index = np.arange(len(ret))
-        logging.info(f'finish model update on {model_id}')
+    def save_result(data, model_id, exection_id, controller):
+        if ret_buffer and not _is_all_none(ret_buffer):
+            ret = pd.concat(ret_buffer, axis=0)
+            ret.index = np.arange(len(ret))
+            logging.info(f'finish model update on {model_id}')
+            if controller.isactive:
+                save_model_results(model_id, ret, ModelExecution.BATCH_PREDICT)
         if controller.isactive:
-            save_model_results(model.model_id, ret, ModelExecution.BATCH_PREDICT)
-    if controller.isactive:
-        set_model_execution_complete(exection_id)
-    MT_MANAGER.release(model_id)
-
+            set_model_execution_complete(exection_id)
+        MT_MANAGER.release(model_id)
+    t = mt.Thread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
+    t.start()
+    return t
 
 def add_model(model_id: str):
     """新增模型
@@ -1143,7 +1146,7 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
-    
+
     model_semaphore.acquire()
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
@@ -1359,7 +1362,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         set_model_execution_complete(exection_id)
 
 
-def pattern_update(controller: ThreadController, batch_type: BatchType):
+def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
@@ -1396,38 +1399,54 @@ def pattern_update(controller: ThreadController, batch_type: BatchType):
             result_buffer.append(gen_future_return(market, period))
         return_result = fast_concat(result_buffer)
         save_future_return(market, return_result)
-
-        market_occur, market_dist = get_pattern_stats_info(
-            pattern_result, return_result, market)
-        ret_market_dist.append(market_dist)
-        ret_market_occur.append(market_occur)
+        if batch_type == BatchType.SERVICE_BATCH:
+            market_dist, market_occur = get_pattern_stats_info_v2(
+                pattern_result, return_result, market)
+            ret_market_dist.append(market_dist)
+            ret_market_occur.append(market_occur)
+        logging.info(f'update patterns: {market}')
     t = mt.Thread(target=dump_future_returns)
     t.start()
     t = mt.Thread(target=dump_pattern_results)
     t.start()
     if batch_type == BatchType.SERVICE_BATCH:
-        ret = pd.concat(ret_buffer, axis=0)
-        ret_market_dist = pd.concat(ret_market_dist, axis=0)
-        ret_market_occur = pd.concat(ret_market_occur, axis=0)
-        logging.info('start writing db')
-        if not controller.isactive:
-            logging.info('batch terminated')
-            return
-        # pickle_dump(ret, './latest_pattern_results.pkl')
-        save_latest_pattern_results(ret)
-        if not controller.isactive:
-            logging.info('batch terminated')
-            return
-        # pickle_dump(ret_market_occur, './latest_pattern_occur.pkl')
-        logging.info('start writing pattern occur')
-        save_latest_pattern_occur(ret_market_occur)
-        if not controller.isactive:
-            logging.info('batch terminated')
-            return
-        # pickle_dump(ret_market_dist, './latest_pattern_distribution.pkl')
-        logging.info('start writing pattern dist')
-        save_latest_pattern_distribution(ret_market_dist)
-
+        def save_latest_pattern(data, controller, pfile=None):
+            if not controller.isactive:
+                logging.info('batch terminated')
+                return
+            ret = pd.concat(data, axis=0)
+            if pfile:
+                pickle_dump(ret, pfile)
+            logging.info('start writing latest pattern')
+            save_latest_pattern_results(ret)
+            logging.info('Writing latest pattern finished')
+        def save_market_occur(data, controller, pfile=None):
+            if not controller.isactive:
+                logging.info('batch terminated')
+                return
+            ret = pd.concat(data, axis=0)
+            if pfile:
+                pickle_dump(ret, pfile)
+            logging.info('Start writing pattern occur')
+            save_latest_pattern_occur(ret)
+            logging.info('Writing pattern occur finished')
+        def save_market_dist(data, controller, pfile=None):
+            if not controller.isactive:
+                logging.info('batch terminated')
+                return
+            ret = pd.concat(data, axis=0)
+            if pfile:
+                pickle_dump(ret, pfile)
+            logging.info('Start writing pattern dist')
+            save_latest_pattern_distribution(ret)
+            logging.info('Writing pattern dist finished')
+        #logging.info('start writing db')
+        ts = [mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller)),
+              mt.Thread(target=save_market_dist, args=(ret_market_dist, controller)),
+              mt.Thread(target=save_market_occur, args=(ret_market_occur, controller))]
+        for t in ts:
+            t.start()
+        return ts
 
 def get_pattern_stats_info(pattern, freturn, market):
 
@@ -1483,13 +1502,53 @@ def get_pattern_stats_info(pattern, freturn, market):
     return pd.DataFrame(market_occur), pd.DataFrame(market_dist)
 
 
+def get_pattern_stats_info_v2(pattern, freturn, market):
+    ret_buffer_1 = []
+    ret_buffer_2 = []
+    for p in PREDICT_PERIODS:
+        cur_1 = pd.DataFrame()
+        cur_2 = pd.DataFrame()
+        cur_r = freturn[get_filed_name_of_future_return(p)].values
+        cur_p = pattern.values.copy()
+
+        # 正常市場資料下的寫法，比較快
+        cur_r = cur_r[:-p]
+        cur_p = cur_p[:-p]
+        # 不正常市場資料下的寫法，比較慢
+        #is_valid_r = ~np.isnan(cur_r)
+        #cur_r = cur_r[is_valid_r]
+        #cur_p = cur_p[is_valid_r]
+
+        is_occur = cur_p == 1
+        is_not_occur = cur_p == 0
+        cur_p[is_not_occur] = np.nan
+        effective_r = (cur_r * cur_p.T).T
+
+        cur_1[MarketDistField.RETURN_MEAN.value] = np.nanmean(effective_r, axis=0)
+        cur_1[MarketDistField.RETURN_STD.value] = np.nanstd(effective_r, axis=0, ddof=0)
+        cur_1[MarketDistField.PATTERN_ID.value] = pattern.columns.values
+        cur_1[MarketDistField.MARKET_ID.value] = market
+        cur_1[MarketDistField.DATE_PERIOD.value] = p
+        cur_2[MarketOccurField.OCCUR_CNT.value] = is_occur.sum(axis=0)
+        cur_2[MarketOccurField.NON_OCCUR_CNT.value] = is_not_occur.sum(axis=0)
+        cur_2[MarketOccurField.MARKET_RISE_CNT.value] = (effective_r>0).sum(axis=0)
+        cur_2[MarketOccurField.MARKET_FLAT_CNT.value] = (effective_r==0).sum(axis=0)
+        cur_2[MarketOccurField.MARKET_FALL_CNT.value] = (effective_r<0).sum(axis=0)
+        cur_2[MarketOccurField.PATTERN_ID.value] = pattern.columns.values
+        cur_2[MarketOccurField.MARKET_ID.value] = market
+        cur_2[MarketOccurField.DATE_PERIOD.value] = p
+        ret_buffer_1.append(cur_1)
+        ret_buffer_2.append(cur_2)
+    return pd.concat(ret_buffer_1, axis=0), pd.concat(ret_buffer_2, axis=0)
+
 def model_execution_recover():
+    logging.info('Start model execution recover')
     for model, etype in get_recover_model_execution():
         if etype == ModelExecution.ADD_PREDICT:
             model_recover(model, ModelStatus.ADDED)
         if etype == ModelExecution.ADD_BACKTEST:
             model_recover(model, ModelStatus.CREATED)
-
+    logging.info('End model execution recover')
 
 def init_db():
     try:
@@ -1515,16 +1574,20 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
             clean_db_cache()
             clone_db_cache(batch_type)
             logging.info("Start pattern update")
-            pattern_update(controller, batch_type)
+            ts = pattern_update(controller, batch_type) or []
             logging.info("End pattern update")
-            if controller.isactive:
-                logging.info('Start model execution recover')
-                model_execution_recover()
-                logging.info('End model execution recover')
-            if batch_type == BatchType.SERVICE_BATCH:            
+            if batch_type == BatchType.INIT_BATCH:
+                if controller.isactive:
+                    t = mt.Thread(target=model_execution_recover)
+                    t.start()
+            if batch_type == BatchType.SERVICE_BATCH:
                 logging.info("Start model update")
                 for model in get_models():
-                    model_update(model, controller, batch_type)
+                    t = model_update(model, controller, batch_type)
+                    if t is not None:
+                        ts.append(t)
+                for t in ts:
+                    t.join()
                 logging.info("End model update")
                 if controller.isactive:
                     checkout_fcst_data()
@@ -1535,4 +1598,4 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
         logging.error(f"batch failed")
         logging.error(traceback.format_exc())
         MT_MANAGER.release(BATCH_EXE_CODE)
-    
+
