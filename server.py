@@ -31,7 +31,7 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db,
  add_model, remove_model, MarketDataFromDb, MT_MANAGER)
-from const import BATCH_EXE_CODE, ExecMode, PORT, LOCAL_DB
+from const import BATCH_EXE_CODE, ExecMode, PORT, LOG_LOC
 from dao import MimosaDB
 from flask import Flask, request
 from waitress import serve
@@ -118,11 +118,11 @@ if __name__ == '__main__':
         raise RuntimeError(f'invalid execution mode {mode}')
     if ExecMode.get(mode) == ExecMode.PROD.value:
         warnings.filterwarnings("ignore")
-    if not os.path.exists('./log'):
-        os.mkdir('./log')
+    if not os.path.exists(LOG_LOC):
+        os.mkdir(LOG_LOC)
     try:
         stream_hdlr = logging.StreamHandler()
-        file_hdlr = handlers.TimedRotatingFileHandler(filename='./log/.log', when='D', backupCount=7)
+        file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/.log', when='D', backupCount=7)
         level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.PROD.value:logging.INFO}[ExecMode.get(mode)]
         logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
         set_db(MimosaDB(mode=mode))

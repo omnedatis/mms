@@ -12,6 +12,7 @@ DEFAULT_TGAP = 3
 MIN_BACKTEST_LEN = 180
 LOCAL_DB = '../_local_db'
 DATA_LOC = '_data'
+LOG_LOC = './log'
 EXCEPT_DATA_LOC = '_except'
 MIN_Y_SAMPLES = 30
 Y_OUTLIER = 0.05
