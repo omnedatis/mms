@@ -66,19 +66,19 @@ class PatternInfo(NamedTuple):
 def save_mkt_score(data):
     """save mkt score to DB."""
     db = get_db()
-    result = db.save_mkt_score()
+    result = db.save_mkt_score(data)
     return result
 
 def save_mkt_period(data):
     """save mkt period to DB."""
     db = get_db()
-    result = db.save_mkt_period()
+    result = db.save_mkt_period(data)
     return result
 
 def save_mkt_dist(data):
     """save mkt dist to DB."""
     db = get_db()
-    result = db.save_mkt_dist()
+    result = db.save_mkt_dist(data)
     return result
 
 def get_score_meta_info():
@@ -1405,6 +1405,7 @@ class HistoryReturnWriter:
         dds = []
         ncs = []
         ncrs = []
+        rps = []
         rms = []
         rss = []
         rcs = []
@@ -1419,6 +1420,7 @@ class HistoryReturnWriter:
             ncs.append(nc)
             ncr = nc / vs[:-p]
             ncrs.append(ncr)
+            rps.append(p)
             rms.append(ncr.mean())
             rss.append(ncr.std())
             rcs.append(len(ncr))
@@ -1437,8 +1439,7 @@ class HistoryReturnWriter:
         ret_1 = pd.DataFrame()
         ret_2 = pd.DataFrame()
         if rms:
-            
-            ret_1[MarketStatField.DATE_PERIOD.value] = PREDICT_PERIODS
+            ret_1[MarketStatField.DATE_PERIOD.value] = rps
             ret_1[MarketStatField.RETURN_MEAN.value] = rms
             ret_1[MarketStatField.RETURN_STD.value] = rss
             ret_1[MarketStatField.RETURN_CNT.value] = rcs
@@ -1453,7 +1454,7 @@ class HistoryReturnWriter:
             s_ = np.array(s_)
             l_ = np.array(l_)
             u_ = np.array(u_)
-            for p, m, s in zip(PREDICT_PERIODS, rms, rss):
+            for p, m, s in zip(rps, rms, rss):
                 dps.append(np.full(len(s_), p))
                 mss.append(s_)
                 ubs.append(m + s * u_)
@@ -1504,7 +1505,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     ret_market_dist = []
     ret_market_occur = []
     if batch_type == BatchType.SERVICE_BATCH:
-        hrw = HistoryReturnWriter(controller, pfile='D:/lreturns.pkl')
+        hrw = HistoryReturnWriter(controller)
         ret_mstats = []
         ret_mscores = []
     for market in markets:
@@ -1602,11 +1603,11 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             save_latest_pattern_distribution(ret)
             logging.info('Writing pattern dist finished')
         #logging.info('start writing db')
-        ts = [mt.Thread(target=save_market_return_scores, args=(ret_mscores, controller, 'D:/save_market_return_scores')),
-              mt.Thread(target=save_market_return_dists, args=(ret_mstats, controller, 'D:/save_market_return_dists')),
-              mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller, 'D:/save_latest_pattern')),
-              mt.Thread(target=save_market_dist, args=(ret_market_dist, controller, 'D:/save_market_dist')),
-              mt.Thread(target=save_market_occur, args=(ret_market_occur, controller, 'D:/save_market_occur'))]
+        ts = [mt.Thread(target=save_market_return_scores, args=(ret_mscores, controller)),
+              mt.Thread(target=save_market_return_dists, args=(ret_mstats, controller)),
+              mt.Thread(target=save_latest_pattern, args=(ret_buffer, controller)),
+              mt.Thread(target=save_market_dist, args=(ret_market_dist, controller)),
+              mt.Thread(target=save_market_occur, args=(ret_market_occur, controller))]
         for t in ts:
             t.start()
         ts.append(hrw.thread)
