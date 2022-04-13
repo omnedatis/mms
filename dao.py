@@ -14,7 +14,8 @@ from model import (ModelInfo, PatternInfo,
                 get_filed_name_of_future_return, set_model_execution_start)
 from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC,
                    MarketDistField, ModelExecution, PredictResultField,
-                   PatternResultField, ModelExecution, BatchType)
+                   PatternResultField, MarketPeriodField, MarketScoreField, 
+                   MarketStatField, ModelExecution, ScoreMetaField, BatchType)
 import logging
 from utils import Cache
 
@@ -387,6 +388,39 @@ class MimosaDB:
                 pickle.dump(data, fp)
             logging.info('Clone model patterns from db finished')
 
+    def _clean_score_meta_info(self):
+        """ 清除當前本地端分數標準差倍率資訊
+
+        Returns
+        -------
+        None.
+
+        """
+        if os.path.exists(f'{DATA_LOC}/score_meta_info.pkl'):
+            os.remove(f'{DATA_LOC}/score_meta_info.pkl')
+
+    def _clone_score_meta_info(self):
+        """複製當前資料庫中的分數標準差倍率資訊至本地端
+
+        Returns
+        -------
+        None.
+        """
+        if not os.path.exists(f'{DATA_LOC}/score_meta_info.pkl'):
+            logging.info('Clone score meta info from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    *
+                FROM
+                    FCST_SCORE
+            """
+            data = pd.read_sql_query(sql, engine)
+            with open(f'{DATA_LOC}/score_meta_info.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone score meta info from db finished')
+
     def clean_db_cache(self):
         """ 清除本地資料庫快取
 
@@ -398,6 +432,7 @@ class MimosaDB:
         -------
         None.
         """
+        self._clean_score_meta_info()
         self._clean_market_data()
         self._clean_markets()
         self._clean_patterns()
@@ -418,6 +453,7 @@ class MimosaDB:
         -------
         None.
         """
+        self._clone_score_meta_info()
         self._clone_market_data(batch_type)
         self._clone_markets(batch_type)
         self._clone_patterns()
@@ -1331,3 +1367,151 @@ class MimosaDB:
                 if_exists='append',
                 chunksize=1000,
                 index=False)
+
+    def save_mkt_score(self, data: pd.DataFrame):
+        """ 儲存市場最新分數上下界
+        儲存各市場各天期要將報酬轉換為分數時的上下界範圍資訊
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        data_upper_bound = data[MarketScoreField.UPPER_BOUND.value].values * 100
+        data_lower_bound = data[MarketScoreField.LOWER_BOUND.value].values * 100
+
+        data = data[[
+            'CREATE_BY', 'CREATE_DT', MarketScoreField.MARKET_SCORE.value,
+            MarketScoreField.MARKET_ID.value, MarketScoreField.DATE_PERIOD.value]]
+        data[MarketScoreField.UPPER_BOUND.value] = data_upper_bound
+        data[MarketScoreField.LOWER_BOUND.value] = data_lower_bound
+
+        logging.info('Save market score')
+        if not self.READ_ONLY:
+            # 新增最新資料
+            data.to_sql(
+                'FCST_MKT_SCORE_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=1000,
+                index=False)
+        logging.info('Save market score finished')
+
+    def save_mkt_period(self, data: pd.DataFrame):
+        """ 儲存市場各天期歷史報酬
+        儲存各市場各天期歷史報酬
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        data_net_change_rate = data[MarketPeriodField.NET_CHANGE_RATE.value].values * 100
+
+        data = data[[
+            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value, 
+            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE, 
+            MarketPeriodField.DATA_DATE, MarketPeriodField.NET_CHANGE]]
+        data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
+
+        logging.info('Start market period')
+        if not self.READ_ONLY:
+            # 新增最新資料
+            data.to_sql(
+                'FCST_MKT_PERIOD_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=1000,
+                index=False)
+        logging.info('Save market period finished')
+
+    def save_mkt_dist(self, data: pd.DataFrame):
+        """ 儲存市場統計結果
+        儲存各市場最新統計資訊結果
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        data_return_mean = data[MarketStatField.RETURN_MEAN.value].values * 100
+        data_return_std = data[MarketStatField.RETURN_STD.value].values * 100
+
+        data = data[[
+            'CREATE_BY', 'CREATE_DT', MarketStatField.MARKET_ID.value, 
+            MarketStatField.DATE_PERIOD.value, MarketStatField.RETURN_CNT]]
+        data[MarketStatField.RETURN_MEAN.value] = data_return_mean
+        data[MarketStatField.RETURN_STD.value] = data_return_std
+
+        logging.info('Start market distribution')
+        if not self.READ_ONLY:
+            # 新增最新資料
+            data.to_sql(
+                'FCST_MKT_DIST_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=1000,
+                index=False)
+        logging.info('Save market distribution finished')
+
+    def get_score_meta_info(self):
+        """ 取得分數標準差倍率資訊
+        取得各個分數區間所使用的上下界標準差倍率
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        result: tuple of list
+            [(score, upper_bound, lower_bound), ...]
+
+        """
+        self._clone_score_meta_info()
+        with open(f'{DATA_LOC}/score_meta_info.pkl', 'rb') as fp:
+            data = pickle.load(fp)
+        result = []
+        for i in range(len(data)):
+            record = data.iloc[i]
+            score = record[ScoreMetaField.SCORE_VALUE.value]
+            upper_bound = record[ScoreMetaField.UPPER_BOUND.value]
+            lower_bound = record[ScoreMetaField.LOWER_BOUND.value]
+            result.append((score, upper_bound, lower_bound))
+        return result

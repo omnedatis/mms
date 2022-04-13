@@ -201,3 +201,18 @@ class MarketStatField(Enum):
     RETURN_MEAN = 'RETURN_MEAN'
     RETURN_STD = 'RETURN_STD'
     RETURN_CNT = 'RETURN_CNT'
+
+class ScoreMetaField(Enum):
+    """分數標籤統計資訊
+    
+    Membors
+    -------
+    SCORE_CODE: 分數代碼
+    SCORE_VALUE: 分數值
+    UPPER_BOUND: 分數上界的標準差倍率
+    LOWER_BOUND: 分數下界的標準差倍率
+    """
+    SCORE_CODE = "SCORE_CODE"
+    SCORE_VALUE = "SCORE_VALUE"
+    UPPER_BOUND = "UPPER_BOUND"
+    LOWER_BOUND = "LOWER_BOUND"
