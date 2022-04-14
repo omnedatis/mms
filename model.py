@@ -1582,7 +1582,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
         pattern_occur_writer = PatternOccurWriter(controller)
-        pattern_dist_writer = PatternOccurWriter(controller)
+        pattern_dist_writer = PatternDistWriter(controller)
         ret_mstats = []
         ret_mscores = []
     for market in markets:
