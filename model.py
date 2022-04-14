@@ -6,6 +6,7 @@ Created on Tue March 8 17:07:36 2021
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import datetime
+import multiprocessing as mp
 import os
 import shutil
 from threading import Lock, Semaphore
@@ -68,20 +69,19 @@ class PatternInfo(NamedTuple):
 def save_mkt_score(data):
     """save mkt score to DB."""
     db = get_db()
-    result = db.save_mkt_score(data)
-    return result
+    db.save_mkt_score(data)
 
 def save_mkt_period(data):
     """save mkt period to DB."""
     db = get_db()
-    result = db.save_mkt_period(data)
-    return result
+    p = mp.Process(target=db.save_mkt_period, args=(data,))
+    p.start()
+    p.join()
 
 def save_mkt_dist(data):
     """save mkt dist to DB."""
     db = get_db()
-    result = db.save_mkt_dist(data)
-    return result
+    db.save_mkt_dist(data)
 
 def get_score_meta_info():
     """get score meta info from DB."""
@@ -127,8 +127,7 @@ def save_pattern_results(market_id, data):
 
     """
     db = get_db()
-    result = db.save_pattern_results(market_id, data)
-    return result
+    db.save_pattern_results(market_id, data)
 
 def dump_pattern_results():
     """Dump pattern results to DB. """
@@ -150,8 +149,7 @@ def save_latest_pattern_results(data):
 
     """
     db = get_db()
-    result = db.save_latest_pattern_results(data)
-    return result
+    db.save_latest_pattern_results(data)
 
 def clean_db_cache():
     """Clean local cache."""
@@ -236,8 +234,7 @@ def save_future_return(market_id, data):
 
     """
     db = get_db()
-    result = db.save_future_return(market_id, data)
-    return result
+    db.save_future_return(market_id, data)
 
 def dump_future_returns():
     """Dump future returns to DB. """
