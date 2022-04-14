@@ -1562,7 +1562,7 @@ def gen_return_value(mid: str):
 
 def get_latest_patterns(mid: str, data: pd.DataFrame):
     ret = pd.DataFrame()
-    ret[PatternResultField.VALUE.value] = data.values[-1]
+    ret[PatternResultField.VALUE.value] = np.nan_to_num(data.values[-1], nan=0)
     ret[PatternResultField.DATE.value] = data.index.values.astype('datetime64[D]').tolist()[-1]
     ret[PatternResultField.MARKET_ID.value] = mid
     ret[PatternResultField.PATTERN_ID.value] = list(data.columns)
