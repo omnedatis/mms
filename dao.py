@@ -1357,7 +1357,7 @@ class MimosaDB:
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
 
-        logging.info('Start market period')
+        logging.info('Save market period')
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
@@ -1398,7 +1398,7 @@ class MimosaDB:
         data[MarketStatField.RETURN_MEAN.value] = data_return_mean
         data[MarketStatField.RETURN_STD.value] = data_return_std
 
-        logging.info('Start market distribution')
+        logging.info('Save market distribution')
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
