@@ -1569,6 +1569,7 @@ def get_latest_patterns(mid: str, data: pd.DataFrame):
     return ret
 
 def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
+    MD_CACHE.clear()
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
