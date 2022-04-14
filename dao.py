@@ -889,6 +889,25 @@ class MimosaDB:
             pickle_dump(except_catches, EXCPT_DATA_PATH)
             logging.error(traceback.format_exc())
             raise e
+    
+    def update_model_accuracy(self):
+        """ 呼叫 SP 計算當前各模型準確率
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        if not self.READ_ONLY:
+            logging.info('start update FCST model accuracy')
+            engine=  self._engine()
+            sql = f'CALL SP_UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP()'
+            with engine.begin() as db_conn:
+                db_conn.execute(sql)
+            logging.info('Update FCST model accuracy finished')
 
     def checkout_fcst_data(self):
         """ 切換系統中的呈現資料位置
@@ -1334,8 +1353,8 @@ class MimosaDB:
 
         data = data[[
             'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value, 
-            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE, 
-            MarketPeriodField.DATA_DATE, MarketPeriodField.NET_CHANGE]]
+            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value, 
+            MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
 
         logging.info('Start market period')
@@ -1375,7 +1394,7 @@ class MimosaDB:
 
         data = data[[
             'CREATE_BY', 'CREATE_DT', MarketStatField.MARKET_ID.value, 
-            MarketStatField.DATE_PERIOD.value, MarketStatField.RETURN_CNT]]
+            MarketStatField.DATE_PERIOD.value, MarketStatField.RETURN_CNT.value]]
         data[MarketStatField.RETURN_MEAN.value] = data_return_mean
         data[MarketStatField.RETURN_STD.value] = data_return_std
 
