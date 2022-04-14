@@ -4,7 +4,7 @@ Created on Tue March 8 17:07:36 2021
 
 """
 
-from abc import ABCMeta, abstractclassmethod, abstractproperty
+from abc import ABCMeta, abstractmethod, abstractproperty
 import datetime
 import os
 import shutil
