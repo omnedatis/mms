@@ -875,7 +875,8 @@ class MimosaDB:
                     table_name,
                     engine,
                     if_exists='append',
-                    chunksize=1000,
+                    chunksize=10000,
+                    method='multi',
                     index=False)
             logging.info('Saving model latest results finished')
         except Exception as e:
@@ -974,7 +975,8 @@ class MimosaDB:
                     'FCST_MODEL_MKT_VALUE_HISTORY',
                     engine,
                     if_exists='append',
-                    chunksize=1000,
+                    chunksize=10000,
+                    method='multi',
                     index=False)
             except Exception as e:
                 logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
@@ -1069,7 +1071,8 @@ class MimosaDB:
                 'FCST_MODEL_EXECUTION',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
         return exec_id
 
@@ -1211,7 +1214,8 @@ class MimosaDB:
                 'FCST_PAT_MKT_EVENT_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
@@ -1252,7 +1256,8 @@ class MimosaDB:
                 'FCST_PAT_MKT_DIST_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
 
     def save_latest_pattern_occur(self, data: pd.DataFrame):
@@ -1284,7 +1289,8 @@ class MimosaDB:
                 'FCST_PAT_MKT_OCCUR_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
 
     def save_mkt_score(self, data: pd.DataFrame):
@@ -1324,7 +1330,8 @@ class MimosaDB:
                 'FCST_MKT_SCORE_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
         logging.info('Save market score finished')
 
@@ -1364,7 +1371,8 @@ class MimosaDB:
                 'FCST_MKT_PERIOD_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
         logging.info('Save market period finished')
 
@@ -1405,7 +1413,8 @@ class MimosaDB:
                 'FCST_MKT_DIST_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=1000,
+                chunksize=10000,
+                method='multi',
                 index=False)
         logging.info('Save market distribution finished')
 
