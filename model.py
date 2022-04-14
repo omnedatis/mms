@@ -1781,8 +1781,7 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                     t.join()
                 logging.info("End model update")
                 if controller.isactive:
-                    #checkout_fcst_data()
-                    print(call SP)
+                    checkout_fcst_data()
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info(f"End batch {excute_id}")
 
