@@ -1141,8 +1141,8 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
         else:
             ret_buffer.append(model_predict(model, mid, controller=controller))
     def save_result(data, model_id, exection_id, controller):
-        if ret_buffer and not _is_all_none(ret_buffer):
-            ret = pd.concat(ret_buffer, axis=0)
+        if data and not _is_all_none(data):
+            ret = pd.concat(data, axis=0)
             ret.index = np.arange(len(ret))
             logging.info(f'finish model update on {model_id}')
             if controller.isactive:

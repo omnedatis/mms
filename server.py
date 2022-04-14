@@ -124,7 +124,7 @@ if __name__ == '__main__':
         stream_hdlr = logging.StreamHandler()
         file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/.log', when='D', backupCount=7)
         level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.PROD.value:logging.INFO}[ExecMode.get(mode)]
-        logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(thread)d - %(lineno)d: %(message)s',handlers=[stream_hdlr, file_hdlr])
+        logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(filename)s - line %(lineno)d: %(message)s', handlers=[stream_hdlr, file_hdlr])
         set_db(MimosaDB(mode=mode))
         set_market_data_provider(MarketDataFromDb())
     except Exception as esp:
