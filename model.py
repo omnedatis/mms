@@ -316,6 +316,16 @@ def checkout_fcst_data():
     db = get_db()
     db.checkout_fcst_data()
 
+def update_model_accuracy():
+    """Save pattern occured info
+
+    Parameters
+    ----------
+    None.
+    """
+    db = get_db()
+    db.update_model_accuracy()
+
 class ModelInfo():
     """Model Info.
 
@@ -1781,6 +1791,7 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                     t.join()
                 logging.info("End model update")
                 if controller.isactive:
+                    update_model_accuracy()
                     checkout_fcst_data()
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info(f"End batch {excute_id}")
