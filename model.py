@@ -21,6 +21,7 @@ from const import *
 from utils import *
 from func._tp import *
 import logging
+from func._td import MD_CACHE
 
 db = None
 
@@ -1406,9 +1407,9 @@ class DbWriterBase(metaclass=ABCMeta):
     def _TASK_NAME(self):
         pass
 
-    @abstractclassmethod
+    @abstractmethod
     def _save(self, data: pd.DataFrame):
-        pass
+        raise NotImplementedError()
 
     def _run(self, stime):
         self._active = True
@@ -1435,8 +1436,7 @@ class DbWriterBase(metaclass=ABCMeta):
 
 class HistoryReturnWriter(DbWriterBase):
 
-    @classmethod
-    def _save(cls, data):
+    def _save(self, data):
         save_mkt_period(data)
 
     @property
@@ -1445,8 +1445,7 @@ class HistoryReturnWriter(DbWriterBase):
 
 class PatternOccurWriter(DbWriterBase):
 
-    @classmethod
-    def _save(cls, data):
+    def _save(self, data):
         save_latest_pattern_occur(data)
 
     @property
@@ -1455,8 +1454,7 @@ class PatternOccurWriter(DbWriterBase):
 
 class PatternDistWriter(DbWriterBase):
 
-    @classmethod
-    def _save(cls, data):
+    def _save(self, data):
         save_latest_pattern_distribution(data)
 
     @property
@@ -1465,8 +1463,7 @@ class PatternDistWriter(DbWriterBase):
 
 class ReturnScoreWriter(DbWriterBase):
 
-    @classmethod
-    def _save(cls, data):
+    def _save(self, data):
         save_mkt_score(data)
 
     @property
@@ -1476,7 +1473,7 @@ class ReturnScoreWriter(DbWriterBase):
 class ReturnDistWriter(DbWriterBase):
 
     @classmethod
-    def _save(cls, data):
+    def _save(self, data):
         save_mkt_dist(data)
 
     @property
@@ -1486,7 +1483,7 @@ class ReturnDistWriter(DbWriterBase):
 class LatestPatternWriter(DbWriterBase):
 
     @classmethod
-    def _save(cls, data):
+    def _save(self, data):
         save_latest_pattern_results(data)
 
     @property
@@ -1783,7 +1780,8 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                     t.join()
                 logging.info("End model update")
                 if controller.isactive:
-                    checkout_fcst_data()
+                    #checkout_fcst_data()
+                    print(call SP)
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info(f"End batch {excute_id}")
 
