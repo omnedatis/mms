@@ -1566,7 +1566,7 @@ def get_latest_patterns(mid: str, data: pd.DataFrame):
     ret[PatternResultField.DATE.value] = data.index.values.astype('datetime64[D]').tolist()[-1]
     ret[PatternResultField.MARKET_ID.value] = mid
     ret[PatternResultField.PATTERN_ID.value] = list(data.columns)
-    return ret
+    return ret.dropna()
 
 def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
     MD_CACHE.clear()
