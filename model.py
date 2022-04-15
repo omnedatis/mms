@@ -6,7 +6,6 @@ Created on Tue March 8 17:07:36 2021
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import datetime
-import multiprocessing as mp
 import os
 import shutil
 from threading import Lock, Semaphore
@@ -74,9 +73,7 @@ def save_mkt_score(data):
 def save_mkt_period(data):
     """save mkt period to DB."""
     db = get_db()
-    p = mp.Process(target=db.save_mkt_period, args=(data,))
-    p.start()
-    p.join()
+    db.save_mkt_period()
 
 def save_mkt_dist(data):
     """save mkt dist to DB."""
