@@ -539,9 +539,9 @@ class MimosaDB:
         with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'wb') as fp:
             cate_data = pickle.load(fp)
         cate_data = cate_data[
-            cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value] == category_code]
-        data = data[MarketInfoField.MARKET_CODE.value].astype(str).values.tolist()
-        cate_data = cate_data[DSStockInfoField.STOCK_CODE.value].astype(str).values.tolist()
+            cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value].values == category_code]
+        data = data[MarketInfoField.MARKET_CODE.value].values.astype(str).tolist()
+        cate_data = cate_data[DSStockInfoField.STOCK_CODE.value].values.astype(str).tolist()
         data = [x for x in data if x in cate_data]
         return data
 
