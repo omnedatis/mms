@@ -1042,7 +1042,7 @@ class MimosaDB:
         if not self.READ_ONLY:
             try:
                 data.to_sql(
-                    'FCST_MODEL_MKT_VALUE_HISTORY',
+                    'FCST_MODEL_MKT_VALUE_HISTORY_SWAP',
                     engine,
                     if_exists='append',
                     chunksize=10000,
