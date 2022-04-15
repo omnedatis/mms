@@ -898,7 +898,7 @@ class MimosaDB:
                     CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE,
                     DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND
                 FROM
-                    {table_name}
+                    FCST_MODEL_MKT_VALUE
                 WHERE
                     MODEL_ID='{model_id}'
             """
