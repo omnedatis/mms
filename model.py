@@ -1527,8 +1527,8 @@ def gen_return_value(mid: str):
         rms.append(ncr.mean())
         rss.append(ncr.std())
         rcs.append(len(ncr))
+    ret = pd.DataFrame()
     if dps:
-        ret = pd.DataFrame()
         ret[MarketPeriodField.DATE_PERIOD.value] = np.concatenate(dps)
         ret[MarketPeriodField.PRICE_DATE.value] = np.concatenate(pds)
         ret[MarketPeriodField.DATA_DATE.value] = np.concatenate(dds)
