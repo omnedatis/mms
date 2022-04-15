@@ -15,6 +15,7 @@ from model import (ModelInfo, PatternInfo,
 from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC,
                    MarketDistField, ModelExecution, PredictResultField,
                    PatternResultField, MarketPeriodField, MarketScoreField, 
+                   MarketInfoField, DSStockInfoField,
                    MarketStatField, ModelExecution, ScoreMetaField, BatchType)
 import logging
 from utils import Cache
@@ -120,19 +121,19 @@ class MimosaDB:
                     pickle.dump(mkt, fp)
             logging.info('Clone market data from db finished')
 
-    def _clean_markets(self):
-        """ 清除當前本地端市場清單
+    def _clean_mkt_info(self):
+        """ 清除當前本地端市場資訊
 
         Returns
         -------
         None.
 
         """
-        if os.path.exists(f'{DATA_LOC}/market_list.pkl'):
-            os.remove(f'{DATA_LOC}/market_list.pkl')
+        if os.path.exists(f'{DATA_LOC}/market_info.pkl'):
+            os.remove(f'{DATA_LOC}/market_info.pkl')
 
-    def _clone_markets(self, batch_type: BatchType=BatchType.SERVICE_BATCH):
-        """複製當前資料庫中的市場清單至本地端
+    def _clone_mkt_info(self, batch_type: BatchType=BatchType.INIT_BATCH):
+        """複製當前資料庫中的市場資訊至本地端
 
         Parameters
         ----------
@@ -149,21 +150,66 @@ class MimosaDB:
         elif batch_type == BatchType.SERVICE_BATCH:
             table_name = 'FCST_MKT_SWAP'
         else:
-            raise Exception(f'_clone_markets: Unknown batch type: {batch_type}')
-        if not os.path.exists(f'{DATA_LOC}/market_list.pkl'):
-            logging.info('Clone market list from db')
+            raise Exception(f'_clone_mkt_info: Unknown batch type: {batch_type}')
+        if not os.path.exists(f'{DATA_LOC}/market_info.pkl'):
+            logging.info('Clone market info from db')
             os.makedirs(f'{DATA_LOC}', exist_ok=True)
             engine = self._engine()
             sql = f"""
                 SELECT
-                    MARKET_CODE
+                    *
                 FROM
                     {table_name}
             """
-            data = pd.read_sql_query(sql, engine)['MARKET_CODE'].values.tolist()
-            with open(f'{DATA_LOC}/market_list.pkl', 'wb') as fp:
+            data = pd.read_sql_query(sql, engine)
+            with open(f'{DATA_LOC}/market_info.pkl', 'wb') as fp:
                 pickle.dump(data, fp)
-            logging.info('Clone market list from db finished')
+            logging.info('Clone market info from db finished')
+
+    def _clean_dsstock_info(self):
+        """ 清除當前本地端 TEJ 股票類別資訊
+
+        Returns
+        -------
+        None.
+
+        """
+        if os.path.exists(f'{DATA_LOC}/ds_s_stock_info.pkl'):
+            os.remove(f'{DATA_LOC}/ds_s_stock_info.pkl')
+
+    def _clone_dsstock_info(self, batch_type: BatchType=BatchType.INIT_BATCH):
+        """複製當前資料庫中的 TEJ 股票類別資訊至本地端
+
+        Parameters
+        ----------
+        batch_type: BatchType
+            指定批次的執行狀態為初始化還是服務呼叫
+
+        Returns
+        -------
+        None.
+        """
+        table_name = ''
+        if batch_type == BatchType.INIT_BATCH:
+            table_name = 'DS_S_STOCK'
+        elif batch_type == BatchType.SERVICE_BATCH:
+            table_name = 'DS_S_STOCK_SWAP'
+        else:
+            raise Exception(f'_clone_dsstock_info: Unknown batch type: {batch_type}')
+        if not os.path.exists(f'{DATA_LOC}/ds_s_stock_info.pkl'):
+            logging.info('Clone ds_s_stock info from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    *
+                FROM
+                    {table_name}
+            """
+            data = pd.read_sql_query(sql, engine)
+            with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'wb') as fp:
+                pickle.dump(data, fp)
+            logging.info('Clone ds_s_stock info from db finished')
 
     def _clean_patterns(self):
         """ 清除當前本地端現象資訊
@@ -433,8 +479,9 @@ class MimosaDB:
         None.
         """
         self._clean_score_meta_info()
+        self._clean_mkt_info()
+        self._clean_dsstock_info()
         self._clean_market_data()
-        self._clean_markets()
         self._clean_patterns()
         self._clean_models()
         self._clean_model_training_infos()
@@ -454,25 +501,48 @@ class MimosaDB:
         None.
         """
         self._clone_score_meta_info()
+        self._clone_mkt_info(batch_type)
+        self._clone_dsstock_info(batch_type)
         self._clone_market_data(batch_type)
-        self._clone_markets(batch_type)
         self._clone_patterns()
         self._clone_models()
         self._clone_model_training_infos()
         self._clone_model_markets()
         self._clone_model_patterns()
 
-    def get_markets(self):
+    def get_markets(self, market_type: str=None, category_code: str=None):
         """get market IDs from DB.
+        Parameters
+        ----------
+        market_type:
+            市場類型( 目前為 BLB 或 TEJ )
+        category_code:
+            市場分類( 電子股, 水泥股...等 )
 
         Returns
         -------
         list of str
 
         """
-        self._clone_markets()
-        with open(f'{DATA_LOC}/market_list.pkl', 'rb') as fp:
+        self._clone_mkt_info()
+        self._clone_dsstock_info()
+        with open(f'{DATA_LOC}/market_info.pkl', 'wb') as fp:
             data = pickle.load(fp)
+        if market_type is None:
+            return data[MarketInfoField.MARKET_CODE.value].values.tolist()
+        
+        data = data[
+            data[MarketInfoField.MARKET_SOURCE_TYPE.value].values == market_type]
+        if category_code is None:
+            return data[MarketInfoField.MARKET_CODE.value].values.tolist()
+        
+        with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'wb') as fp:
+            cate_data = pickle.load(fp)
+        cate_data = cate_data[
+            cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value] == category_code]
+        data = data[MarketInfoField.MARKET_CODE.value].astype(str).values.tolist()
+        cate_data = cate_data[DSStockInfoField.STOCK_CODE.value].astype(str).values.tolist()
+        data = [x for x in data if x in cate_data]
         return data
 
     def get_patterns(self):
@@ -1208,7 +1278,7 @@ class MimosaDB:
         data['CREATE_BY'] = self.CREATE_BY
         data['CREATE_DT'] = create_dt
 
-        logging.info(f'saving start')
+        logging.info(f'Save pattern event')
         if not self.READ_ONLY:
             data.to_sql(
                 'FCST_PAT_MKT_EVENT_SWAP',
@@ -1217,6 +1287,7 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        logging.info(f'Save pattern event finished')
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
         """ 儲存最新現象統計分布統計量
@@ -1250,6 +1321,7 @@ class MimosaDB:
         data[MarketDistField.RETURN_MEAN.value] = data_mean
         data[MarketDistField.RETURN_STD.value] = data_std
 
+        logging.info(f'Save pattern distribution')
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
@@ -1259,6 +1331,7 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        logging.info(f'Save pattern distribution finished')
 
     def save_latest_pattern_occur(self, data: pd.DataFrame):
         """ 儲存最新現象發生後次數統計
@@ -1283,6 +1356,7 @@ class MimosaDB:
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
 
+        logging.info(f'Save pattern occur')
         if not self.READ_ONLY:
         # 新增最新資料
             data.to_sql(
@@ -1292,6 +1366,7 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        logging.info(f'Save pattern occur finished')
 
     def save_mkt_score(self, data: pd.DataFrame):
         """ 儲存市場最新分數上下界
@@ -1443,3 +1518,115 @@ class MimosaDB:
             lower_bound = record[ScoreMetaField.LOWER_BOUND.value]
             result.append((score, upper_bound, lower_bound))
         return result
+
+    def update_latest_pattern_occur(self, data: pd.DataFrame):
+        """ 儲存新增的最新現象發生後次數統計
+        儲存發生指定現象後, 指定市場, 指定天期下的發生與未發生總數,
+        上漲總數, 持平總數與下跌總數
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+
+        logging.info(f'Update pattern occur')
+        if not self.READ_ONLY:
+        # 新增最新資料
+            data.to_sql(
+                'FCST_PAT_MKT_OCCUR',
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        logging.info(f'Update pattern occur finished')
+    
+    def update_latest_pattern_distribution(self, data: pd.DataFrame):
+        """ 儲存新增的最新現象統計分布統計量
+        儲存發生指定現象後, 指定市場, 指定天期下的報酬分布統計量
+        這個方法在儲存均值和標準差時會將結果轉換為 % , 因此會做
+        乘 100 的動作
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        data_mean = data[MarketDistField.RETURN_MEAN.value].values * 100
+        data_std = data[MarketDistField.RETURN_STD.value].values * 100
+
+        data = data[[
+            'CREATE_BY', 'CREATE_DT', MarketDistField.PATTERN_ID.value,
+            MarketDistField.MARKET_ID.value, MarketDistField.DATE_PERIOD.value]]
+        data[MarketDistField.RETURN_MEAN.value] = data_mean
+        data[MarketDistField.RETURN_STD.value] = data_std
+
+        logging.info(f'Update pattern distribution')
+        if not self.READ_ONLY:
+            # 新增最新資料
+            data.to_sql(
+                'FCST_PAT_MKT_DIST',
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        logging.info(f'Update pattern distribution finished')
+
+    def update_latest_pattern_results(self, data: pd.DataFrame):
+        """儲存新增的最新現象當前發生資訊至資料表
+
+        Parameters
+        ----------
+        data: Pandas's DataFrame
+            A table of pattern results with columns for market_id, pattern_id,
+            price_date and value.
+        block_size: int
+            Save each data_block that size is block_size in data until finished
+
+        See Also
+        --------
+        PatternResultField
+
+        """
+        engine = self._engine()
+        now = datetime.datetime.now()
+        create_dt = now
+        data['CREATE_BY'] = self.CREATE_BY
+        data['CREATE_DT'] = create_dt
+
+        logging.info(f'Update pattern event')
+        if not self.READ_ONLY:
+            data.to_sql(
+                'FCST_PAT_MKT_EVENT',
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        logging.info(f'Update pattern event end')

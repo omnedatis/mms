@@ -217,3 +217,47 @@ class ScoreMetaField(Enum):
     SCORE_VALUE = "SCORE_VALUE"
     UPPER_BOUND = "UPPER_BOUND"
     LOWER_BOUND = "LOWER_BOUND"
+
+class MarketInfoField(Enum):
+    """市場資訊
+    
+    Membors
+    -------
+    MARKET_CODE: 市場代碼
+    MARKET_SOURCE_TYPE: 市場來源型態(BLB, TEJ)
+    MARKET_SOURCE_CODE: 市場於來源端資料的編碼
+    MARKET_NAME: 市場名稱
+    """
+    MARKET_CODE = "MARKET_CODE"
+    MARKET_SOURCE_TYPE = "MARKET_SOURCE_TYPE"
+    MARKET_SOURCE_CODE = "MARKET_SOURCE_CODE"
+    MARKET_NAME = "MARKET_NAME"
+
+class DSStockInfoField(Enum):
+    """TEJ 市場資訊
+    
+    Membors
+    -------
+    STOCK_CODE: 股票代碼
+    ISIN_CODE: ISIN 代碼
+    COMPANY_CODE: 公司代碼
+    EXCHANGE_TYPE: 上市別
+    INDUSTRY_CODE: TEJ 產業別代碼
+    TSE_INDUSTRY_CODE: TSE 產業別代碼
+    CUR_CODE: 幣別
+    TSE_IPO_DATE: 首次 TSE 上市日
+    OCT_IPO_DATE: 首次 OTC 上市日
+    REG_IPO_DATE: 首次 REG 上市日
+    DELISTING_DATE: 下市日期
+    """
+    STOCK_CODE = "STOCK_CODE"
+    ISIN_CODE = "ISIN_CODE"
+    COMPANY_CODE = "COMPANY_CODE"
+    EXCHANGE_TYPE = "EXCHANGE_TYPE"
+    INDUSTRY_CODE = "INDUSTRY_CODE"
+    TSE_INDUSTRY_CODE = "TSE_INDUSTRY_CODE"
+    CUR_CODE = "CUR_CODE"
+    TSE_IPO_DATE = "TSE_IPO_DATE"
+    OCT_IPO_DATE = "OCT_IPO_DATE"
+    REG_IPO_DATE = "REG_IPO_DATE"
+    DELISTING_DATE = "DELISTING_DATE"
