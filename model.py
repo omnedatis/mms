@@ -73,7 +73,7 @@ def save_mkt_score(data):
 def save_mkt_period(data):
     """save mkt period to DB."""
     db = get_db()
-    db.save_mkt_period()
+    db.save_mkt_period(data)
 
 def save_mkt_dist(data):
     """save mkt dist to DB."""
