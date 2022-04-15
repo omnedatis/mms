@@ -1630,3 +1630,77 @@ class MimosaDB:
                 method='multi',
                 index=False)
         logging.info(f'Update pattern event end')
+
+    def get_pattern_info(self, pattern_id: str) -> PatternInfo:
+        """取得指定現象 ID 的現象資訊
+
+        Parameters
+        ----------
+        pattern_id: str
+            要取得的現象 ID
+
+        Returns
+        -------
+        result: model.PatternInfo
+            現象計算所需的參數資訊
+        """
+        logging.info(f'Get pattern info {pattern_id} from db')
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                ptn.PATTERN_ID, mcr.FUNC_CODE, para.PARAM_CODE, para.PARAM_VALUE, mp.PARAM_TYPE
+            FROM
+                FCST_PAT AS ptn
+            LEFT JOIN
+                (
+                    SELECT
+                        PATTERN_ID, MACRO_ID, PARAM_CODE, PARAM_VALUE
+                    FROM
+                        FCST_PAT_PARAM
+                ) AS para
+            ON ptn.PATTERN_ID=para.PATTERN_ID
+            LEFT JOIN
+                (
+                    SELECT
+                        MACRO_ID, FUNC_CODE
+                    FROM
+                        FCST_MACRO
+                ) AS mcr
+            ON ptn.MACRO_ID=mcr.MACRO_ID
+            LEFT JOIN
+                (
+                    SELECT
+                        MACRO_ID, PARAM_CODE, PARAM_TYPE
+                    FROM
+                        FCST_MACRO_PARAM
+                ) AS mp
+            ON ptn.MACRO_ID=mp.MACRO_ID AND para.PARAM_CODE=mp.PARAM_CODE
+            ORDER BY ptn.PATTERN_ID, mcr.FUNC_CODE ASC;
+        """
+        data = pd.read_sql_query(sql, engine)
+        result = {}
+        for i in range(len(data)):
+            record = data.iloc[i]
+            pid = record['PATTERN_ID']
+            if pid in result:
+                continue
+            func = record['FUNC_CODE']
+            params = {}
+            ptn_record = data[data['PATTERN_ID'].values==pid]
+            for j in range(len(ptn_record)):
+                param_record = ptn_record.iloc[j]
+                param_type = param_record['PARAM_TYPE']
+                param_val = param_record['PARAM_VALUE']
+                if param_type == "int":
+                    param_val = int(param_record['PARAM_VALUE'])
+                elif param_type == "float":
+                    param_val = float(param_record['PARAM_VALUE'])
+                elif param_type == "string":
+                    param_val = str(param_record['PARAM_VALUE'])
+                params[param_record['PARAM_CODE']] = param_val
+            result[pid] = PatternInfo(pid, func, params)
+        if pattern_id not in result:
+            raise Exception(f'get_pattern_info: pattern info not found in db: {pattern_id}')
+        result = result[pattern_id]
+        logging.info(f'Get pattern info {pattern_id} from db finished')
+        return result
