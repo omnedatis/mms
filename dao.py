@@ -526,7 +526,7 @@ class MimosaDB:
         """
         self._clone_mkt_info()
         self._clone_dsstock_info()
-        with open(f'{DATA_LOC}/market_info.pkl', 'wb') as fp:
+        with open(f'{DATA_LOC}/market_info.pkl', 'rb') as fp:
             data = pickle.load(fp)
         if market_type is None:
             return data[MarketInfoField.MARKET_CODE.value].values.tolist()
@@ -536,7 +536,7 @@ class MimosaDB:
         if category_code is None:
             return data[MarketInfoField.MARKET_CODE.value].values.tolist()
         
-        with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'wb') as fp:
+        with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'rb') as fp:
             cate_data = pickle.load(fp)
         cate_data = cate_data[
             cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value].values == category_code]
