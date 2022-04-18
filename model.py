@@ -1669,8 +1669,6 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
-        print(patterns)
-        print(markets)
         return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
     if batch_type == BatchType.SERVICE_BATCH:
