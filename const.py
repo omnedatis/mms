@@ -246,7 +246,7 @@ class DSStockInfoField(Enum):
     TSE_INDUSTRY_CODE: TSE 產業別代碼
     CUR_CODE: 幣別
     TSE_IPO_DATE: 首次 TSE 上市日
-    OCT_IPO_DATE: 首次 OTC 上市日
+    OTC_IPO_DATE: 首次 OTC 上市日
     REG_IPO_DATE: 首次 REG 上市日
     DELISTING_DATE: 下市日期
     """
@@ -258,6 +258,6 @@ class DSStockInfoField(Enum):
     TSE_INDUSTRY_CODE = "TSE_INDUSTRY_CODE"
     CUR_CODE = "CUR_CODE"
     TSE_IPO_DATE = "TSE_IPO_DATE"
-    OCT_IPO_DATE = "OCT_IPO_DATE"
+    OTC_IPO_DATE = "OTC_IPO_DATE"
     REG_IPO_DATE = "REG_IPO_DATE"
     DELISTING_DATE = "DELISTING_DATE"
