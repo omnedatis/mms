@@ -67,14 +67,18 @@ class PatternInfo(NamedTuple):
         """
         return eval(f"{self.func}('{market_id}', **{self.kwargs})").to_pandas()
 
-def save_mkt_score(data):
+def save_mkt_score(data: pd.DataFrame):
     """save mkt score to DB."""
     db = get_db()
     db.save_mkt_score(data)
 
+def save_mkt_period(data: pd.DataFrame):
+    """save mkt period to DB."""
     db = get_db()
     db.save_mkt_period(data)
 
+def save_mkt_dist(data: pd.DataFrame):
+    """save mkt dist to DB."""
     db = get_db()
     db.save_mkt_dist(data)
 
