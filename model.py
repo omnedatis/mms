@@ -27,6 +27,8 @@ db = None
 
 model_semaphore = Semaphore(QUEUE_LIMIT)
 
+MP_CACHE = Cache(MULTI_PATTERN_CACHE_SIZE)
+
 def get_db():
     return db
 
@@ -70,13 +72,9 @@ def save_mkt_score(data):
     db = get_db()
     db.save_mkt_score(data)
 
-def save_mkt_period(data):
-    """save mkt period to DB."""
     db = get_db()
     db.save_mkt_period(data)
 
-def save_mkt_dist(data):
-    """save mkt dist to DB."""
     db = get_db()
     db.save_mkt_dist(data)
 
@@ -86,7 +84,7 @@ def get_score_meta_info():
     result = db.get_score_meta_info()
     return result
 
-def get_markets():
+def get_markets(market_type=None, category_code=None):
     """get market IDs from DB.
 
     Returns
@@ -95,9 +93,20 @@ def get_markets():
 
     """
     db = get_db()
-    result = db.get_markets()
+    result = db.get_markets(market_type, category_code)
     return result
 
+def get_pattern_info(pid) -> PatternInfo:
+    """get patterns from DB.
+
+    Returns
+    -------
+    list of PatternInfo
+
+    """
+    db = get_db()
+    result = db.get_pattern_info(pid)
+    return result
 
 def get_patterns():
     """get patterns from DB.
@@ -112,7 +121,7 @@ def get_patterns():
     return result
 
 
-def save_pattern_results(market_id, data):
+def save_pattern_results(market_id, data, to_local=False):
     """Save pattern results to DB.
 
     Parameters
@@ -125,6 +134,20 @@ def save_pattern_results(market_id, data):
     """
     db = get_db()
     db.save_pattern_results(market_id, data)
+
+def update_pattern_result(market_id, data):
+    """Save pattern results to DB.
+
+    Parameters
+    ----------
+    market_id: str
+        ID of market.
+    data: Pandas's Series
+        A time-series of boolean which name is the pattern ID.
+
+    """
+    db = get_db()
+    db.update_pattern_result(market_id, data)
 
 def dump_pattern_results():
     """Dump pattern results to DB. """
@@ -148,6 +171,23 @@ def save_latest_pattern_results(data):
     db = get_db()
     db.save_latest_pattern_results(data)
 
+def update_latest_pattern_results(data):
+    """Save latest pattern results to DB.
+
+    Parameters
+    ----------
+    data: Pandas's DataFrame
+        A table of pattern results with columns for market_id, pattern_id,
+        price_date and value.
+
+    See Also
+    --------
+    PatternResultField
+
+    """
+    db = get_db()
+    db.update_latest_pattern_results(data)
+
 def clean_db_cache():
     """Clean local cache."""
     db = get_db()
@@ -158,7 +198,7 @@ def clone_db_cache(batch_type):
     db = get_db()
     db.clone_db_cache(batch_type)
 
-def get_pattern_results(market_id, patterns, begin_date):
+def get_pattern_results(market_id, patterns, begin_date=None):
     """Get pattern results from begining date to the latest of given market from DB.
 
     Parameters
@@ -180,7 +220,6 @@ def get_pattern_results(market_id, patterns, begin_date):
     db = get_db()
     result = db.get_pattern_results(market_id, patterns, begin_date)
     return result
-
 
 def get_filed_name_of_future_return(period: int) -> str:
     return f'FR{period}'
@@ -219,6 +258,29 @@ def get_future_return(market_id, period, begin_date):
     return result
 
 
+def get_future_returns(market_id, begin_date=None):
+    """Get future return from begining date to the latest of given market from DB.
+
+    Parameters
+    ----------
+    market_id: str
+        ID of market.
+    period: int
+        Predicting period.
+    begin_date: datetime.date, optional
+        The begin date of the designated data range. If it is not set, get all
+        history results.
+
+    Returns
+    -------
+    Pandas's Series
+        A timeseries of float.
+
+    """
+    db = get_db()
+    result = db.get_future_returns(market_id, begin_date)
+    return result
+
 def save_future_return(market_id, data):
     """Save futrue return results to DB.
 
@@ -248,6 +310,15 @@ def save_latest_pattern_occur(data: pd.DataFrame):
     db = get_db()
     db.save_latest_pattern_occur(data)
 
+def update_latest_pattern_occur(data: pd.DataFrame):
+    """Save pattern occured info
+
+    Parameters
+    ----------
+    data: pd.DataFram
+    """
+    db = get_db()
+    db.update_latest_pattern_occur(data)
 
 def save_latest_pattern_distribution(data: pd.DataFrame):
     """Save pattern occured info
@@ -259,6 +330,15 @@ def save_latest_pattern_distribution(data: pd.DataFrame):
     db = get_db()
     db.save_latest_pattern_distribution(data)
 
+def update_latest_pattern_distribution(data: pd.DataFrame):
+    """Save pattern occured info
+
+    Parameters
+    ----------
+    data: pd.DataFram
+    """
+    db = get_db()
+    db.update_latest_pattern_distribution(data)
 
 def get_latest_dates(model_id):
     """get dates of the latest predict results of markets for given model.
@@ -1154,7 +1234,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
         if controller.isactive:
             set_model_execution_complete(exection_id)
         MT_MANAGER.release(model_id)
-    t = mt.Thread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
+    t = CatchableTread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
     t.start()
     return t
 
@@ -1396,7 +1476,7 @@ class DbWriterBase(metaclass=ABCMeta):
         self._active = False
         self._pool = []
         self._lock = Lock()
-        self._thread = mt.Thread(target=self._run, args=(stime,))
+        self._thread = CatchableTread(target=self._run, args=(stime,))
         self._thread.start()
 
     def add(self, data: pd.DataFrame):
@@ -1579,11 +1659,10 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
+        print(patterns)
+        print(markets)
         return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
-    ret_buffer = []
-    ret_market_dist = []
-    ret_market_occur = []
     if batch_type == BatchType.SERVICE_BATCH:
         market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
@@ -1622,9 +1701,9 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             pattern_dist_writer.add(market_dist)
             pattern_occur_writer.add(market_occur)
         logging.debug(f'update patterns: {market}')
-    t = mt.Thread(target=dump_future_returns)
+    t = CatchableTread(target=dump_future_returns)
     t.start()
-    t = mt.Thread(target=dump_pattern_results)
+    t = CatchableTread(target=dump_pattern_results)
     t.start()
     if batch_type == BatchType.SERVICE_BATCH:
         return_score_writer = ReturnScoreWriter(controller)
@@ -1644,6 +1723,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
                pattern_dist_writer.get_thread(), pattern_occur_writer.get_thread(),
                return_score_writer.get_thread(), return_dist_writer.get_thread()]
         return ret
+
 
 def get_pattern_stats_info(pattern, freturn, market):
 
@@ -1785,10 +1865,13 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                         ts.append(t)
                 for t in ts:
                     t.join()
+                    if t.esp is not None:
+                        logging.error(t.esp)
                 logging.info("End model update")
                 if controller.isactive:
                     update_model_accuracy()
                     checkout_fcst_data()
+            MP_CACHE.clear()
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info(f"End batch {excute_id}")
 
@@ -1797,3 +1880,75 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
         logging.error(traceback.format_exc())
         MT_MANAGER.release(BATCH_EXE_CODE)
 
+
+def get_mix_pattern_occur(market_id: str, patterns: List):
+    recv = get_pattern_results(market_id, patterns)
+    ret = recv.index.values[recv.values.all(axis=1)].astype('datetime64[D]').tolist()
+    return ret
+
+def get_pattern_occur(market_id: str, pattern_id):
+    return get_mix_pattern_occur(market_id, [pattern_id])
+
+def _multi_pattern_cnts(pids, markets):
+    pdata = np.concatenate([get_pattern_results(mid, pids).values for mid in markets], axis=0).sum(axis=1)
+    occur_cnt = (pdata == len(pids)).sum()
+    non_occur_cnt = len(pdata) - occur_cnt - np.isnan(pdata).sum()
+    return occur_cnt, non_occur_cnt
+
+def get_mix_pattern_occur_cnt(pids, market_type=None, category_code=None):
+    name = f'_multi_pattern_cnts({pids}, {market_type}, {category_code})'
+    markets = get_markets(market_type, category_code)
+    if name not in MP_CACHE:
+        MP_CACHE[name] = _multi_pattern_cnts(pids, markets)
+    return MP_CACHE[name]
+
+def _multi_pattern_upprob(pids, markets):
+    pdata = np.concatenate([get_pattern_results(mid, pids).values for mid in markets], axis=0).all(axis=1)
+    rdata = np.concatenate([get_future_returns(mid).values for mid in markets], axis=0)[pdata]
+    up_cnts = (rdata > 0).sum(axis=0)
+    up_probs = up_cnts / (len(rdata) - np.isnan(rdata).sum(axis=0))
+    ret = {p: up_probs[i] for i, p in enumerate(PREDICT_PERIODS)}
+    return ret
+
+def get_mix_pattern_rise_prob(pids, period, market_type=None, category_code=None):
+    name = f'multi_pattern_upprob({pids}, {market_type}, {category_code})'
+    markets = get_markets(market_type, category_code)
+    if name not in MP_CACHE:
+        MP_CACHE[name] = _multi_pattern_upprob(pids, markets)
+    return MP_CACHE[name][period]
+
+def _multi_pattern_dist(pids, mid):
+    name = f'multi_pattern_dist({pids}, {mid})'
+    if name not in MP_CACHE:
+        pdata = get_pattern_results(mid, pids).values.all(axis=1)
+        rdata = get_future_returns(mid).values
+        rdata[~pdata] = np.nan
+        means = np.nanmean(rdata, axis=0)
+        stds = np.nanstd(rdata, axis=0, ddof=0)
+        cnts = len(rdata) - np.isnan(rdata).sum(axis=0)
+        ret = {p: (m, s, c) for p, m, s, c in zip(PREDICT_PERIODS, means, stds, cnts)}
+        MP_CACHE[name] = ret
+    return MP_CACHE[name]
+
+def get_mix_pattern_mkt_dist_info(pids, period, market_type=None, category_code=None):
+    markets = get_markets(market_type, category_code)
+    ret = {mid: _multi_pattern_dist(pids, mid)[period] for mid in markets}
+    return ret
+
+def add_pattern(pid):
+    pattern = get_pattern_info(pid)
+    markets = get_markets()
+    latest_patterns = []
+    pattern_occurs = []
+    pattern_dists = []
+    for mid in markets:
+        pattern_result = pattern.run(mid).rename(pattern.pid)
+        update_pattern_result(mid, pattern_result)
+        return_result = get_future_returns(mid)
+        latest_patterns.append(get_latest_patterns(mid, pd.DataFrame(pattern_result)))
+        market_dist, market_occur = get_pattern_stats_info_v2(pd.DataFrame(pattern_result), return_result, mid)
+        pattern_occurs.append(market_occur)
+        pattern_dists.append(market_dist)
+    update_latest_pattern_results(pd.concat(latest_patterns, axis=0))
+    update_latest_pattern_occur(pd.concat(pattern_occurs, axis=0))
+    update_latest_pattern_distribution(pd.concat(pattern_dists, axis=0))

@@ -20,7 +20,7 @@ BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
 QUEUE_LIMIT = 2
 PORT = 8080
 FUNC_CACHE_SIZE = 2000
-
+MULTI_PATTERN_CACHE_SIZE = 2000 * 100
 
 class BatchType(str, Enum):
     """Batch 的執行型態
@@ -47,10 +47,10 @@ class ExecMode(Enum):
                 return each.value
         else:
             return None
-            
+
 class PredictResultField(Enum):
     """Fields of predict result table on DB.
-    
+
     Membors
     -------
     MODEL_ID: ID of model.
@@ -60,7 +60,7 @@ class PredictResultField(Enum):
     UPPER_BOUND: Upper-bound of predicting range.
     LOWER_BOUND: Lower-bound of predicting range.
     PREDICT_VALUE: value of predicting result.
-    
+
     """
     MODEL_ID = 'MODEL_ID'
     MARKET_ID = 'MARKET_CODE'
@@ -69,17 +69,17 @@ class PredictResultField(Enum):
     UPPER_BOUND = 'UPPER_BOUND'
     LOWER_BOUND = 'LOWER_BOUND'
     PREDICT_VALUE = 'DATA_VALUE'
-    
+
 class PatternResultField(Enum):
     """Fields of pattern result table on DB.
-    
+
     Membors
     -------
     PATTERN_ID: ID of pattern.
     MARKET_ID: ID of market.
     DATE: Trading date.
     VALUE: Value of pattern.
-    
+
     """
     PATTERN_ID = 'PATTERN_ID'
     MARKET_ID = 'MARKET_CODE'
@@ -88,7 +88,7 @@ class PatternResultField(Enum):
 
 class ModelExecution(str, Enum):
     """Execution types of Model.
-    
+
     新增模型時預測 ADD_PREDICT = 'AP'
     新增模型時回測 ADD_BACKTEST = 'AB'
     批次執行預測 BATCH_PREDICT = 'BP'
@@ -112,7 +112,7 @@ class ModelStatus(int, Enum):
 
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
-    
+
     Membors
     -------
     PATTERN_ID: ID of pattern.
@@ -135,7 +135,7 @@ class MarketOccurField(Enum):
 
 class MarketDistField(Enum):
     """Fields of pattern market occur stat info table on DB.
-    
+
     Membors
     -------
     PATTERN_ID: ID of pattern.
@@ -152,7 +152,7 @@ class MarketDistField(Enum):
 
 class MarketScoreField(Enum):
     """市場分數標籤表的欄位資訊
-    
+
     Membors
     -------
     MARKET_ID: ID of market.
@@ -169,7 +169,7 @@ class MarketScoreField(Enum):
 
 class MarketPeriodField(Enum):
     """市場各天期歷史報酬的欄位資訊
-    
+
     Membors
     -------
     MARKET_ID: ID of market.
@@ -177,7 +177,7 @@ class MarketPeriodField(Enum):
     PRICE_DATE: 價格日期
     DATA_DATE: 計算報酬的計算日期
     NET_CHANGE: 漲跌幅
-    NET_CHANGE_RATE: 報酬率 
+    NET_CHANGE_RATE: 報酬率
     """
     MARKET_ID = 'MARKET_CODE'
     DATE_PERIOD = 'DATE_PERIOD'
@@ -188,7 +188,7 @@ class MarketPeriodField(Enum):
 
 class MarketStatField(Enum):
     """市場統計資訊的欄位資訊
-    
+
     Membors
     -------
     MARKET_ID: ID of market.
@@ -205,7 +205,7 @@ class MarketStatField(Enum):
 
 class ScoreMetaField(Enum):
     """分數標籤統計資訊
-    
+
     Membors
     -------
     SCORE_CODE: 分數代碼
@@ -220,7 +220,7 @@ class ScoreMetaField(Enum):
 
 class MarketInfoField(Enum):
     """市場資訊
-    
+
     Membors
     -------
     MARKET_CODE: 市場代碼
@@ -235,7 +235,7 @@ class MarketInfoField(Enum):
 
 class DSStockInfoField(Enum):
     """TEJ 市場資訊
-    
+
     Membors
     -------
     STOCK_CODE: 股票代碼

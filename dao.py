@@ -14,7 +14,7 @@ from model import (ModelInfo, PatternInfo,
                 get_filed_name_of_future_return, set_model_execution_start)
 from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC,
                    MarketDistField, ModelExecution, PredictResultField,
-                   PatternResultField, MarketPeriodField, MarketScoreField, 
+                   PatternResultField, MarketPeriodField, MarketScoreField,
                    MarketInfoField, DSStockInfoField,
                    MarketStatField, ModelExecution, ScoreMetaField, BatchType)
 import logging
@@ -530,12 +530,12 @@ class MimosaDB:
             data = pickle.load(fp)
         if market_type is None:
             return data[MarketInfoField.MARKET_CODE.value].values.tolist()
-        
+
         data = data[
             data[MarketInfoField.MARKET_SOURCE_TYPE.value].values == market_type]
         if category_code is None:
             return data[MarketInfoField.MARKET_CODE.value].values.tolist()
-        
+
         with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'rb') as fp:
             cate_data = pickle.load(fp)
         cate_data = cate_data[
@@ -613,10 +613,38 @@ class MimosaDB:
             ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
         return ret
 
+    def get_future_returns(self, market_id:str, begin_date=None):
+        """Get future return results from begining date to the latest of given market from DB.
+
+        Parameters
+        ----------
+        market_id: str
+            ID of market.
+        period: int
+            Predicting period.
+        begin_date: datetime.date, optional
+            The begin date of the designated data range. If it is not set, get all
+            history results.
+
+        Returns
+        -------
+        Pandas's Series
+            A timeseries of float.
+
+        """
+        if market_id not in self.future_reture_cache:
+            self._local_db_lock.acquire()
+            self.future_reture_cache[market_id] = pickle_load(self._get_future_return_file(market_id))
+            self._local_db_lock.release()
+        ret = self.future_reture_cache[market_id]
+        if begin_date:
+            ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
+        return ret
+
     def _get_pattern_file(self, market_id: str) -> str:
         return f'{LOCAL_DB}/patterns/{market_id}.pkl'
 
-    def save_pattern_results(self, market_id:str, data:pd.DataFrame):
+    def save_pattern_results(self, market_id:str, data:pd.DataFrame, to_local=False):
         """Save pattern results to DB.
 
         Parameters
@@ -628,6 +656,25 @@ class MimosaDB:
 
         """
         self.pattern_cache[market_id] = data
+        if to_local:
+            self._local_db_lock.acquire()
+            pickle_dump(data, self._get_pattern_file(market_id))
+            self._local_db_lock.release()
+
+    def update_pattern_result(self, market_id:str, data:pd.DataFrame):
+        """Save pattern results to DB.
+
+        Parameters
+        ----------
+        market_id: str
+            Id of market.
+        data: Pandas's DataFrame
+            A panel of boolean which columns are the pattern IDs.
+
+        """
+        ret = self._get_pattern_results(market_id)
+        ret[data.name] = data.values
+        self.save_pattern_results(market_id, ret, to_local=True)
 
     def dump_pattern_results(self):
         """Dump pattern results to DB. """
@@ -638,7 +685,7 @@ class MimosaDB:
             self._local_db_lock.release()
         logging.info('Dump pattern results finished')
 
-    def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:datetime.date):
+    def _get_pattern_results(self, market_id:str):
         """Get pattern results from begining date to the latest of given market from DB.
 
         Parameters
@@ -661,7 +708,29 @@ class MimosaDB:
             self._local_db_lock.acquire()
             self.pattern_cache[market_id] = pickle_load(self._get_pattern_file(market_id))
             self._local_db_lock.release()
-        ret = self.pattern_cache[market_id][patterns]
+        ret = self.pattern_cache[market_id]
+        return ret
+
+    def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:datetime.date):
+        """Get pattern results from begining date to the latest of given market from DB.
+
+        Parameters
+        ----------
+        market_id: str
+            ID of market.
+        patterns: list of str
+            ID of patterns.
+        begin_date: datetime.date, optional
+            The begin date of the designated data range. If it is not set, get all
+            history results.
+
+        Returns
+        -------
+        Pandas's DataFrame
+            A panel of boolean with all id of patterns as columns.
+
+        """
+        ret = self._get_pattern_results(market_id)[patterns]
         if begin_date:
             ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
         return ret
@@ -960,7 +1029,7 @@ class MimosaDB:
             pickle_dump(except_catches, EXCPT_DATA_PATH)
             logging.error(traceback.format_exc())
             raise e
-    
+
     def update_model_accuracy(self):
         """ 呼叫 SP 計算當前各模型準確率
 
@@ -1434,8 +1503,8 @@ class MimosaDB:
         data_net_change_rate = data[MarketPeriodField.NET_CHANGE_RATE.value].values * 100
 
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value, 
-            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value, 
+            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value,
+            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value,
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
 
@@ -1476,7 +1545,7 @@ class MimosaDB:
         data_return_std = data[MarketStatField.RETURN_STD.value].values * 100
 
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketStatField.MARKET_ID.value, 
+            'CREATE_BY', 'CREATE_DT', MarketStatField.MARKET_ID.value,
             MarketStatField.DATE_PERIOD.value, MarketStatField.RETURN_CNT.value]]
         data[MarketStatField.RETURN_MEAN.value] = data_return_mean
         data[MarketStatField.RETURN_STD.value] = data_return_std
@@ -1553,7 +1622,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         logging.info(f'Update pattern occur finished')
-    
+
     def update_latest_pattern_distribution(self, data: pd.DataFrame):
         """ 儲存新增的最新現象統計分布統計量
         儲存發生指定現象後, 指定市場, 指定天期下的報酬分布統計量
