@@ -1588,13 +1588,15 @@ class MimosaDB:
             result.append((score, upper_bound, lower_bound))
         return result
 
-    def update_latest_pattern_occur(self, data: pd.DataFrame):
+    def update_latest_pattern_occur(self, pattern_id: str, data: pd.DataFrame):
         """ 儲存新增的最新現象發生後次數統計
         儲存發生指定現象後, 指定市場, 指定天期下的發生與未發生總數,
         上漲總數, 持平總數與下跌總數
 
         Parameters
         ----------
+        pattern_id: `str`
+            要更新的現象 ID
         data: `pd.DataFrame`
             要儲存的資料
 
@@ -1611,6 +1613,14 @@ class MimosaDB:
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
 
+        if not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM FCST_PAT_MKT_OCCUR
+                WHERE
+                    PATTERN_ID='{pattern_id}'
+            """
+            engine.execute(sql)
+
         logging.info(f'Update pattern occur')
         if not self.READ_ONLY:
         # 新增最新資料
@@ -1623,7 +1633,7 @@ class MimosaDB:
                 index=False)
         logging.info(f'Update pattern occur finished')
 
-    def update_latest_pattern_distribution(self, data: pd.DataFrame):
+    def update_latest_pattern_distribution(self, pattern_id: str, data: pd.DataFrame):
         """ 儲存新增的最新現象統計分布統計量
         儲存發生指定現象後, 指定市場, 指定天期下的報酬分布統計量
         這個方法在儲存均值和標準差時會將結果轉換為 % , 因此會做
@@ -1631,6 +1641,8 @@ class MimosaDB:
 
         Parameters
         ----------
+        pattern_id: `str`
+            要更新的現象 ID
         data: `pd.DataFrame`
             要儲存的資料
 
@@ -1655,6 +1667,14 @@ class MimosaDB:
         data[MarketDistField.RETURN_MEAN.value] = data_mean
         data[MarketDistField.RETURN_STD.value] = data_std
 
+        if not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM FCST_PAT_MKT_DIST
+                WHERE
+                    PATTERN_ID='{pattern_id}'
+            """
+            engine.execute(sql)
+
         logging.info(f'Update pattern distribution')
         if not self.READ_ONLY:
             # 新增最新資料
@@ -1667,11 +1687,13 @@ class MimosaDB:
                 index=False)
         logging.info(f'Update pattern distribution finished')
 
-    def update_latest_pattern_results(self, data: pd.DataFrame):
+    def update_latest_pattern_results(self, pattern_id: str, data: pd.DataFrame):
         """儲存新增的最新現象當前發生資訊至資料表
 
         Parameters
         ----------
+        pattern_id: `str`
+            要更新的現象 ID
         data: Pandas's DataFrame
             A table of pattern results with columns for market_id, pattern_id,
             price_date and value.
@@ -1688,6 +1710,14 @@ class MimosaDB:
         create_dt = now
         data['CREATE_BY'] = self.CREATE_BY
         data['CREATE_DT'] = create_dt
+
+        if not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM FCST_PAT_MKT_EVENT
+                WHERE
+                    PATTERN_ID='{pattern_id}'
+            """
+            engine.execute(sql)
 
         logging.info(f'Update pattern event')
         if not self.READ_ONLY:

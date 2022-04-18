@@ -171,11 +171,13 @@ def save_latest_pattern_results(data):
     db = get_db()
     db.save_latest_pattern_results(data)
 
-def update_latest_pattern_results(data):
+def update_latest_pattern_results(pid: str, data: pd.DataFrame):
     """Save latest pattern results to DB.
 
     Parameters
     ----------
+    pattern_id: `str`
+        要更新的現象 ID
     data: Pandas's DataFrame
         A table of pattern results with columns for market_id, pattern_id,
         price_date and value.
@@ -186,7 +188,7 @@ def update_latest_pattern_results(data):
 
     """
     db = get_db()
-    db.update_latest_pattern_results(data)
+    db.update_latest_pattern_results(pid, data)
 
 def clean_db_cache():
     """Clean local cache."""
@@ -310,15 +312,17 @@ def save_latest_pattern_occur(data: pd.DataFrame):
     db = get_db()
     db.save_latest_pattern_occur(data)
 
-def update_latest_pattern_occur(data: pd.DataFrame):
+def update_latest_pattern_occur(pid: str, data: pd.DataFrame):
     """Save pattern occured info
 
     Parameters
     ----------
+    pattern_id: `str`
+        要更新的現象 ID
     data: pd.DataFram
     """
     db = get_db()
-    db.update_latest_pattern_occur(data)
+    db.update_latest_pattern_occur(pid, data)
 
 def save_latest_pattern_distribution(data: pd.DataFrame):
     """Save pattern occured info
@@ -330,15 +334,17 @@ def save_latest_pattern_distribution(data: pd.DataFrame):
     db = get_db()
     db.save_latest_pattern_distribution(data)
 
-def update_latest_pattern_distribution(data: pd.DataFrame):
+def update_latest_pattern_distribution(pid: str, data: pd.DataFrame):
     """Save pattern occured info
 
     Parameters
     ----------
+    pattern_id: `str`
+        要更新的現象 ID
     data: pd.DataFram
     """
     db = get_db()
-    db.update_latest_pattern_distribution(data)
+    db.update_latest_pattern_distribution(pid, data)
 
 def get_latest_dates(model_id):
     """get dates of the latest predict results of markets for given model.
@@ -1949,6 +1955,6 @@ def add_pattern(pid):
         market_dist, market_occur = get_pattern_stats_info_v2(pd.DataFrame(pattern_result), return_result, mid)
         pattern_occurs.append(market_occur)
         pattern_dists.append(market_dist)
-    update_latest_pattern_results(pd.concat(latest_patterns, axis=0))
-    update_latest_pattern_occur(pd.concat(pattern_occurs, axis=0))
-    update_latest_pattern_distribution(pd.concat(pattern_dists, axis=0))
+    update_latest_pattern_results(pid, pd.concat(latest_patterns, axis=0))
+    update_latest_pattern_occur(pid, pd.concat(pattern_occurs, axis=0))
+    update_latest_pattern_distribution(pid, pd.concat(pattern_dists, axis=0))
