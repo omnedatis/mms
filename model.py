@@ -1154,7 +1154,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
         if controller.isactive:
             set_model_execution_complete(exection_id)
         MT_MANAGER.release(model_id)
-    t = mt.Thread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
+    t = CatchableTread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
     t.start()
     return t
 
@@ -1396,7 +1396,7 @@ class DbWriterBase(metaclass=ABCMeta):
         self._active = False
         self._pool = []
         self._lock = Lock()
-        self._thread = mt.Thread(target=self._run, args=(stime,))
+        self._thread = CatchableTread(target=self._run, args=(stime,))
         self._thread.start()
 
     def add(self, data: pd.DataFrame):
@@ -1581,9 +1581,6 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     if len(patterns) <= 0 or len(markets) <= 0:
         return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
-    ret_buffer = []
-    ret_market_dist = []
-    ret_market_occur = []
     if batch_type == BatchType.SERVICE_BATCH:
         market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
@@ -1622,9 +1619,9 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             pattern_dist_writer.add(market_dist)
             pattern_occur_writer.add(market_occur)
         logging.debug(f'update patterns: {market}')
-    t = mt.Thread(target=dump_future_returns)
+    t = CatchableTread(target=dump_future_returns)
     t.start()
-    t = mt.Thread(target=dump_pattern_results)
+    t = CatchableTread(target=dump_pattern_results)
     t.start()
     if batch_type == BatchType.SERVICE_BATCH:
         return_score_writer = ReturnScoreWriter(controller)
@@ -1785,6 +1782,8 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                         ts.append(t)
                 for t in ts:
                     t.join()
+                    if t.esp is not None:
+                        logging.error(t.esp)
                 logging.info("End model update")
                 if controller.isactive:
                     update_model_accuracy()
