@@ -529,7 +529,7 @@ class MimosaDB:
         with open(f'{DATA_LOC}/market_info.pkl', 'rb') as fp:
             data = pickle.load(fp)
         if market_type is None:
-            return data[MarketInfoField.MARKET_CODE.value].values.tolist()[400:405]
+            return data[MarketInfoField.MARKET_CODE.value].values.tolist()
 
         data = data[
             data[MarketInfoField.MARKET_SOURCE_TYPE.value].values == market_type]

@@ -29,7 +29,6 @@ model_semaphore = Semaphore(QUEUE_LIMIT)
 
 MP_CACHE = Cache(MULTI_PATTERN_CACHE_SIZE)
 
-FOR_TEST = True
 def get_db():
     return db
 
@@ -70,22 +69,12 @@ class PatternInfo(NamedTuple):
 
 def save_mkt_score(data):
     """save mkt score to DB."""
-    if FOR_TEST:
-        return
     db = get_db()
     db.save_mkt_score(data)
 
-def save_mkt_period(data):
-    """save mkt period to DB."""
-    if FOR_TEST:
-        return
     db = get_db()
     db.save_mkt_period()
 
-def save_mkt_dist(data):
-    """save mkt dist to DB."""
-    if FOR_TEST:
-        return
     db = get_db()
     db.save_mkt_dist(data)
 
@@ -115,11 +104,6 @@ def get_pattern_info(pid) -> PatternInfo:
     list of PatternInfo
 
     """
-    if FOR_TEST:
-        for each in get_patterns():
-            if pid == each.pid:
-                return each
-        raise KeyError('SMD')
     db = get_db()
     result = db.get_pattern_info(pid)
     return result
@@ -184,11 +168,6 @@ def save_latest_pattern_results(data):
     PatternResultField
 
     """
-    if FOR_TEST:
-        if os.path.exists('D:/latest_pattern_results.pkl'):
-            data = pd.concat([data, pickle_load('D:/latest_pattern_results.pkl')])
-        pickle_dump(data, 'D:/latest_pattern_results.pkl')
-        return
     db = get_db()
     db.save_latest_pattern_results(data)
 
@@ -206,10 +185,6 @@ def update_latest_pattern_results(data):
     PatternResultField
 
     """
-    if FOR_TEST:
-        ret = pd.concat([data, pickle_load('D:/latest_pattern_results.pkl')])
-        pickle_dump(ret, 'D:/latest_pattern_results.pkl')
-        return
     db = get_db()
     db.update_latest_pattern_results(data)
 
@@ -332,11 +307,6 @@ def save_latest_pattern_occur(data: pd.DataFrame):
     ----------
     data: pd.DataFram
     """
-    if FOR_TEST:
-        if os.path.exists('D:/latest_pattern_occur.pkl'):
-            data = pd.concat([data, pickle_load('D:/latest_pattern_occur.pkl')])
-        pickle_dump(data, 'D:/latest_pattern_occur.pkl')
-        return
     db = get_db()
     db.save_latest_pattern_occur(data)
 
@@ -347,10 +317,6 @@ def update_latest_pattern_occur(data: pd.DataFrame):
     ----------
     data: pd.DataFram
     """
-    if FOR_TEST:
-        ret = pd.concat([data, pickle_load('D:/latest_pattern_occur.pkl')])
-        pickle_dump(ret, 'D:/latest_pattern_occur.pkl')
-        return
     db = get_db()
     db.update_latest_pattern_occur(data)
 
@@ -361,11 +327,6 @@ def save_latest_pattern_distribution(data: pd.DataFrame):
     ----------
     data: pd.DataFram
     """
-    if FOR_TEST:
-        if os.path.exists('D:/latest_pattern_distribution.pkl'):
-            data = pd.concat([data, pickle_load('D:/latest_pattern_distribution.pkl')])
-        pickle_dump(data, 'D:/latest_pattern_distribution.pkl')
-        return
     db = get_db()
     db.save_latest_pattern_distribution(data)
 
@@ -376,10 +337,6 @@ def update_latest_pattern_distribution(data: pd.DataFrame):
     ----------
     data: pd.DataFram
     """
-    if FOR_TEST:
-        ret = pd.concat([data, pickle_load('D:/latest_pattern_distribution.pkl')])
-        pickle_dump(ret, 'D:/latest_pattern_distribution.pkl')
-        return
     db = get_db()
     db.update_latest_pattern_distribution(data)
 
@@ -1700,8 +1657,6 @@ def get_latest_patterns(mid: str, data: pd.DataFrame):
 def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
     MD_CACHE.clear()
     patterns = get_patterns()
-    if FOR_TEST:
-        patterns = patterns[:-1]
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
         print(patterns)
