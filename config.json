@@ -9,6 +9,15 @@
 			"Database name": "MIMOSA",
 			"charset": "utf8"
 		},
+		"test": {
+			"engine": "mysql+pymysql",
+			"IP address": "192.168.0.209",
+			"Port": "3306",
+			"User": "apuser",
+			"Password": "apuser",
+			"Database name": "MIMOSA",
+			"charset": "utf8"
+		},
 		"prod": {
 			"engine": "mysql+pymysql",
 			"IP address": "192.168.0.77",

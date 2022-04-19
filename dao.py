@@ -540,9 +540,10 @@ class MimosaDB:
             cate_data = pickle.load(fp)
         cate_data = cate_data[
             cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value].values == category_code]
-        data = data[MarketInfoField.MARKET_CODE.value].values.astype(str).tolist()
+        data = data[[MarketInfoField.MARKET_CODE.value, 
+                     MarketInfoField.MARKET_SOURCE_CODE.value]].values.astype(str).tolist()
         cate_data = cate_data[DSStockInfoField.STOCK_CODE.value].values.astype(str).tolist()
-        data = [x for x in data if x in cate_data]
+        data = [x[0] for x in data if x[1] in cate_data]
         return data
 
     def get_patterns(self):
