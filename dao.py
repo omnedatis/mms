@@ -1,23 +1,22 @@
 import datetime
 import json
-import os
+import logging
 import numpy as np
+import os
 import pandas as pd
 import pickle
 import traceback
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
-
 from model import (ModelInfo, PatternInfo,
                 pickle_dump, pickle_load,
-                get_filed_name_of_future_return, set_model_execution_start)
-from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC,
+                get_filed_name_of_future_return)
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode,
                    MarketDistField, ModelExecution, PredictResultField,
-                   PatternResultField, MarketPeriodField, MarketScoreField,
+                   MarketPeriodField, MarketScoreField,
                    MarketInfoField, DSStockInfoField,
                    MarketStatField, ModelExecution, ScoreMetaField, BatchType)
-import logging
 from utils import Cache
 
 class MimosaDB:
@@ -30,7 +29,7 @@ class MimosaDB:
     MODIFY_BY='SYS_BATCH'
     READ_ONLY=False
 
-    def __init__(self, db_name='mimosa', mode='dev', read_only=False):
+    def __init__(self, db_name='mimosa', mode: str=ExecMode.DEV.value, read_only: bool=False):
         """
         根據傳入參數取得指定的資料庫設定
         """

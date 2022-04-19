@@ -240,7 +240,7 @@ if __name__ == '__main__':
         file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/.log', when='D', backupCount=7)
         level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.UAT.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
         logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(filename)s - line %(lineno)d: %(message)s', handlers=[stream_hdlr, file_hdlr])
-        set_db(MimosaDB(mode=mode))
+        set_db(MimosaDB(mode=ExecMode.get(mode)))
         set_market_data_provider(MarketDataFromDb())
     except Exception as esp:
         logging.error(f"setting up failed")
