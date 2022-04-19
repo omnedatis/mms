@@ -1030,7 +1030,7 @@ class MimosaDB:
                     index=False)
             
             if self.WRITE_LOCAL:
-                pickle_dump(latest_data, f'{DATA_LOC}/local_out/{table_name}.df')
+                pickle_dump(latest_data, f'{DATA_LOC}/local_out/{table_name}.pkl')
             logging.info('Saving model latest results finished')
         except Exception as e:
             logging.error('Save model latest results failed, save except data')
@@ -1135,7 +1135,7 @@ class MimosaDB:
                 logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
                 logging.debug(traceback.format_exc())
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MODEL_MKT_VALUE_HISTORY_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MODEL_MKT_VALUE_HISTORY_SWAP.pkl')
         logging.info('Saving model results finished')
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
@@ -1373,7 +1373,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT_SWAP.pkl')
         logging.info(f'Save pattern event finished')
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
@@ -1419,7 +1419,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST_SWAP.pkl')
         logging.info(f'Save pattern distribution finished')
 
     def save_latest_pattern_occur(self, data: pd.DataFrame):
@@ -1456,7 +1456,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR_SWAP.pkl')
         logging.info(f'Save pattern occur finished')
 
     def save_mkt_score(self, data: pd.DataFrame):
@@ -1500,7 +1500,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_SCORE_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_SCORE_SWAP.pkl')
         logging.info('Save market score finished')
 
     def save_mkt_period(self, data: pd.DataFrame):
@@ -1543,7 +1543,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.pkl')
         logging.info('Save market period finished')
 
     def save_mkt_dist(self, data: pd.DataFrame):
@@ -1587,7 +1587,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_DIST_SWAP.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_DIST_SWAP.pkl')
         logging.info('Save market distribution finished')
 
     def get_score_meta_info(self):
@@ -1660,7 +1660,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl')
         logging.info(f'Update pattern occur finished')
 
     def update_latest_pattern_distribution(self, pattern_id: str, data: pd.DataFrame):
@@ -1716,7 +1716,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl')
         logging.info(f'Update pattern distribution finished')
 
     def update_latest_pattern_results(self, pattern_id: str, data: pd.DataFrame):
@@ -1761,7 +1761,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.df')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl')
         logging.info(f'Update pattern event end')
 
     def get_pattern_info(self, pattern_id: str) -> PatternInfo:
