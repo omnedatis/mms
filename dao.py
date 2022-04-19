@@ -28,8 +28,12 @@ class MimosaDB:
     CREATE_BY='SYS_BATCH'
     MODIFY_BY='SYS_BATCH'
     READ_ONLY=False
+    WRITE_LOCAL=False
 
-    def __init__(self, db_name='mimosa', mode: str=ExecMode.DEV.value, read_only: bool=False):
+    def __init__(
+        self, db_name='mimosa', mode: str=ExecMode.DEV.value, 
+        read_only: bool=False, write_local: bool=False
+    ):
         """
         根據傳入參數取得指定的資料庫設定
         """
@@ -45,6 +49,10 @@ class MimosaDB:
         self.pattern_cache = Cache(size=400000)
         self.future_reture_cache = Cache(size=100000)
         self.READ_ONLY = read_only
+        self.WRITE_LOCAL = write_local
+        if self.WRITE_LOCAL:
+            if not os.path.exists(f'{DATA_LOC}/local_out'):
+                os.makedirs(f'{DATA_LOC}/local_out', exist_ok=True)
 
     def _engine(self):
       """
@@ -917,6 +925,7 @@ class MimosaDB:
                 },
                 'process': {}
             }
+            latest_data = data
             logging.info('start saving model latest results')
             table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
             if exec_type == ModelExecution.ADD_PREDICT:
@@ -926,79 +935,81 @@ class MimosaDB:
             else:
                 logging.error(f'Unknown execution type: {exec_type}')
                 return -1
-            engine = self._engine()
 
-            # 製作儲存結構
-            now = datetime.datetime.now()
-            py = data[PredictResultField.PREDICT_VALUE.value].values * 100
-            upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
-            lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
+            if not self.READ_ONLY:
+                engine = self._engine()
 
-            data = data[[
-                PredictResultField.MODEL_ID.value,
-                PredictResultField.MARKET_ID.value,
-                PredictResultField.DATE.value,
-                PredictResultField.PERIOD.value
-                ]]
-            data[PredictResultField.PREDICT_VALUE.value] = py
-            data[PredictResultField.UPPER_BOUND.value] = upper_bound
-            data[PredictResultField.LOWER_BOUND.value] = lower_bound
-            create_dt = now
-            data['CREATE_BY'] = self.CREATE_BY
-            data['CREATE_DT'] = create_dt
+                # 製作儲存結構
+                now = datetime.datetime.now()
+                py = data[PredictResultField.PREDICT_VALUE.value].values * 100
+                upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
+                lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
 
-            # 移除傳入預測結果中較舊的預測結果
-            group_data = data.groupby([
-                PredictResultField.MODEL_ID.value,
-                PredictResultField.MARKET_ID.value,
-                PredictResultField.PERIOD.value])
-            latest_data = []
-            for group_i, group in group_data:
-                max_date = np.max(group[PredictResultField.DATE.value].values)
-                latest_data.append(
-                    group[group[PredictResultField.DATE.value].values == max_date])
-            latest_data = pd.concat(latest_data, axis=0)
+                data = data[[
+                    PredictResultField.MODEL_ID.value,
+                    PredictResultField.MARKET_ID.value,
+                    PredictResultField.DATE.value,
+                    PredictResultField.PERIOD.value
+                    ]]
+                data[PredictResultField.PREDICT_VALUE.value] = py
+                data[PredictResultField.UPPER_BOUND.value] = upper_bound
+                data[PredictResultField.LOWER_BOUND.value] = lower_bound
+                create_dt = now
+                data['CREATE_BY'] = self.CREATE_BY
+                data['CREATE_DT'] = create_dt
 
-            # 新增最新預測結果
-            # 合併現有的資料預測結果與當前的預測結果
-            db_data = None
-            sql = f"""
-                SELECT
-                    CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE,
-                    DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND
-                FROM
-                    FCST_MODEL_MKT_VALUE
-                WHERE
-                    MODEL_ID='{model_id}'
-            """
-            db_data = pd.read_sql_query(sql, engine)
-            except_catch['process']['db_data'] = db_data.copy()
-            db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
-            union_data = pd.concat([db_data, latest_data], axis=0)
+                # 移除傳入預測結果中較舊的預測結果
+                group_data = data.groupby([
+                    PredictResultField.MODEL_ID.value,
+                    PredictResultField.MARKET_ID.value,
+                    PredictResultField.PERIOD.value])
+                latest_data = []
+                for group_i, group in group_data:
+                    max_date = np.max(group[PredictResultField.DATE.value].values)
+                    latest_data.append(
+                        group[group[PredictResultField.DATE.value].values == max_date])
+                latest_data = pd.concat(latest_data, axis=0)
 
-            # 移除完全重複的預測結果
-            union_data[PredictResultField.MODEL_ID.value] = union_data[PredictResultField.MODEL_ID.value].astype(str)
-            union_data[PredictResultField.MARKET_ID.value] = union_data[PredictResultField.MARKET_ID.value].astype(str)
-            union_data[PredictResultField.PERIOD.value] = union_data[PredictResultField.PERIOD.value].astype(np.int64)
-            union_data[PredictResultField.DATE.value] = union_data[PredictResultField.DATE.value].astype('datetime64[D]')
-            union_data = union_data.drop_duplicates(subset=[
-                PredictResultField.MODEL_ID.value,
-                PredictResultField.MARKET_ID.value,
-                PredictResultField.PERIOD.value,
-                PredictResultField.DATE.value
-                ])
+                # 新增最新預測結果
+                # 合併現有的資料預測結果與當前的預測結果
+                db_data = None
+                sql = f"""
+                    SELECT
+                        CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE,
+                        DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND
+                    FROM
+                        FCST_MODEL_MKT_VALUE
+                    WHERE
+                        MODEL_ID='{model_id}'
+                """
+                db_data = pd.read_sql_query(sql, engine)
+                except_catch['process']['db_data'] = db_data.copy()
+                db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
+                union_data = pd.concat([db_data, latest_data], axis=0)
 
-            # 移除較舊的預測結果
-            group_data = union_data.groupby([
-                PredictResultField.MODEL_ID.value,
-                PredictResultField.MARKET_ID.value,
-                PredictResultField.PERIOD.value])
-            latest_data = []
-            for group_i, group in group_data:
-                max_date = np.max(group[PredictResultField.DATE.value].values)
-                latest_data.append(
-                    group[group[PredictResultField.DATE.value].values == max_date])
-            latest_data = pd.concat(latest_data, axis=0)
+                # 移除完全重複的預測結果
+                union_data[PredictResultField.MODEL_ID.value] = union_data[PredictResultField.MODEL_ID.value].astype(str)
+                union_data[PredictResultField.MARKET_ID.value] = union_data[PredictResultField.MARKET_ID.value].astype(str)
+                union_data[PredictResultField.PERIOD.value] = union_data[PredictResultField.PERIOD.value].astype(np.int64)
+                union_data[PredictResultField.DATE.value] = union_data[PredictResultField.DATE.value].astype('datetime64[D]')
+                union_data = union_data.drop_duplicates(subset=[
+                    PredictResultField.MODEL_ID.value,
+                    PredictResultField.MARKET_ID.value,
+                    PredictResultField.PERIOD.value,
+                    PredictResultField.DATE.value
+                    ])
+
+                # 移除較舊的預測結果
+                group_data = union_data.groupby([
+                    PredictResultField.MODEL_ID.value,
+                    PredictResultField.MARKET_ID.value,
+                    PredictResultField.PERIOD.value])
+                latest_data = []
+                for group_i, group in group_data:
+                    max_date = np.max(group[PredictResultField.DATE.value].values)
+                    latest_data.append(
+                        group[group[PredictResultField.DATE.value].values == max_date])
+                latest_data = pd.concat(latest_data, axis=0)
 
             # 開始儲存
             if not self.READ_ONLY:
@@ -1017,6 +1028,9 @@ class MimosaDB:
                     chunksize=10000,
                     method='multi',
                     index=False)
+            
+            if self.WRITE_LOCAL:
+                pickle_dump(latest_data, f'{DATA_LOC}/local_out/{table_name}.df')
             logging.info('Saving model latest results finished')
         except Exception as e:
             logging.error('Save model latest results failed, save except data')
@@ -1120,7 +1134,9 @@ class MimosaDB:
             except Exception as e:
                 logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
                 logging.debug(traceback.format_exc())
-            logging.info('Saving model results finished')
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MODEL_MKT_VALUE_HISTORY_SWAP.df')
+        logging.info('Saving model results finished')
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
         """Get market data from the designated date to the latest from DB.
@@ -1356,6 +1372,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT_SWAP.df')
         logging.info(f'Save pattern event finished')
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
@@ -1400,6 +1418,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST_SWAP.df')
         logging.info(f'Save pattern distribution finished')
 
     def save_latest_pattern_occur(self, data: pd.DataFrame):
@@ -1435,6 +1455,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR_SWAP.df')
         logging.info(f'Save pattern occur finished')
 
     def save_mkt_score(self, data: pd.DataFrame):
@@ -1477,6 +1499,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_SCORE_SWAP.df')
         logging.info('Save market score finished')
 
     def save_mkt_period(self, data: pd.DataFrame):
@@ -1518,6 +1542,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.df')
         logging.info('Save market period finished')
 
     def save_mkt_dist(self, data: pd.DataFrame):
@@ -1560,6 +1586,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_DIST_SWAP.df')
         logging.info('Save market distribution finished')
 
     def get_score_meta_info(self):
@@ -1631,6 +1659,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.df')
         logging.info(f'Update pattern occur finished')
 
     def update_latest_pattern_distribution(self, pattern_id: str, data: pd.DataFrame):
@@ -1685,6 +1715,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.df')
         logging.info(f'Update pattern distribution finished')
 
     def update_latest_pattern_results(self, pattern_id: str, data: pd.DataFrame):
@@ -1728,6 +1760,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.df')
         logging.info(f'Update pattern event end')
 
     def get_pattern_info(self, pattern_id: str) -> PatternInfo:
