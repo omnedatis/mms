@@ -1,6 +1,6 @@
 {
 	"mimosa":{
-		"dev": {
+		"uat": {
 			"engine": "mysql+pymysql",
 			"IP address": "192.168.0.76",
 			"Port": "3306",
@@ -9,7 +9,7 @@
 			"Database name": "MIMOSA",
 			"charset": "utf8"
 		},
-		"test": {
+		"dev": {
 			"engine": "mysql+pymysql",
 			"IP address": "192.168.0.209",
 			"Port": "3306",

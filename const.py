@@ -41,6 +41,7 @@ class ExecMode(Enum):
     PROD = "prod"
     UAT = 'uat'
 
+
     @classmethod
     def get(cls, value):
         for each in cls:
