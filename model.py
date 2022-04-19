@@ -11,7 +11,7 @@ import shutil
 from threading import Lock, Semaphore
 import time
 import threading as mt
-from typing import Any, List, Optional, NamedTuple, Dict
+from typing import Any, List, Optional, NamedTuple, Dict, Callable
 import numpy as np
 import pandas as pd
 from scipy.stats.distributions import norm
@@ -1389,6 +1389,77 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
+class ExecQueue:
+
+    def __init__(self):
+        self._occupants = 0
+        self._queue = []
+        self.isactive = True
+        self._lock = Lock()
+        self._thread = CatchableTread(self._run)
+        self._thread.start()
+        self.threads = []
+
+    def _run(self):
+        try:  
+            while self.isactive:
+                if self._occupants < QUEUE_LIMIT and self._queue:
+                    func, args, size = self._queue.pop(0)
+                    self._occupants += size
+                    def callback():
+                        ret = func(*args)
+                        self._occupants -= size
+                        return ret
+                    t = CatchableTread(target=callback)
+                    t.start()
+                    self.threads.append(t)
+                    
+                time.sleep(1)
+        except Exception as esp:
+            logging.error(traceback.format_exc())
+            
+    def push(self, func:Callable, args:tuple, size:int):
+        self._lock.acquire()
+        assert size <= QUEUE_LIMIT, 'exceed queue size'
+        self._queue.append((func, args, size))
+        self._lock.release()
+
+    def cut_line(self, func:Callable, args:tuple, size:int):
+        self._lock.acquire()
+        assert size <= QUEUE_LIMIT, 'exceed queue size'
+        self._queue.insert(0, (func, args, size))
+        self._lock.release()
+
+    def stop(self):
+        self.isactive = False
+    
+    def collect_threads(self):
+        self._thread.join()
+        return self.threads
+
+class CatchableTread:
+
+    def __init__(self, target, args=None, name=None):
+        self._args = args
+        self._target = target
+        self.esp = None
+        self._thread = mt.Thread(name=name, target=self._run)
+    
+    def start(self):
+        self._thread.start()
+
+    def _run(self):
+        try:
+            if self._args is not None:
+                self._target(*self._args)
+            else:
+                self._target()
+        except Exception as esp:
+            self.esp = traceback.format_exc()
+
+
+    def join(self):
+        self._thread.join()
 
 class DbWriterBase(metaclass=ABCMeta):
     def __init__(self, controller: ThreadController, stime=1):
