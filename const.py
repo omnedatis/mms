@@ -39,6 +39,7 @@ class ExecMode(Enum):
 
     DEV = "dev"
     PROD = "prod"
+    UAT = 'uat'
 
     @classmethod
     def get(cls, value):

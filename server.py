@@ -116,14 +116,14 @@ if __name__ == '__main__':
     if ExecMode.get(mode) is None:
         logging.error(f'invalid execution mode {mode}')
         raise RuntimeError(f'invalid execution mode {mode}')
-    if ExecMode.get(mode) == ExecMode.PROD.value:
+    if ExecMode.get(mode) == ExecMode.PROD.value or ExecMode.get(mode) == ExecMode.UAT.value:
         warnings.filterwarnings("ignore")
     if not os.path.exists(LOG_LOC):
         os.mkdir(LOG_LOC)
     try:
         stream_hdlr = logging.StreamHandler()
         file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/.log', when='D', backupCount=7)
-        level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.PROD.value:logging.INFO}[ExecMode.get(mode)]
+        level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.UAT.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
         logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(filename)s - line %(lineno)d: %(message)s', handlers=[stream_hdlr, file_hdlr])
         set_db(MimosaDB(mode=mode))
         set_market_data_provider(MarketDataFromDb())
