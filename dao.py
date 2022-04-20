@@ -289,7 +289,7 @@ class MimosaDB:
                             {TableName.MACRO_PARAM.value}
                     ) AS mp
                 ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND 
-                para.{PatternParamField.PARAM_CODE.value}=mp.PARAM_CODE{MacroParamField.PARAM_CODE.value}
+                para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
                 ORDER BY 
                     ptn.{PatternInfoField.PATTERN_ID.value}, 
                     mcr.{MacroInfoField.FUNC_CODE.value} ASC;
