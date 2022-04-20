@@ -756,40 +756,43 @@ class MimosaDB:
                 logging.error(f'Unknown execution type: {exec_type}')
                 return -1
 
-            if not self.READ_ONLY:
+            # 製作儲存結構
+            now = datetime.datetime.now()
+            py = data[PredictResultField.PREDICT_VALUE.value].values * 100
+            upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
+            lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
+
+            data = data[[
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.DATE.value,
+                PredictResultField.PERIOD.value
+                ]]
+            data[PredictResultField.PREDICT_VALUE.value] = py
+            data[PredictResultField.UPPER_BOUND.value] = upper_bound
+            data[PredictResultField.LOWER_BOUND.value] = lower_bound
+            create_dt = now
+            data['CREATE_BY'] = self.CREATE_BY
+            data['CREATE_DT'] = create_dt
+
+            # 移除傳入預測結果中較舊的預測結果
+            group_data = data.groupby([
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.PERIOD.value])
+            latest_data = []
+            for group_i, group in group_data:
+                max_date = np.max(group[PredictResultField.DATE.value].values)
+                latest_data.append(
+                    group[group[PredictResultField.DATE.value].values == max_date])
+            latest_data = pd.concat(latest_data, axis=0)
+            
+            db_data = pd.DataFrame(columns=latest_data.columns)
+            if self.WRITE_LOCAL and self.READ_ONLY:
+                if os.path.exists(f'{DATA_LOC}/local_out/{table_name}.pkl'):
+                    db_data = pickle_load(f'{DATA_LOC}/local_out/{table_name}.pkl')
+            elif not self.READ_ONLY:
                 engine = self._engine()
-
-                # 製作儲存結構
-                now = datetime.datetime.now()
-                py = data[PredictResultField.PREDICT_VALUE.value].values * 100
-                upper_bound = data[PredictResultField.UPPER_BOUND.value].values * 100
-                lower_bound = data[PredictResultField.LOWER_BOUND.value].values * 100
-
-                data = data[[
-                    PredictResultField.MODEL_ID.value,
-                    PredictResultField.MARKET_ID.value,
-                    PredictResultField.DATE.value,
-                    PredictResultField.PERIOD.value
-                    ]]
-                data[PredictResultField.PREDICT_VALUE.value] = py
-                data[PredictResultField.UPPER_BOUND.value] = upper_bound
-                data[PredictResultField.LOWER_BOUND.value] = lower_bound
-                create_dt = now
-                data['CREATE_BY'] = self.CREATE_BY
-                data['CREATE_DT'] = create_dt
-
-                # 移除傳入預測結果中較舊的預測結果
-                group_data = data.groupby([
-                    PredictResultField.MODEL_ID.value,
-                    PredictResultField.MARKET_ID.value,
-                    PredictResultField.PERIOD.value])
-                latest_data = []
-                for group_i, group in group_data:
-                    max_date = np.max(group[PredictResultField.DATE.value].values)
-                    latest_data.append(
-                        group[group[PredictResultField.DATE.value].values == max_date])
-                latest_data = pd.concat(latest_data, axis=0)
-
                 # 新增最新預測結果
                 # 合併現有的資料預測結果與當前的預測結果
                 db_data = None
@@ -803,36 +806,41 @@ class MimosaDB:
                         MODEL_ID='{model_id}'
                 """
                 db_data = pd.read_sql_query(sql, engine)
-                except_catch['process']['db_data'] = db_data.copy()
-                db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
-                union_data = pd.concat([db_data, latest_data], axis=0)
+            except_catch['process']['db_data'] = db_data.copy()
+            db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
+            union_data = pd.concat([db_data, latest_data], axis=0)
 
-                # 移除完全重複的預測結果
-                union_data[PredictResultField.MODEL_ID.value] = union_data[PredictResultField.MODEL_ID.value].astype(str)
-                union_data[PredictResultField.MARKET_ID.value] = union_data[PredictResultField.MARKET_ID.value].astype(str)
-                union_data[PredictResultField.PERIOD.value] = union_data[PredictResultField.PERIOD.value].astype(np.int64)
-                union_data[PredictResultField.DATE.value] = union_data[PredictResultField.DATE.value].astype('datetime64[D]')
-                union_data = union_data.drop_duplicates(subset=[
-                    PredictResultField.MODEL_ID.value,
-                    PredictResultField.MARKET_ID.value,
-                    PredictResultField.PERIOD.value,
-                    PredictResultField.DATE.value
-                    ])
+            # 移除完全重複的預測結果
+            union_data[PredictResultField.MODEL_ID.value] = union_data[PredictResultField.MODEL_ID.value].astype(str)
+            union_data[PredictResultField.MARKET_ID.value] = union_data[PredictResultField.MARKET_ID.value].astype(str)
+            union_data[PredictResultField.PERIOD.value] = union_data[PredictResultField.PERIOD.value].astype(np.int64)
+            union_data[PredictResultField.DATE.value] = union_data[PredictResultField.DATE.value].astype('datetime64[D]')
+            union_data = union_data.drop_duplicates(subset=[
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.PERIOD.value,
+                PredictResultField.DATE.value
+                ])
 
-                # 移除較舊的預測結果
-                group_data = union_data.groupby([
-                    PredictResultField.MODEL_ID.value,
-                    PredictResultField.MARKET_ID.value,
-                    PredictResultField.PERIOD.value])
-                latest_data = []
-                for group_i, group in group_data:
-                    max_date = np.max(group[PredictResultField.DATE.value].values)
-                    latest_data.append(
-                        group[group[PredictResultField.DATE.value].values == max_date])
-                latest_data = pd.concat(latest_data, axis=0)
+            # 移除較舊的預測結果
+            group_data = union_data.groupby([
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.PERIOD.value])
+            latest_data = []
+            for group_i, group in group_data:
+                max_date = np.max(group[PredictResultField.DATE.value].values)
+                latest_data.append(
+                    group[group[PredictResultField.DATE.value].values == max_date])
+            latest_data = pd.concat(latest_data, axis=0)
 
             # 開始儲存
-            if not self.READ_ONLY:
+            if self.WRITE_LOCAL and self.READ_ONLY:
+                if os.path.exists(f'{DATA_LOC}/local_out/{table_name}.pkl'):
+                    db_data = pickle_load(f'{DATA_LOC}/local_out/{table_name}.pkl')
+                    db_data = db_data[db_data['MODEL_ID'].values != model_id]
+                    pickle_dump(db_data, f'{DATA_LOC}/local_out/{table_name}.pkl')
+            elif not self.READ_ONLY:
                 sql = f"""
                     DELETE FROM {table_name}
                     WHERE
@@ -1519,7 +1527,12 @@ class MimosaDB:
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
 
-        if not self.READ_ONLY:
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl')
+                db_data = db_data[db_data['PATTERN_ID'].values != pattern_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl')
+        elif not self.READ_ONLY:
             sql = f"""
                 DELETE FROM FCST_PAT_MKT_OCCUR
                 WHERE
@@ -1575,7 +1588,12 @@ class MimosaDB:
         data[MarketDistField.RETURN_MEAN.value] = data_mean
         data[MarketDistField.RETURN_STD.value] = data_std
 
-        if not self.READ_ONLY:
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl')
+                db_data = db_data[db_data['PATTERN_ID'].values != pattern_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl')
+        elif not self.READ_ONLY:
             sql = f"""
                 DELETE FROM FCST_PAT_MKT_DIST
                 WHERE
@@ -1621,7 +1639,12 @@ class MimosaDB:
         data['CREATE_BY'] = self.CREATE_BY
         data['CREATE_DT'] = create_dt
 
-        if not self.READ_ONLY:
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl')
+                db_data = db_data[db_data['PATTERN_ID'].values != pattern_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl')
+        elif not self.READ_ONLY:
             sql = f"""
                 DELETE FROM FCST_PAT_MKT_EVENT
                 WHERE
