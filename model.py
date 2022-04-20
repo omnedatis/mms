@@ -1872,7 +1872,7 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
             pattern_occur_writer.add(market_occur)
         logging.debug(f'update patterns: {market}')
     smd_swap.update(**smd_buffer)
-    def smd_buffer
+    del smd_buffer
     tsmd = mt.Thread(target=smd_swap.dump)
     tsmd.start()
     ret = [tsmd]
