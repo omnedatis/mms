@@ -23,11 +23,103 @@ from func._tp import *
 import logging
 from func._td import MD_CACHE
 
+class SMD:
+    LOCAL_FILE = f'{LOCAL_DB}/smd.pkl'
+    def __init__(self, mids: List[str]=[], pids: List[str]=[], mdates: List[np.ndarray]=[],
+                       pvalues: List[np.ndarray]=[], freturns: List[np.ndarray]=[]):
+        self._mids = {mid: idx for idx in enumerate(mids)}
+        self._pids = {pid: idx for idx in enumerate(pids)}
+        self._mdates = mdates
+        self._pvalues = pvalues
+        self._freturns = freturns
+
+    @staticmethod
+    def pencode(values: np.ndarray) -> np.ndarray:
+        ret = values.astype('int8')
+        ret[np.isnan(values)] = -1
+        return ret
+
+    @staticmethod
+    def rencode(values: np.ndarray) -> np.ndarray:
+        return values.astype('float32')
+
+    @staticmethod
+    def dencode(values: np.ndarray) -> np.ndarray:
+        return values.astype('datetime64[D]').astype('int32')
+
+    @staticmethod
+    def pdecode(values: np.ndarray) -> np.ndarray:
+        ret = values.astype(float)
+        ret[ret < 0] = np.nan
+        return ret
+
+    @staticmethod
+    def rdecode(values: np.ndarray) -> np.ndarray:
+        return values.astype(float)
+
+    @staticmethod
+    def ddecode(values: np.ndarray) -> np.ndarray:
+        return values.astype('datetime64[D]')
+
+    def copy_from(self, other: 'SMD'):
+        self._mids = other._mids
+        self._pids = other._pids
+        self._mdates = other._mdates
+        self._pvalues = other._pvalues
+        self._freturns = other._freturns
+
+    def clear(self):
+        self._mids = {}
+        self._pids = {}
+        self._mdates = []
+        self._pvalues = []
+        self._freturns = []
+
+    def update(self, mids: Optional[List[str]]=None,
+               pids: Optional[List[str]]=None,
+               mdates: Optional[List[np.ndarray]]=None,
+               pvalues: Optional[List[np.ndarray]]=None,
+               freturns: Optional[List[np.ndarray]]=None):
+        if mids:
+            self._mids = {mid: idx for idx, mid in enumerate(mids)}
+        if pids:
+            self._pids = {pid: idx for idx, pid in enumerate(pids)}
+        if mdates:
+            self._mdates = mdates
+        if pvalues:
+            self._pvalues = pvalues
+        if freturns:
+            self._freturns = freturns
+
+    def dump(self):
+        pickle_dump({'mids': self._mids, 'pids': self._pids,
+                     'mdates': self._mdates, 'pvalues': self._pvalues,
+                     'freturns': self._freturns}, self.LOCAL_FILE)
+
+    @classmethod
+    def load(cls):
+        ret = cls()
+        if os.path.exists(cls.LOCAL_FILE):
+            recv = pickle_load(cls.LOCAL_FILE)
+            ret._mids = recv['mids']
+            ret._pids = recv['pids']
+            ret._mdates = recv['mdates']
+            ret._pvalues = recv['pvalues']
+            ret._freturns = recv['freturns']
+        return ret
+
+    @property
+    def raw_data(self):
+        # Without copy, be careful!!
+        return self._mids, self._pids, self._mdates, self._pvalues, self._freturns
+
 db = None
 
 model_semaphore = Semaphore(QUEUE_LIMIT)
 
-MP_CACHE = Cache(MULTI_PATTERN_CACHE_SIZE)
+smd = SMD.load()
+smd_swap = SMD()
+smd_lock = Lock()
 
 def get_db():
     return db
@@ -37,6 +129,11 @@ def set_db(_db):
     global db
     db = _db
 
+def swap_smd():
+    smd_lock.acquire()
+    smd.copy_from(smd_swap)
+    smd_lock.release()
+    smd_swap.clear()
 
 class PatternInfo(NamedTuple):
     """Pattern Info.
@@ -124,40 +221,6 @@ def get_patterns():
     result = db.get_patterns()
     return result
 
-
-def save_pattern_results(market_id, data, to_local=False):
-    """Save pattern results to DB.
-
-    Parameters
-    ----------
-    market_id: str
-        ID of market.
-    data: Pandas's Series
-        A time-series of boolean which name is the pattern ID.
-
-    """
-    db = get_db()
-    db.save_pattern_results(market_id, data)
-
-def update_pattern_result(market_id, data):
-    """Save pattern results to DB.
-
-    Parameters
-    ----------
-    market_id: str
-        ID of market.
-    data: Pandas's Series
-        A time-series of boolean which name is the pattern ID.
-
-    """
-    db = get_db()
-    db.update_pattern_result(market_id, data)
-
-def dump_pattern_results():
-    """Dump pattern results to DB. """
-    db = get_db()
-    db.dump_pattern_results()
-
 def save_latest_pattern_results(data):
     """Save latest pattern results to DB.
 
@@ -223,9 +286,25 @@ def get_pattern_results(market_id, patterns, begin_date=None):
         A panel of boolean with all id of patterns as columns.
 
     """
-    db = get_db()
-    result = db.get_pattern_results(market_id, patterns, begin_date)
-    return result
+    smd_lock.acquire()
+    mids, pids, mdates, pvalues, _ = smd.raw_data
+    smd_lock.release()
+
+    midx = mids[market_id]
+    values = pvalues[midx]
+    dates = mdates[midx]
+    if patterns:
+        columns = patterns
+        pidxs = [self._pids[pid] for pid in pids]
+        values = values[:, [pidxs]]
+    else:
+        columns = list(pids.keys())
+    values = SMD.pdecode(values)
+    dates = SMD.ddecode(dates)
+    ret = pd.DataFrame(values, index=dates, columns=columns)
+    if begin_date:
+        ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
+    return ret
 
 def get_filed_name_of_future_return(period: int) -> str:
     return f'FR{period}'
@@ -259,10 +338,18 @@ def get_future_return(market_id, period, begin_date):
         A timeseries of float.
 
     """
-    db = get_db()
-    result = db.get_future_return(market_id, period, begin_date)
-    return result
+    smd_lock.acquire()
+    mids, _, mdates, _, freturns = smd.raw_data
+    smd_lock.release()
 
+    midx = self._mids[market_id]
+    pidx = PREDICT_PERIODS.index(period)
+    values = SMD.rdecode(freturns[midx][:, pidx])
+    dates = SMD.ddecode(mdates[midx])
+    ret = pd.Series(values, index=dates, name=market_id)
+    if begin_date:
+        ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
+    return ret
 
 def get_future_returns(market_id, begin_date=None):
     """Get future return from begining date to the latest of given market from DB.
@@ -283,28 +370,18 @@ def get_future_returns(market_id, begin_date=None):
         A timeseries of float.
 
     """
-    db = get_db()
-    result = db.get_future_returns(market_id, begin_date)
-    return result
+    smd_lock.acquire()
+    mids, _, mdates, _, freturns = smd.raw_data
+    smd_lock.release()
 
-def save_future_return(market_id, data):
-    """Save futrue return results to DB.
-
-    Parameters
-    ----------
-    market_id: str
-        ID of market.
-    data: Pandas's DataFrame
-        A panel of float which columns TF(d) for each predicting period as d.
-
-    """
-    db = get_db()
-    db.save_future_return(market_id, data)
-
-def dump_future_returns():
-    """Dump future returns to DB. """
-    db = get_db()
-    db.dump_future_returns()
+    midx = mids[market_id]
+    columns = [f'FR{period}' for period in PREDICT_PERIODS]
+    values = SMD.rdecode(freturns[midx])
+    dates = SMD.ddecode(mdates[midx])
+    ret = pd.DataFrame(values, index=dates, columns=columns)
+    if begin_date:
+        ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
+    return ret
 
 def save_latest_pattern_occur(data: pd.DataFrame):
     """Save pattern occured info
@@ -1491,7 +1568,7 @@ class ExecQueue:
         self.threads = []
 
     def _run(self):
-        try:  
+        try:
             while self.isactive:
                 if self._occupants < QUEUE_LIMIT and self._queue:
                     func, args, size = self._queue.pop(0)
@@ -1503,11 +1580,11 @@ class ExecQueue:
                     t = CatchableTread(target=callback)
                     t.start()
                     self.threads.append(t)
-                    
+
                 time.sleep(1)
         except Exception as esp:
             logging.error(traceback.format_exc())
-            
+
     def push(self, func:Callable, args:tuple, size:int):
         self._lock.acquire()
         assert size <= QUEUE_LIMIT, 'exceed queue size'
@@ -1522,7 +1599,7 @@ class ExecQueue:
 
     def stop(self):
         self.isactive = False
-    
+
     def collect_threads(self):
         self._thread.join()
         return self.threads
@@ -1534,7 +1611,7 @@ class CatchableTread:
         self._target = target
         self.esp = None
         self._thread = mt.Thread(name=name, target=self._run)
-    
+
     def start(self):
         self._thread.start()
 
@@ -1725,23 +1802,27 @@ def gen_return_value(mid: str):
         ret_2[MarketScoreField.MARKET_ID.value] = mid
     return ret, ret_1, ret_2
 
-def get_latest_patterns(mid: str, data: pd.DataFrame):
+def get_latest_patterns(mids, pids, dates, pvalues):
     ret = pd.DataFrame()
-    values = np.full(data.values[-1].shape, 'N')
-    values[data.values[-1] == 1] = 'Y'
+    values = np.full(len(pvalues), 'N')
+    values[pvalues == 1] = 'Y'
     ret[PatternResultField.VALUE.value] = values
-    ret[PatternResultField.DATE.value] = data.index.values.astype('datetime64[D]').tolist()[-1]
-    ret[PatternResultField.MARKET_ID.value] = mid
-    ret[PatternResultField.PATTERN_ID.value] = list(data.columns)
-    return ret.dropna()
+    ret[PatternResultField.DATE.value] = dates.astype('datetime64[D]').tolist()
+    ret[PatternResultField.MARKET_ID.value] = mids
+    ret[PatternResultField.PATTERN_ID.value] = pids
+    return ret
 
 def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
     MD_CACHE.clear()
+    smd_buffer = {}
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
         return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
+    ret_buffer = []
+    ret_market_dist = []
+    ret_market_occur = []
     if batch_type == BatchType.SERVICE_BATCH:
         market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
@@ -1749,6 +1830,12 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         pattern_dist_writer = PatternDistWriter(controller)
         ret_mstats = []
         ret_mscores = []
+    smd_buffer['mids'] = {mid: idx for idx, mid in enumerate(markets)}
+    pids = [each.pid for each in patterns]
+    smd_buffer['pids'] = {pid: idx for idx, pid in enumerate(pids)}
+    smd_buffer['mdates'] = []
+    smd_buffer['pvalues'] = []
+    smd_buffer['freturns'] = []
     for market in markets:
         if batch_type == BatchType.SERVICE_BATCH:
             r1, r2, r3 = gen_return_value(market)
@@ -1765,7 +1852,6 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         if not controller.isactive:
             logging.info('batch terminated')
             return
-        save_pattern_results(market, pattern_result)
         result_buffer = []
         for period in PREDICT_PERIODS:
             if not controller.isactive:
@@ -1773,17 +1859,23 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
                 return
             result_buffer.append(gen_future_return(market, period))
         return_result = fast_concat(result_buffer)
-        save_future_return(market, return_result)
+        mdates = SMD.dencode(pattern_result.index.values)
+        pvalues = SMD.pencode(pattern_result.values)
+        freturns = SMD.rencode(return_result.values)
+        smd_buffer['mdates'].append(mdates)
+        smd_buffer['pvalues'].append(pvalues)
+        smd_buffer['freturns'].append(freturns)
         if batch_type == BatchType.SERVICE_BATCH and len(pattern_result) > 0:
-            latest_pattern_writer.add(get_latest_patterns(market, pattern_result))
+            latest_pattern_writer.add(get_latest_patterns(market, pids, mdates[-1], pvalues[-1]))
             market_dist, market_occur = get_pattern_stats_info_v2(pattern_result, return_result, market)
             pattern_dist_writer.add(market_dist)
             pattern_occur_writer.add(market_occur)
         logging.debug(f'update patterns: {market}')
-    t = CatchableTread(target=dump_future_returns)
-    t.start()
-    t = CatchableTread(target=dump_pattern_results)
-    t.start()
+    smd_swap.update(**smd_buffer)
+    def smd_buffer
+    tsmd = mt.Thread(target=smd_swap.dump)
+    tsmd.start()
+    ret = [tsmd]
     if batch_type == BatchType.SERVICE_BATCH:
         return_score_writer = ReturnScoreWriter(controller)
         return_score_writer.add(pd.concat(ret_mscores, axis=0))
@@ -1798,10 +1890,10 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         if not controller.isactive:
             logging.info('batch terminated')
             return
-        ret = [market_return_writer.get_thread(), latest_pattern_writer.get_thread(),
-               pattern_dist_writer.get_thread(), pattern_occur_writer.get_thread(),
-               return_score_writer.get_thread(), return_dist_writer.get_thread()]
-        return ret
+        ret += [market_return_writer.get_thread(), latest_pattern_writer.get_thread(),
+                pattern_dist_writer.get_thread(), pattern_occur_writer.get_thread(),
+                return_score_writer.get_thread(), return_dist_writer.get_thread()]
+    return ret
 
 
 def get_pattern_stats_info(pattern, freturn, market):
@@ -1950,6 +2042,7 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                 if controller.isactive:
                     update_model_accuracy()
                     checkout_fcst_data()
+                    update_mp_cache()
             MP_CACHE.clear()
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info(f"End batch {excute_id}")
@@ -1961,73 +2054,110 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
 
 
 def get_mix_pattern_occur(market_id: str, patterns: List):
-    recv = get_pattern_results(market_id, patterns)
-    ret = recv.index.values[recv.values.all(axis=1)].astype('datetime64[D]').tolist()
+    smd_lock.acquire()
+    mids, pids, mdates, pvalues, _ = smd.raw_data
+    smd_lock.release()
+
+    midx = mids[market_id]
+    pidxs = [pids[pid] for pid in patterns]
+    valeus = pvalues[midx][:,pidxs]
+    dates = mdates[midx]
+    ret = SMD.ddecode(dates[(valeus==1).all(axis=1)]).tolist()
     return ret
 
-def get_pattern_occur(market_id: str, pattern_id):
-    return get_mix_pattern_occur(market_id, [pattern_id])
+def get_pattern_occur_v2(market_id: str, pattern_id):
+    return get_mix_pattern_occur_v2(market_id, [pattern_id])
 
-def _multi_pattern_cnts(pids, markets):
-    pdata = np.concatenate([get_pattern_results(mid, pids).values for mid in markets], axis=0).sum(axis=1)
-    occur_cnt = (pdata == len(pids)).sum()
-    non_occur_cnt = len(pdata) - occur_cnt - np.isnan(pdata).sum()
-    return occur_cnt, non_occur_cnt
+def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
+    def func(vs):
+        cnts, occurs = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs]).sum(axis=0)
+        return occurs, cnts - occurs
 
-def get_mix_pattern_occur_cnt(pids, market_type=None, category_code=None):
-    name = f'_multi_pattern_cnts({pids}, {market_type}, {category_code})'
+    smd_lock.acquire()
+    mids, pids, mdates, pvalues, _ = smd.raw_data
+    smd_lock.release()
+
     markets = get_markets(market_type, category_code)
-    if name not in MP_CACHE:
-        MP_CACHE[name] = _multi_pattern_cnts(pids, markets)
-    return MP_CACHE[name]
+    midxs = [mids[mid] for mid in markets]
+    pidxs = [pids[pid] for pid in patterns]
+    values = [pvalues[idx][:,pidxs] for idx in midxs]
+    return func(values)
 
-def _multi_pattern_upprob(pids, markets):
-    pdata = np.concatenate([get_pattern_results(mid, pids).values for mid in markets], axis=0).all(axis=1)
-    rdata = np.concatenate([get_future_returns(mid).values for mid in markets], axis=0)[pdata]
-    up_cnts = (rdata > 0).sum(axis=0)
-    up_probs = up_cnts / (len(rdata) - np.isnan(rdata).sum(axis=0))
-    ret = {p: up_probs[i] for i, p in enumerate(PREDICT_PERIODS)}
-    return ret
+def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=None):
+    def func(v, r):
+        ret = r[(v==1).all(axis=1) & (r==r)]
+        return len(ret), (ret>0).sum()
 
-def get_mix_pattern_rise_prob(pids, period, market_type=None, category_code=None):
-    name = f'multi_pattern_upprob({pids}, {market_type}, {category_code})'
+    smd_lock.acquire()
+    mids, pids, _, pvalues, freturns = smd.raw_data
+    smd_lock.release()
+
     markets = get_markets(market_type, category_code)
-    if name not in MP_CACHE:
-        MP_CACHE[name] = _multi_pattern_upprob(pids, markets)
-    return MP_CACHE[name][period]
+    pidx = PREDICT_PERIODS.index(period)
+    midxs = [mids[mid] for mid in markets]
+    pidxs = [pids[pid] for pid in patterns]
+    values = [pvalues[idx][:,pidxs] for idx in midxs]
+    returns = [freturns[idx][:,pidx] for idx in midxs]
+    stats = np.array([func(v, r) for v, r in zip(values, returns)])
+    cnts, ups = stats.sum(axis=0)
+    return ups / cnts
 
-def _multi_pattern_dist(pids, mid):
-    name = f'multi_pattern_dist({pids}, {mid})'
-    if name not in MP_CACHE:
-        pdata = get_pattern_results(mid, pids).values.all(axis=1)
-        rdata = get_future_returns(mid).values
-        rdata[~pdata] = np.nan
-        means = np.nanmean(rdata, axis=0)
-        stds = np.nanstd(rdata, axis=0, ddof=0)
-        cnts = len(rdata) - np.isnan(rdata).sum(axis=0)
-        ret = {p: (m, s, c) for p, m, s, c in zip(PREDICT_PERIODS, means, stds, cnts)}
-        MP_CACHE[name] = ret
-    return MP_CACHE[name]
+def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
+    def func(v, r):
+        ret = r[(v==1).all(axis=1) & (r==r)]
+        return ret.mean(), ret.std(), len(ret)
 
-def get_mix_pattern_mkt_dist_info(pids, period, market_type=None, category_code=None):
+    smd_lock.acquire()
+    mids, pids, _, pvalues, freturns = smd.raw_data
+    smd_lock.release()
+
     markets = get_markets(market_type, category_code)
-    ret = {mid: _multi_pattern_dist(pids, mid)[period] for mid in markets}
-    return ret
+    pidx = PREDICT_PERIODS.index(period)
+    midxs = [mids[mid] for mid in markets]
+    pidxs = [pids[pid] for pid in patterns]
+    values = [pvalues[idx][:,pidxs] for idx in midxs]
+    returns = [freturns[idx][:,pidx] for idx in midxs]
+    stats = np.array([func(v, r) for v, r in zip(values, returns)])
+    return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
 
 def add_pattern(pid):
+    smd_lock.acquire()
+    mids, pids, _, old_pvalues, freturns = smd.raw_data
+    smd_lock.release()
+
+    pvalues = []
     pattern = get_pattern_info(pid)
-    markets = get_markets()
-    latest_patterns = []
+    latest_dates = []
+    latest_values = []
     pattern_occurs = []
     pattern_dists = []
-    for mid in markets:
+    if pid in pids:
+        pidx = pids[pid]
+    else:
+        pids = pids.copy()
+        pids[pid] = len(pids)
+        pidx = -1
+
+    for mid, idx in mids.items():
         pattern_result = pattern.run(mid).rename(pattern.pid)
-        update_pattern_result(mid, pattern_result)
+        if pidx > 0:
+            values = old_pvalues[idx].copy()
+            values[:, pidx] = SMD.pencode(pattern_result.values)
+        else:
+            values = np.concatenate([old_pvalues[idx], SMD.pencode(pattern_result.values).reshape((-1,1))], axis=1)
+        pvalues.append(values)
         return_result = get_future_returns(mid)
-        latest_patterns.append(get_latest_patterns(mid, pd.DataFrame(pattern_result)))
+        latest_dates.append(pattern_result.index.values[-1])
+        latest_values.append(pattern_result.values[-1])
         market_dist, market_occur = get_pattern_stats_info_v2(pd.DataFrame(pattern_result), return_result, mid)
         pattern_occurs.append(market_occur)
         pattern_dists.append(market_dist)
-    update_latest_pattern_results(pid, pd.concat(latest_patterns, axis=0))
-    update_latest_pattern_occur(pid, pd.concat(pattern_occurs, axis=0))
-    update_latest_pattern_distribution(pid, pd.concat(pattern_dists, axis=0))
+    update_latest_pattern_results(get_latest_patterns(list(mids.keys()), pid, np.array(latest_dates), np.array(latest_values)))
+    update_latest_pattern_occur(pd.concat(pattern_occurs, axis=0))
+    update_latest_pattern_distribution(pd.concat(pattern_dists, axis=0))
+    smd_lock.acquire()
+    if pidx > 0:
+        smd.update(pvalues=pvalues)
+    else:
+        smd.update(pids=pids, pvalues=pvalues)
+    smd_lock.release()

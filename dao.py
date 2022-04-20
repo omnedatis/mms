@@ -17,7 +17,6 @@ from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode,
                    MarketPeriodField, MarketScoreField,
                    MarketInfoField, DSStockInfoField,
                    MarketStatField, ModelExecution, ScoreMetaField, BatchType)
-from utils import Cache
 
 class MimosaDB:
     """
@@ -31,7 +30,7 @@ class MimosaDB:
     WRITE_LOCAL=False
 
     def __init__(
-        self, db_name='mimosa', mode: str=ExecMode.DEV.value, 
+        self, db_name='mimosa', mode: str=ExecMode.DEV.value,
         read_only: bool=False, write_local: bool=False
     ):
         """
@@ -46,8 +45,6 @@ class MimosaDB:
             return config
         self.config = init_config()
         self._local_db_lock = Lock()
-        self.pattern_cache = Cache(size=400000)
-        self.future_reture_cache = Cache(size=100000)
         self.READ_ONLY = read_only
         self.WRITE_LOCAL = write_local
         if self.WRITE_LOCAL:
@@ -547,7 +544,7 @@ class MimosaDB:
             cate_data = pickle.load(fp)
         cate_data = cate_data[
             cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value].values == category_code]
-        data = data[[MarketInfoField.MARKET_CODE.value, 
+        data = data[[MarketInfoField.MARKET_CODE.value,
                      MarketInfoField.MARKET_SOURCE_CODE.value]].values.astype(str).tolist()
         cate_data = cate_data[DSStockInfoField.STOCK_CODE.value].values.astype(str).tolist()
         data = [x[0] for x in data if x[1] in cate_data]
@@ -565,183 +562,6 @@ class MimosaDB:
         with open(f'{DATA_LOC}/patterns.pkl', 'rb') as fp:
             data = pickle.load(fp)
         return data
-
-    def _get_future_return_file(self, market_id: str) -> str:
-        return f'{LOCAL_DB}/freturns/{market_id}.pkl'
-
-    def save_future_return(self, market_id:str, data:pd.DataFrame):
-        """Save future return results to DB.
-
-        Parameters
-        ----------
-        market_id: str
-            Id of market.
-        data: Pandas's DataFrame
-            A panel of float which columns TF(d) for each predicting period as
-            d.
-
-        """
-        self.future_reture_cache[market_id] = data
-
-    def dump_future_returns(self):
-        """Dump future returns to DB. """
-        logging.info('Dump future returns to db')
-        for market_id in self.get_markets():
-            self._local_db_lock.acquire()
-            pickle_dump(self.future_reture_cache[market_id], self._get_future_return_file(market_id))
-            self._local_db_lock.release()
-        logging.info('Dump future returns finished')
-
-    def get_future_return(self, market_id:str, period: int, begin_date:datetime.date):
-        """Get future return results from begining date to the latest of given market from DB.
-
-        Parameters
-        ----------
-        market_id: str
-            ID of market.
-        period: int
-            Predicting period.
-        begin_date: datetime.date, optional
-            The begin date of the designated data range. If it is not set, get all
-            history results.
-
-        Returns
-        -------
-        Pandas's Series
-            A timeseries of float.
-
-        """
-        field = get_filed_name_of_future_return(period)
-        if market_id not in self.future_reture_cache:
-            self._local_db_lock.acquire()
-            self.future_reture_cache[market_id] = pickle_load(self._get_future_return_file(market_id))
-            self._local_db_lock.release()
-        ret = self.future_reture_cache[market_id][field]
-        if begin_date:
-            ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
-        return ret
-
-    def get_future_returns(self, market_id:str, begin_date=None):
-        """Get future return results from begining date to the latest of given market from DB.
-
-        Parameters
-        ----------
-        market_id: str
-            ID of market.
-        period: int
-            Predicting period.
-        begin_date: datetime.date, optional
-            The begin date of the designated data range. If it is not set, get all
-            history results.
-
-        Returns
-        -------
-        Pandas's Series
-            A timeseries of float.
-
-        """
-        if market_id not in self.future_reture_cache:
-            self._local_db_lock.acquire()
-            self.future_reture_cache[market_id] = pickle_load(self._get_future_return_file(market_id))
-            self._local_db_lock.release()
-        ret = self.future_reture_cache[market_id]
-        if begin_date:
-            ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
-        return ret
-
-    def _get_pattern_file(self, market_id: str) -> str:
-        return f'{LOCAL_DB}/patterns/{market_id}.pkl'
-
-    def save_pattern_results(self, market_id:str, data:pd.DataFrame, to_local=False):
-        """Save pattern results to DB.
-
-        Parameters
-        ----------
-        market_id: str
-            Id of market.
-        data: Pandas's DataFrame
-            A panel of boolean which columns are the pattern IDs.
-
-        """
-        self.pattern_cache[market_id] = data
-        if to_local:
-            self._local_db_lock.acquire()
-            pickle_dump(data, self._get_pattern_file(market_id))
-            self._local_db_lock.release()
-
-    def update_pattern_result(self, market_id:str, data:pd.DataFrame):
-        """Save pattern results to DB.
-
-        Parameters
-        ----------
-        market_id: str
-            Id of market.
-        data: Pandas's DataFrame
-            A panel of boolean which columns are the pattern IDs.
-
-        """
-        ret = self._get_pattern_results(market_id)
-        ret[data.name] = data.values
-        self.save_pattern_results(market_id, ret, to_local=True)
-
-    def dump_pattern_results(self):
-        """Dump pattern results to DB. """
-        logging.info('Dump pattern results to db')
-        for market_id in self.get_markets():
-            self._local_db_lock.acquire()
-            pickle_dump(self.pattern_cache[market_id], self._get_pattern_file(market_id))
-            self._local_db_lock.release()
-        logging.info('Dump pattern results finished')
-
-    def _get_pattern_results(self, market_id:str):
-        """Get pattern results from begining date to the latest of given market from DB.
-
-        Parameters
-        ----------
-        market_id: str
-            ID of market.
-        patterns: list of str
-            ID of patterns.
-        begin_date: datetime.date, optional
-            The begin date of the designated data range. If it is not set, get all
-            history results.
-
-        Returns
-        -------
-        Pandas's DataFrame
-            A panel of boolean with all id of patterns as columns.
-
-        """
-        if market_id not in self.pattern_cache:
-            self._local_db_lock.acquire()
-            self.pattern_cache[market_id] = pickle_load(self._get_pattern_file(market_id))
-            self._local_db_lock.release()
-        ret = self.pattern_cache[market_id]
-        return ret
-
-    def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:datetime.date):
-        """Get pattern results from begining date to the latest of given market from DB.
-
-        Parameters
-        ----------
-        market_id: str
-            ID of market.
-        patterns: list of str
-            ID of patterns.
-        begin_date: datetime.date, optional
-            The begin date of the designated data range. If it is not set, get all
-            history results.
-
-        Returns
-        -------
-        Pandas's DataFrame
-            A panel of boolean with all id of patterns as columns.
-
-        """
-        ret = self._get_pattern_results(market_id)[patterns]
-        if begin_date:
-            ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
-        return ret
 
     def get_latest_dates(self, model_id:str):
         """get dates of the latest predict results of markets for given model.
@@ -1028,7 +848,7 @@ class MimosaDB:
                     chunksize=10000,
                     method='multi',
                     index=False)
-            
+
             if self.WRITE_LOCAL:
                 pickle_dump(latest_data, f'{DATA_LOC}/local_out/{table_name}.pkl')
             logging.info('Saving model latest results finished')
