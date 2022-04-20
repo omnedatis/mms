@@ -1375,7 +1375,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.pkl')
+            pickle_dump(latest_data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.pkl')
         logging.info('Save market period finished')
 
     def save_mkt_period(self, data: pd.DataFrame):
@@ -1420,6 +1420,8 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_HISTORY_SWAP.pkl')
         logging.info('Save market period history finished')
 
     def save_mkt_dist(self, data: pd.DataFrame):
