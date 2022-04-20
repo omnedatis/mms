@@ -1410,9 +1410,9 @@ class MimosaDB:
                 index=False)
         logging.info('Save market score finished')
 
-    def save_mkt_period(self, data: pd.DataFrame):
-        """ 儲存市場各天期歷史報酬
-        儲存各市場各天期歷史報酬
+    def _save_latest_mkt_period(self, data: pd.DataFrame):
+        """ 儲存市場各天期最新歷史報酬
+        儲存各市場各天期最新歷史報酬
 
         Parameters
         ----------
@@ -1438,11 +1438,23 @@ class MimosaDB:
             MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value, 
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
+        data[MarketPeriodField.PRICE_DATE.value] = data[MarketPeriodField.PRICE_DATE.value].astype('datetime64[D]')
 
+        # 移除傳入各天期報酬中較舊的報酬
+        group_data = data.groupby([
+            MarketPeriodField.MARKET_ID.value,
+            MarketPeriodField.DATE_PERIOD.value])
+        latest_data = []
+        for group_i, group in group_data:
+            max_date = np.max(group[MarketPeriodField.PRICE_DATE.value].values)
+            latest_data.append(
+                group[group[MarketPeriodField.PRICE_DATE.value].values == max_date])
+        latest_data = pd.concat(latest_data, axis=0)
+        
         logging.info('Save market period')
         if not self.READ_ONLY:
             # 新增最新資料
-            data.to_sql(
+            latest_data.to_sql(
                 'FCST_MKT_PERIOD_SWAP',
                 engine,
                 if_exists='append',
@@ -1450,6 +1462,50 @@ class MimosaDB:
                 method='multi',
                 index=False)
         logging.info('Save market period finished')
+
+    def save_mkt_period(self, data: pd.DataFrame):
+        """ 儲存市場各天期歷史報酬與最新報酬
+        儲存各市場各天期歷史報酬與最新報酬
+
+        Parameters
+        ----------
+        data: `pd.DataFrame`
+            要儲存的資料
+
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+
+        # 儲存最新市場各天期報酬
+        self._save_latest_mkt_period(data.copy(deep=True))
+
+        now = datetime.datetime.now()
+        create_by = self.CREATE_BY
+        create_dt = now
+        data['CREATE_BY'] = create_by
+        data['CREATE_DT'] = create_dt
+        data_net_change_rate = data[MarketPeriodField.NET_CHANGE_RATE.value].values * 100
+
+        data = data[[
+            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value, 
+            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value, 
+            MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
+        data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
+
+        logging.info('Save market period history')
+        if not self.READ_ONLY:
+            # 新增最新資料
+            data.to_sql(
+                'FCST_MKT_PERIOD_HISTORY_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        logging.info('Save market period history finished')
 
     def save_mkt_dist(self, data: pd.DataFrame):
         """ 儲存市場統計結果
