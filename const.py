@@ -17,10 +17,11 @@ EXCEPT_DATA_LOC = '_except'
 MIN_Y_SAMPLES = 30
 Y_OUTLIER = 0.05
 BATCH_EXE_CODE = 'nlKJ12avTYHDlw956evclk2b'
-QUEUE_LIMIT = 2
+MODEL_QUEUE_LIMIT = 2
+PATTERN_QUEUE_LIMIT = 1
 PORT = 8080
 FUNC_CACHE_SIZE = 2000
-
+MULTI_PATTERN_CACHE_SIZE = 2000 * 100
 
 class BatchType(str, Enum):
     """Batch 的執行型態
@@ -49,10 +50,74 @@ class ExecMode(Enum):
                 return each.value
         else:
             return None
-            
+
+class TableName(Enum):
+    """資料表名稱
+
+    Membors
+    -------
+    DS_S_STOCK: TEJ 台股資料表
+    MKT_INFO: Mimosa 市場資料表
+    MKT_HISTORY_PRICE: 市場歷史價格表
+    MKT_PERIOD: 市場最新各天期報酬表
+    MKT_PERIOD_HISTORY: 市場歷史各天期報酬表
+    MKT_DIST: 市場統計資訊表
+    MKT_SCORE: 市場分數範圍資訊表
+    PAT_INFO: 現象資訊表
+    PAT_PARAM: 現象參數資訊表
+    PATTERN_RESULT: 現象當日發生狀況資訊表
+    PAT_MKT_DIST: 現象最新統計結果資訊表
+    PAT_MKT_OCCUR: 現象最新發生次數統計表
+    MACRO_INFO: Macro資訊表
+    MACRO_PARAM: Macro參數資訊表
+    MODEL_INFO: 觀點資訊表
+    MODEL_EXECUTION: 觀點執行狀態資訊表
+    MODEL_MKT_MAP: 觀點使用市場資訊表
+    MODEL_PAT_MAP: 觀點使用現象資訊表
+    PREDICT_RESULT: 觀點最新預測結果資訊表
+    PREDICT_RESULT_HISTORY: 觀點歷史預測結果資訊表
+    SCORE_META: 分數標籤統計資訊表
+    """
+    DS_S_STOCK = "DS_S_STOCK"
+    MKT_INFO = "FCST_MKT"
+    MKT_HISTORY_PRICE = "FCST_MKT_PRICE_HISTORY"
+    MKT_PERIOD = "FCST_MKT_PERIOD"
+    MKT_PERIOD_HISTORY = "FCST_MKT_PERIOD_HISTORY"
+    MKT_DIST = "FCST_MKT_DIST"
+    MKT_SCORE = "FCST_MKT_SCORE"
+    PAT_INFO = "FCST_PAT"
+    PAT_PARAM = "FCST_PAT_PARAM"
+    PATTERN_RESULT = "FCST_PAT_MKT_EVENT"
+    PAT_MKT_DIST = "FCST_PAT_MKT_DIST"
+    PAT_MKT_OCCUR = "FCST_PAT_MKT_OCCUR"
+    MACRO_INFO = "FCST_MACRO"
+    MACRO_PARAM = "FCST_MACRO_PARAM"
+    MODEL_INFO = "FCST_MODEL"
+    MODEL_EXECUTION = "FCST_MODEL_EXECUTION"
+    MODEL_MKT_MAP = "FCST_MODEL_MKT_MAP"
+    MODEL_PAT_MAP = "FCST_MODEL_PAT_MAP"
+    PREDICT_RESULT = "FCST_MODEL_MKT_VALUE"
+    PREDICT_RESULT_HISTORY = "FCST_MODEL_MKT_VALUE_HISTORY"
+    SCORE_META = "FCST_SCORE"
+
+class StoredProcedule(Enum):
+    """SP名稱
+    
+    Membors
+    -------
+    TRUNCATE_AI_SWAP: 清空計算時所需要為空的資料表的 SP
+    GET_SERIAL_NO: 取得觀點執行代碼的 SP
+    UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP: 統計觀點準確率的 SP
+    SWAP_FCST: 將 SWAP 切換至正式資料表的SP
+    """
+    TRUNCATE_AI_SWAP = "SP_TRUNCATE_AI_SWAP"
+    GET_SERIAL_NO = "SP_GET_SERIAL_NO"
+    UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP = "SP_UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP"
+    SWAP_FCST = "SP_SWAP_FCST"
+
 class PredictResultField(Enum):
     """Fields of predict result table on DB.
-    
+
     Membors
     -------
     MODEL_ID: ID of model.
@@ -62,7 +127,7 @@ class PredictResultField(Enum):
     UPPER_BOUND: Upper-bound of predicting range.
     LOWER_BOUND: Lower-bound of predicting range.
     PREDICT_VALUE: value of predicting result.
-    
+
     """
     MODEL_ID = 'MODEL_ID'
     MARKET_ID = 'MARKET_CODE'
@@ -71,17 +136,17 @@ class PredictResultField(Enum):
     UPPER_BOUND = 'UPPER_BOUND'
     LOWER_BOUND = 'LOWER_BOUND'
     PREDICT_VALUE = 'DATA_VALUE'
-    
+
 class PatternResultField(Enum):
     """Fields of pattern result table on DB.
-    
+
     Membors
     -------
     PATTERN_ID: ID of pattern.
     MARKET_ID: ID of market.
     DATE: Trading date.
     VALUE: Value of pattern.
-    
+
     """
     PATTERN_ID = 'PATTERN_ID'
     MARKET_ID = 'MARKET_CODE'
@@ -90,7 +155,7 @@ class PatternResultField(Enum):
 
 class ModelExecution(str, Enum):
     """Execution types of Model.
-    
+
     新增模型時預測 ADD_PREDICT = 'AP'
     新增模型時回測 ADD_BACKTEST = 'AB'
     批次執行預測 BATCH_PREDICT = 'BP'
@@ -114,7 +179,7 @@ class ModelStatus(int, Enum):
 
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
-    
+
     Membors
     -------
     PATTERN_ID: ID of pattern.
@@ -137,7 +202,7 @@ class MarketOccurField(Enum):
 
 class MarketDistField(Enum):
     """Fields of pattern market occur stat info table on DB.
-    
+
     Membors
     -------
     PATTERN_ID: ID of pattern.
@@ -154,7 +219,7 @@ class MarketDistField(Enum):
 
 class MarketScoreField(Enum):
     """市場分數標籤表的欄位資訊
-    
+
     Membors
     -------
     MARKET_ID: ID of market.
@@ -171,7 +236,7 @@ class MarketScoreField(Enum):
 
 class MarketPeriodField(Enum):
     """市場各天期歷史報酬的欄位資訊
-    
+
     Membors
     -------
     MARKET_ID: ID of market.
@@ -179,7 +244,7 @@ class MarketPeriodField(Enum):
     PRICE_DATE: 價格日期
     DATA_DATE: 計算報酬的計算日期
     NET_CHANGE: 漲跌幅
-    NET_CHANGE_RATE: 報酬率 
+    NET_CHANGE_RATE: 報酬率
     """
     MARKET_ID = 'MARKET_CODE'
     DATE_PERIOD = 'DATE_PERIOD'
@@ -190,7 +255,7 @@ class MarketPeriodField(Enum):
 
 class MarketStatField(Enum):
     """市場統計資訊的欄位資訊
-    
+
     Membors
     -------
     MARKET_ID: ID of market.
@@ -207,7 +272,7 @@ class MarketStatField(Enum):
 
 class ScoreMetaField(Enum):
     """分數標籤統計資訊
-    
+
     Membors
     -------
     SCORE_CODE: 分數代碼
@@ -222,7 +287,7 @@ class ScoreMetaField(Enum):
 
 class MarketInfoField(Enum):
     """市場資訊
-    
+
     Membors
     -------
     MARKET_CODE: 市場代碼
@@ -237,7 +302,7 @@ class MarketInfoField(Enum):
 
 class DSStockInfoField(Enum):
     """TEJ 市場資訊
-    
+
     Membors
     -------
     STOCK_CODE: 股票代碼
@@ -248,7 +313,7 @@ class DSStockInfoField(Enum):
     TSE_INDUSTRY_CODE: TSE 產業別代碼
     CUR_CODE: 幣別
     TSE_IPO_DATE: 首次 TSE 上市日
-    OCT_IPO_DATE: 首次 OTC 上市日
+    OTC_IPO_DATE: 首次 OTC 上市日
     REG_IPO_DATE: 首次 REG 上市日
     DELISTING_DATE: 下市日期
     """
@@ -260,6 +325,155 @@ class DSStockInfoField(Enum):
     TSE_INDUSTRY_CODE = "TSE_INDUSTRY_CODE"
     CUR_CODE = "CUR_CODE"
     TSE_IPO_DATE = "TSE_IPO_DATE"
-    OCT_IPO_DATE = "OCT_IPO_DATE"
+    OTC_IPO_DATE = "OTC_IPO_DATE"
     REG_IPO_DATE = "REG_IPO_DATE"
     DELISTING_DATE = "DELISTING_DATE"
+
+class MarketHistoryPriceField(Enum):
+    """歷史市場價格資訊
+
+    Members
+    -------
+    MARKET_CODE: 市場代碼
+    PRICE_DATE: 價格日期
+    OPEN_PRICE: 開盤價
+    HIGH_PRICE: 最高價
+    LOW_PRICE: 最低價
+    CLOSE_PRICE: 收盤價
+    VOLUME: 成交量
+    NET_CHANGE: 單日漲跌幅
+    NET_CHANGE_RATE: 單日報酬率
+    """
+    MARKET_CODE = "MARKET_CODE"
+    PRICE_DATE = "PRICE_DATE"
+    OPEN_PRICE = "OPEN_PRICE"
+    HIGH_PRICE = "HIGH_PRICE"
+    LOW_PRICE = "LOW_PRICE"
+    CLOSE_PRICE = "CLOSE_PRICE"
+    VOLUME = "VOLUME"
+    NET_CHANGE = "NET_CHANGE"
+    NET_CHANGE_RATE = "NET_CHANGE_RATE"
+
+class PatternInfoField(Enum):
+    """現象基本資訊
+
+    Members
+    -------
+    PATTERN_ID: 現象ID
+    PATTERN_NAME: 現象名稱
+    PATTERN_DESC: 現象描述
+    MACRO_ID: 現象使用的 Macro ID
+    """
+    PATTERN_ID = "PATTERN_ID"
+    PATTERN_NAME = "PATTERN_NAME"
+    PATTERN_DESC = "PATTERN_DESC"
+    MACRO_ID = "MACRO_ID"
+
+class PatternParamField(Enum):
+    """現象參數基本資訊
+
+    Members
+    -------
+    PATTERN_ID: 現象ID
+    MACRO_ID: 現象所使用的 Macro ID
+    PARAM_CODE: 現象下的參數代碼
+    PARAM_VALUE: 現象下的參數設定值
+    """
+    PATTERN_ID = "PATTERN_ID"
+    MACRO_ID = "MACRO_ID"
+    PARAM_CODE = "PARAM_CODE"
+    PARAM_VALUE = "PARAM_VALUE"
+
+class MacroInfoField(Enum):
+    """Macro 基本資訊
+
+    Members
+    -------
+    MACRO_ID: Macro ID
+    MACRO_NAME: Macro 名稱
+    MACRO_DESC: Macro 描述
+    FUNC_CODE: Macro 所使用的 Function 代碼
+    """
+    MACRO_ID = "MACRO_ID"
+    MACRO_NAME = "MACRO_NAME"
+    MACRO_DESC = "MACRO_DESC"
+    FUNC_CODE = "FUNC_CODE"
+
+class MacroParamField(Enum):
+    """Macro 參數基本資訊
+
+    Members
+    -------
+    MACRO_ID: Macro ID
+    PARAM_CODE: Macro 參數代碼
+    PARAM_NAME: Macro 參數名稱
+    PARAM_DESC: Macro 參數描述
+    PARAM_DEFAULT: Macro 參數預設值
+    PARAM_TYPE: Macro 參數型態(str, int, float)
+    """
+    MACRO_ID = "MACRO_ID"
+    PARAM_CODE = "PARAM_CODE"
+    PARAM_NAME = "PARAM_NAME"
+    PARAM_DESC = "PARAM_DESC"
+    PARAM_DEFAULT = "PARAM_DEFAULT"
+    PARAM_TYPE = "PARAM_TYPE"
+
+class ModelInfoField(Enum):
+    """觀點基本資訊
+
+    Members
+    -------
+    MODEL_ID: 觀點ID
+    MODEL_NAME: 觀點名稱
+    MODEL_DESC: 觀點描述
+    SHARE_YN: 觀點是否分享
+    TRAIN_START_DT: 觀點訓練起始日
+    TRAIN_END_DT: 觀點訓練終止日
+    RETRAIN_CYCLE: 觀點重訓練區間(日)
+    """
+    MODEL_ID = "MODEL_ID"
+    MODEL_NAME = "MODEL_NAME"
+    MODEL_DESC = "MODEL_DESC"
+    SHARE_YN = "SHARE_YN"
+    TRAIN_START_DT = "TRAIN_START_DT"
+    TRAIN_END_DT = "TRAIN_END_DT"
+    RETRAIN_CYCLE = "RETRAIN_CYCLE"
+
+class ModelMarketMapField(Enum):
+    """觀點使用的市場資訊
+
+    Members
+    -------
+    MODEL_ID: 觀點ID
+    MARKET_CODE: 市場代碼
+    """
+    MODEL_ID = "MODEL_ID"
+    MARKET_CODE = "MARKET_CODE"
+
+class ModelPatternMapField(Enum):
+    """觀點使用的現象資訊
+
+    Members
+    -------
+    MODEL_ID: 觀點ID
+    PATTERN_ID: 現象代碼
+    """
+    MODEL_ID = "MODEL_ID"
+    PATTERN_ID = "PATTERN_ID"
+
+class ModelExecutionField(Enum):
+    """觀點執行狀態資訊
+
+    Members
+    -------
+    EXEC_ID: 執行ID
+    MODEL_ID: 觀點ID
+    STATUS_CODE: 執行狀態代碼
+    START_DT: 執行起始時間
+    END_DT: 執行結束時間
+    """
+    EXEC_ID = "EXEC_ID"
+    MODEL_ID = "MODEL_ID"
+    STATUS_CODE = "STATUS_CODE"
+    START_DT = "START_DT"
+    END_DT = "END_DT"

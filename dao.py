@@ -1,24 +1,25 @@
 import datetime
 import json
-import os
+import logging
 import numpy as np
+import os
 import pandas as pd
 import pickle
 import traceback
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
-
 from model import (ModelInfo, PatternInfo,
                 pickle_dump, pickle_load,
-                get_filed_name_of_future_return, set_model_execution_start)
-from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC,
-                   MarketDistField, ModelExecution, PredictResultField,
-                   PatternResultField, MarketPeriodField, MarketScoreField, 
-                   MarketInfoField, DSStockInfoField,
-                   MarketStatField, ModelExecution, ScoreMetaField, BatchType)
-import logging
-from utils import Cache
+                get_filed_name_of_future_return)
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, MarketOccurField, PatternResultField,
+                   TableName, MarketDistField, ModelExecution, PredictResultField,
+                   MarketPeriodField, MarketScoreField, MarketHistoryPriceField,
+                   MarketInfoField, DSStockInfoField, PatternInfoField,
+                   MarketStatField, ModelExecution, ScoreMetaField,
+                   PatternParamField, MacroInfoField, MacroParamField,
+                   ModelInfoField, ModelMarketMapField, ModelPatternMapField,
+                   ModelExecutionField, StoredProcedule)
 
 class MimosaDB:
     """
@@ -29,8 +30,12 @@ class MimosaDB:
     CREATE_BY='SYS_BATCH'
     MODIFY_BY='SYS_BATCH'
     READ_ONLY=False
+    WRITE_LOCAL=False
 
-    def __init__(self, db_name='mimosa', mode='dev', read_only=False):
+    def __init__(
+        self, db_name='mimosa', mode: str=ExecMode.DEV.value,
+        read_only: bool=False, write_local: bool=False
+    ):
         """
         根據傳入參數取得指定的資料庫設定
         """
@@ -43,9 +48,11 @@ class MimosaDB:
             return config
         self.config = init_config()
         self._local_db_lock = Lock()
-        self.pattern_cache = Cache(size=400000)
-        self.future_reture_cache = Cache(size=100000)
         self.READ_ONLY = read_only
+        self.WRITE_LOCAL = write_local
+        if self.WRITE_LOCAL:
+            if not os.path.exists(f'{DATA_LOC}/local_out'):
+                os.makedirs(f'{DATA_LOC}/local_out', exist_ok=True)
 
     def _engine(self):
       """
@@ -92,9 +99,9 @@ class MimosaDB:
         """
         table_name = ''
         if batch_type == BatchType.INIT_BATCH:
-            table_name = 'FCST_MKT_PRICE_HISTORY'
+            table_name = TableName.MKT_HISTORY_PRICE.value
         elif batch_type == BatchType.SERVICE_BATCH:
-            table_name = 'FCST_MKT_PRICE_HISTORY_SWAP'
+            table_name = f'{TableName.MKT_HISTORY_PRICE.value}_SWAP'
         else:
             raise Exception(f'_clone_market_data: Unknown batch type: {batch_type}')
         if not os.path.exists(f'{DATA_LOC}/markets'):
@@ -103,14 +110,24 @@ class MimosaDB:
             engine = self._engine()
             sql = f"""
                 SELECT
-                    MARKET_CODE, PRICE_DATE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE, CLOSE_PRICE
+                    {MarketHistoryPriceField.MARKET_CODE.value}, 
+                    {MarketHistoryPriceField.PRICE_DATE.value}, 
+                    {MarketHistoryPriceField.OPEN_PRICE.value}, 
+                    {MarketHistoryPriceField.HIGH_PRICE.value}, 
+                    {MarketHistoryPriceField.LOW_PRICE.value}, 
+                    {MarketHistoryPriceField.CLOSE_PRICE.value}
                 FROM
                     {table_name}
             """
             data = pd.read_sql_query(sql, engine)
             result = pd.DataFrame(
-                data[['MARKET_CODE', 'OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE', 'CLOSE_PRICE']].values,
-                index=data['PRICE_DATE'].values.astype('datetime64[D]'),
+                data[[
+                    MarketHistoryPriceField.MARKET_CODE.value, 
+                    MarketHistoryPriceField.OPEN_PRICE.value, 
+                    MarketHistoryPriceField.HIGH_PRICE.value, 
+                    MarketHistoryPriceField.LOW_PRICE.value, 
+                    MarketHistoryPriceField.CLOSE_PRICE.value]].values,
+                index=data[MarketHistoryPriceField.PRICE_DATE.value].values.astype('datetime64[D]'),
                 columns=['MARKET_CODE', 'OP', 'HP', 'LP', 'CP']
                 )
             market_groups = result.groupby('MARKET_CODE')
@@ -146,9 +163,9 @@ class MimosaDB:
         """
         table_name = ''
         if batch_type == BatchType.INIT_BATCH:
-            table_name = 'FCST_MKT'
+            table_name = TableName.MKT_INFO.value
         elif batch_type == BatchType.SERVICE_BATCH:
-            table_name = 'FCST_MKT_SWAP'
+            table_name = f'{TableName.MKT_INFO.value}_SWAP'
         else:
             raise Exception(f'_clone_mkt_info: Unknown batch type: {batch_type}')
         if not os.path.exists(f'{DATA_LOC}/market_info.pkl'):
@@ -191,9 +208,9 @@ class MimosaDB:
         """
         table_name = ''
         if batch_type == BatchType.INIT_BATCH:
-            table_name = 'DS_S_STOCK'
+            table_name = TableName.DS_S_STOCK.value
         elif batch_type == BatchType.SERVICE_BATCH:
-            table_name = 'DS_S_STOCK_SWAP'
+            table_name = f'{TableName.DS_S_STOCK.value}_SWAP'
         else:
             raise Exception(f'_clone_dsstock_info: Unknown batch type: {batch_type}')
         if not os.path.exists(f'{DATA_LOC}/ds_s_stock_info.pkl'):
@@ -235,56 +252,69 @@ class MimosaDB:
             engine = self._engine()
             sql = f"""
                 SELECT
-                    ptn.PATTERN_ID, mcr.FUNC_CODE, para.PARAM_CODE, para.PARAM_VALUE, mp.PARAM_TYPE
+                    ptn.{PatternInfoField.PATTERN_ID.value}, 
+                    mcr.{MacroInfoField.FUNC_CODE.value}, 
+                    para.{PatternParamField.PARAM_CODE.value}, 
+                    para.{PatternParamField.PARAM_VALUE.value}, 
+                    mp.{MacroParamField.PARAM_TYPE.value}
                 FROM
-                    FCST_PAT AS ptn
+                    {TableName.PAT_INFO.value} AS ptn
                 LEFT JOIN
                     (
                         SELECT
-                            PATTERN_ID, MACRO_ID, PARAM_CODE, PARAM_VALUE
+                            {PatternParamField.PATTERN_ID.value}, 
+                            {PatternParamField.MACRO_ID.value}, 
+                            {PatternParamField.PARAM_CODE.value}, 
+                            {PatternParamField.PARAM_VALUE.value}
                         FROM
-                            FCST_PAT_PARAM
+                            {TableName.PAT_PARAM.value}
                     ) AS para
-                ON ptn.PATTERN_ID=para.PATTERN_ID
+                ON ptn.{PatternInfoField.PATTERN_ID.value}=para.{PatternParamField.PATTERN_ID.value}
                 LEFT JOIN
                     (
                         SELECT
-                            MACRO_ID, FUNC_CODE
+                            {MacroInfoField.MACRO_ID.value}, 
+                            {MacroInfoField.FUNC_CODE.value}
                         FROM
-                            FCST_MACRO
+                            {TableName.MACRO_INFO.value}
                     ) AS mcr
-                ON ptn.MACRO_ID=mcr.MACRO_ID
+                ON ptn.{PatternInfoField.MACRO_ID.value}=mcr.{MacroInfoField.MACRO_ID.value}
                 LEFT JOIN
                     (
                         SELECT
-                            MACRO_ID, PARAM_CODE, PARAM_TYPE
+                            {MacroParamField.MACRO_ID.value}, 
+                            {MacroParamField.PARAM_CODE.value}, 
+                            {MacroParamField.PARAM_TYPE.value}
                         FROM
-                            FCST_MACRO_PARAM
+                            {TableName.MACRO_PARAM.value}
                     ) AS mp
-                ON ptn.MACRO_ID=mp.MACRO_ID AND para.PARAM_CODE=mp.PARAM_CODE
-                ORDER BY ptn.PATTERN_ID, mcr.FUNC_CODE ASC;
+                ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND 
+                para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
+                ORDER BY 
+                    ptn.{PatternInfoField.PATTERN_ID.value}, 
+                    mcr.{MacroInfoField.FUNC_CODE.value} ASC;
             """
             data = pd.read_sql_query(sql, engine)
             result = {}
             for i in range(len(data)):
                 record = data.iloc[i]
-                pid = record['PATTERN_ID']
+                pid = record[PatternInfoField.PATTERN_ID.value]
                 if pid in result:
                     continue
-                func = record['FUNC_CODE']
+                func = record[MacroInfoField.FUNC_CODE.value]
                 params = {}
-                ptn_record = data[data['PATTERN_ID'].values==pid]
+                ptn_record = data[data[PatternInfoField.PATTERN_ID.value].values==pid]
                 for j in range(len(ptn_record)):
                     param_record = ptn_record.iloc[j]
-                    param_type = param_record['PARAM_TYPE']
-                    param_val = param_record['PARAM_VALUE']
+                    param_type = param_record[MacroParamField.PARAM_TYPE.value]
+                    param_val = param_record[PatternParamField.PARAM_VALUE.value]
                     if param_type == "int":
-                        param_val = int(param_record['PARAM_VALUE'])
+                        param_val = int(param_record[PatternParamField.PARAM_VALUE.value])
                     elif param_type == "float":
-                        param_val = float(param_record['PARAM_VALUE'])
+                        param_val = float(param_record[PatternParamField.PARAM_VALUE.value])
                     elif param_type == "string":
-                        param_val = str(param_record['PARAM_VALUE'])
-                    params[param_record['PARAM_CODE']] = param_val
+                        param_val = str(param_record[PatternParamField.PARAM_VALUE.value])
+                    params[param_record[PatternParamField.PARAM_CODE.value]] = param_val
                 result[pid] = PatternInfo(pid, func, params)
             result = [result[pid] for pid in result]
             with open(f'{DATA_LOC}/patterns.pkl', 'wb') as fp:
@@ -315,22 +345,24 @@ class MimosaDB:
             engine = self._engine()
             sql = f"""
                 SELECT
-                    model.MODEL_ID
+                    model.{ModelInfoField.MODEL_ID.value}
                 FROM
-                    FCST_MODEL AS model
+                    {TableName.MODEL_INFO.value} AS model
                 INNER JOIN
                     (
                         SELECT
-                            MODEL_ID, STATUS_CODE, END_DT
+                            {ModelExecutionField.MODEL_ID.value}, 
+                            {ModelExecutionField.STATUS_CODE.value}, 
+                            {ModelExecutionField.END_DT.value}
                         FROM
-                            FCST_MODEL_EXECUTION
+                            {TableName.MODEL_EXECUTION.value}
                         WHERE
-                            STATUS_CODE='{ModelExecution.ADD_PREDICT_FINISHED}' AND
-                            END_DT IS NOT NULL
+                            {ModelExecutionField.STATUS_CODE.value}='{ModelExecution.ADD_PREDICT_FINISHED}' AND
+                            {ModelExecutionField.END_DT.value} IS NOT NULL
                     ) AS me
-                ON model.MODEL_ID=me.MODEL_ID
+                ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
             """
-            data = pd.read_sql_query(sql, engine)['MODEL_ID'].values.tolist()
+            data = pd.read_sql_query(sql, engine)[ModelInfoField.MODEL_ID.value].values.tolist()
             with open(f'{DATA_LOC}/models.pkl', 'wb') as fp:
                 pickle.dump(data, fp)
             logging.info('Clone models from db finished')
@@ -361,7 +393,7 @@ class MimosaDB:
                 SELECT
                     *
                 FROM
-                    FCST_MODEL
+                    {TableName.MODEL_INFO.value}
             """
             model_info = pd.read_sql_query(sql, engine)
             with open(f'{DATA_LOC}/model_training_infos.pkl', 'wb') as fp:
@@ -394,7 +426,7 @@ class MimosaDB:
                 SELECT
                     *
                 FROM
-                    FCST_MODEL_MKT_MAP
+                    {TableName.MODEL_MKT_MAP.value}
             """
             data = pd.read_sql_query(sql, engine)
             with open(f'{DATA_LOC}/model_markets.pkl', 'wb') as fp:
@@ -427,7 +459,7 @@ class MimosaDB:
                 SELECT
                     *
                 FROM
-                    FCST_MODEL_PAT_MAP
+                    {TableName.MODEL_PAT_MAP.value}
             """
             data = pd.read_sql_query(sql, engine)
             with open(f'{DATA_LOC}/model_patterns.pkl', 'wb') as fp:
@@ -460,7 +492,7 @@ class MimosaDB:
                 SELECT
                     *
                 FROM
-                    FCST_SCORE
+                    {TableName.SCORE_META.value}
             """
             data = pd.read_sql_query(sql, engine)
             with open(f'{DATA_LOC}/score_meta_info.pkl', 'wb') as fp:
@@ -530,19 +562,20 @@ class MimosaDB:
             data = pickle.load(fp)
         if market_type is None:
             return data[MarketInfoField.MARKET_CODE.value].values.tolist()
-        
+
         data = data[
             data[MarketInfoField.MARKET_SOURCE_TYPE.value].values == market_type]
         if category_code is None:
             return data[MarketInfoField.MARKET_CODE.value].values.tolist()
-        
+
         with open(f'{DATA_LOC}/ds_s_stock_info.pkl', 'rb') as fp:
             cate_data = pickle.load(fp)
         cate_data = cate_data[
             cate_data[DSStockInfoField.TSE_INDUSTRY_CODE.value].values == category_code]
-        data = data[MarketInfoField.MARKET_CODE.value].values.astype(str).tolist()
+        data = data[[MarketInfoField.MARKET_CODE.value,
+                     MarketInfoField.MARKET_SOURCE_CODE.value]].values.astype(str).tolist()
         cate_data = cate_data[DSStockInfoField.STOCK_CODE.value].values.astype(str).tolist()
-        data = [x for x in data if x in cate_data]
+        data = [x[0] for x in data if x[1] in cate_data]
         return data
 
     def get_patterns(self):
@@ -557,114 +590,6 @@ class MimosaDB:
         with open(f'{DATA_LOC}/patterns.pkl', 'rb') as fp:
             data = pickle.load(fp)
         return data
-
-    def _get_future_return_file(self, market_id: str) -> str:
-        return f'{LOCAL_DB}/freturns/{market_id}.pkl'
-
-    def save_future_return(self, market_id:str, data:pd.DataFrame):
-        """Save future return results to DB.
-
-        Parameters
-        ----------
-        market_id: str
-            Id of market.
-        data: Pandas's DataFrame
-            A panel of float which columns TF(d) for each predicting period as
-            d.
-
-        """
-        self.future_reture_cache[market_id] = data
-
-    def dump_future_returns(self):
-        """Dump future returns to DB. """
-        logging.info('Dump future returns to db')
-        for market_id in self.get_markets():
-            self._local_db_lock.acquire()
-            pickle_dump(self.future_reture_cache[market_id], self._get_future_return_file(market_id))
-            self._local_db_lock.release()
-        logging.info('Dump future returns finished')
-
-    def get_future_return(self, market_id:str, period: int, begin_date:datetime.date):
-        """Get future return results from begining date to the latest of given market from DB.
-
-        Parameters
-        ----------
-        market_id: str
-            ID of market.
-        period: int
-            Predicting period.
-        begin_date: datetime.date, optional
-            The begin date of the designated data range. If it is not set, get all
-            history results.
-
-        Returns
-        -------
-        Pandas's Series
-            A timeseries of float.
-
-        """
-        field = get_filed_name_of_future_return(period)
-        if market_id not in self.future_reture_cache:
-            self._local_db_lock.acquire()
-            self.future_reture_cache[market_id] = pickle_load(self._get_future_return_file(market_id))
-            self._local_db_lock.release()
-        ret = self.future_reture_cache[market_id][field]
-        if begin_date:
-            ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
-        return ret
-
-    def _get_pattern_file(self, market_id: str) -> str:
-        return f'{LOCAL_DB}/patterns/{market_id}.pkl'
-
-    def save_pattern_results(self, market_id:str, data:pd.DataFrame):
-        """Save pattern results to DB.
-
-        Parameters
-        ----------
-        market_id: str
-            Id of market.
-        data: Pandas's DataFrame
-            A panel of boolean which columns are the pattern IDs.
-
-        """
-        self.pattern_cache[market_id] = data
-
-    def dump_pattern_results(self):
-        """Dump pattern results to DB. """
-        logging.info('Dump pattern results to db')
-        for market_id in self.get_markets():
-            self._local_db_lock.acquire()
-            pickle_dump(self.pattern_cache[market_id], self._get_pattern_file(market_id))
-            self._local_db_lock.release()
-        logging.info('Dump pattern results finished')
-
-    def get_pattern_results(self, market_id:str, patterns: List[str], begin_date:datetime.date):
-        """Get pattern results from begining date to the latest of given market from DB.
-
-        Parameters
-        ----------
-        market_id: str
-            ID of market.
-        patterns: list of str
-            ID of patterns.
-        begin_date: datetime.date, optional
-            The begin date of the designated data range. If it is not set, get all
-            history results.
-
-        Returns
-        -------
-        Pandas's DataFrame
-            A panel of boolean with all id of patterns as columns.
-
-        """
-        if market_id not in self.pattern_cache:
-            self._local_db_lock.acquire()
-            self.pattern_cache[market_id] = pickle_load(self._get_pattern_file(market_id))
-            self._local_db_lock.release()
-        ret = self.pattern_cache[market_id][patterns]
-        if begin_date:
-            ret = ret[ret.index.values.astype('datetime64[D]') >= begin_date]
-        return ret
 
     def get_latest_dates(self, model_id:str):
         """get dates of the latest predict results of markets for given model.
@@ -684,18 +609,19 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                MARKET_CODE, MAX(DATA_DATE) AS DATA_DATE
+                {PredictResultField.MARKET_ID.value}, 
+                MAX({PredictResultField.DATE.value}) AS DATA_DATE
             FROM
-                FCST_MODEL_MKT_VALUE
+                {TableName.PREDICT_RESULT.value}
             WHERE
-                MODEL_ID='{model_id}'
+                {PredictResultField.MODEL_ID.value}='{model_id}'
             GROUP BY
-                MARKET_CODE
+                {PredictResultField.MARKET_ID.value}
         """
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
-            market_id = data.iloc[i]['MARKET_CODE']
+            market_id = data.iloc[i][{PredictResultField.MARKET_ID.value}]
             result[market_id] = datetime.datetime.strptime(
                 str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
         return result
@@ -718,18 +644,19 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                MARKET_CODE, MIN(DATA_DATE) AS DATA_DATE
+                {PredictResultField.MARKET_ID.value}, 
+                MIN({PredictResultField.DATE.value}) AS DATA_DATE
             FROM
-                FCST_MODEL_MKT_VALUE_HISTORY
+                {TableName.PREDICT_RESULT_HISTORY.value}
             WHERE
-                MODEL_ID='{model_id}'
+                {PredictResultField.MODEL_ID.value}='{model_id}'
             GROUP BY
-                MARKET_CODE
+                {PredictResultField.MARKET_ID.value}
         """
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
-            market_id = data.iloc[i]['MARKET_CODE']
+            market_id = data.iloc[i][{PredictResultField.MARKET_ID.value}]
             result[market_id] = datetime.datetime.strptime(
                 str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
         return result
@@ -771,27 +698,27 @@ class MimosaDB:
         # 取得觀點的訓練資訊
         with open(f'{DATA_LOC}/model_training_infos.pkl', 'rb') as fp:
             model_info = pickle.load(fp)
-        m_cond = model_info['MODEL_ID'].values == model_id
+        m_cond = model_info[ModelInfoField.MODEL_ID.value].values == model_id
         if len(model_info[m_cond]) == 0:
             # 若發生取不到資料的情況
             raise Exception(f"get_model_info: model not found: {model_id}")
-        train_begin = model_info[m_cond].iloc[0]['TRAIN_START_DT']
-        train_gap = model_info[m_cond].iloc[0]['RETRAIN_CYCLE']
+        train_begin = model_info[m_cond].iloc[0][ModelInfoField.TRAIN_START_DT.value]
+        train_gap = model_info[m_cond].iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
 
         # 取得觀點的所有標的市場
         with open(f'{DATA_LOC}/model_markets.pkl', 'rb') as fp:
             markets = pickle.load(fp)
-        m_cond = markets['MODEL_ID'].values == model_id
-        markets = markets[m_cond]['MARKET_CODE'].values.tolist()
+        m_cond = markets[ModelMarketMapField.MODEL_ID.value].values == model_id
+        markets = markets[m_cond][ModelMarketMapField.MARKET_CODE.value].values.tolist()
 
         # 取得觀點所有使用的現象 ID
         with open(f'{DATA_LOC}/model_patterns.pkl', 'rb') as fp:
             patterns = pickle.load(fp)
-        m_cond = patterns['MODEL_ID'].values == model_id
+        m_cond = patterns[ModelPatternMapField.MODEL_ID.value].values == model_id
         if len(patterns[m_cond]) == 0:
             # 若觀點下沒有任何現象, 則回傳例外
             raise Exception(f"get_model_info: 0 model pattern exception: {model_id}")
-        patterns = patterns[m_cond]['PATTERN_ID'].values.tolist()
+        patterns = patterns[m_cond][ModelPatternMapField.PATTERN_ID.value].values.tolist()
 
         result = ModelInfo(model_id, patterns, markets, train_begin, train_gap)
         return result
@@ -809,17 +736,17 @@ class MimosaDB:
         if not self.READ_ONLY:
             # DEL FCST_MODEL_MKT_VALUE
             sql = f"""
-                DELETE FROM FCST_MODEL_MKT_VALUE
+                DELETE FROM {TableName.PREDICT_RESULT.value}
                 WHERE
-                    MODEL_ID='{model_id}'
+                    {PredictResultField.MODEL_ID.value}='{model_id}'
             """
             engine.execute(sql)
 
             # DEL FCST_MODEL_MKT_VALUE_HISTORY
             sql = f"""
-                DELETE FROM FCST_MODEL_MKT_VALUE_HISTORY
+                DELETE FROM {TableName.PREDICT_RESULT_HISTORY.value}
                 WHERE
-                    MODEL_ID='{model_id}'
+                    {PredictResultField.MODEL_ID.value}='{model_id}'
             """
             engine.execute(sql)
 
@@ -848,16 +775,16 @@ class MimosaDB:
                 },
                 'process': {}
             }
+            latest_data = data
             logging.info('start saving model latest results')
-            table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
+            table_name = f'{TableName.PREDICT_RESULT.value}_SWAP'
             if exec_type == ModelExecution.ADD_PREDICT:
-                table_name = 'FCST_MODEL_MKT_VALUE'
+                table_name = TableName.PREDICT_RESULT.value
             elif exec_type == ModelExecution.BATCH_PREDICT:
-                table_name = 'FCST_MODEL_MKT_VALUE_SWAP'
+                table_name = f'{TableName.PREDICT_RESULT.value}_SWAP'
             else:
                 logging.error(f'Unknown execution type: {exec_type}')
                 return -1
-            engine = self._engine()
 
             # 製作儲存結構
             now = datetime.datetime.now()
@@ -889,20 +816,32 @@ class MimosaDB:
                 latest_data.append(
                     group[group[PredictResultField.DATE.value].values == max_date])
             latest_data = pd.concat(latest_data, axis=0)
-
-            # 新增最新預測結果
-            # 合併現有的資料預測結果與當前的預測結果
-            db_data = None
-            sql = f"""
-                SELECT
-                    CREATE_BY, CREATE_DT, MODEL_ID, MARKET_CODE,
-                    DATE_PERIOD, DATA_DATE, DATA_VALUE, UPPER_BOUND, LOWER_BOUND
-                FROM
-                    FCST_MODEL_MKT_VALUE
-                WHERE
-                    MODEL_ID='{model_id}'
-            """
-            db_data = pd.read_sql_query(sql, engine)
+            
+            db_data = pd.DataFrame(columns=latest_data.columns)
+            if self.WRITE_LOCAL and self.READ_ONLY:
+                if os.path.exists(f'{DATA_LOC}/local_out/{table_name}.pkl'):
+                    db_data = pickle_load(f'{DATA_LOC}/local_out/{table_name}.pkl')
+            elif not self.READ_ONLY:
+                engine = self._engine()
+                # 新增最新預測結果
+                # 合併現有的資料預測結果與當前的預測結果
+                db_data = None
+                sql = f"""
+                    SELECT
+                        CREATE_BY, CREATE_DT, 
+                        {PredictResultField.MODEL_ID.value}, 
+                        {PredictResultField.MARKET_ID.value},
+                        {PredictResultField.PERIOD.value}, 
+                        {PredictResultField.DATE.value}, 
+                        {PredictResultField.PREDICT_VALUE.value}, 
+                        {PredictResultField.UPPER_BOUND.value}, 
+                        {PredictResultField.LOWER_BOUND.value}
+                    FROM
+                        {TableName.PREDICT_RESULT.value}
+                    WHERE
+                        {PredictResultField.MODEL_ID.value}='{model_id}'
+                """
+                db_data = pd.read_sql_query(sql, engine)
             except_catch['process']['db_data'] = db_data.copy()
             db_data[PredictResultField.DATE.value] = db_data[PredictResultField.DATE.value].astype('datetime64[D]')
             union_data = pd.concat([db_data, latest_data], axis=0)
@@ -932,11 +871,16 @@ class MimosaDB:
             latest_data = pd.concat(latest_data, axis=0)
 
             # 開始儲存
-            if not self.READ_ONLY:
+            if self.WRITE_LOCAL and self.READ_ONLY:
+                if os.path.exists(f'{DATA_LOC}/local_out/{table_name}.pkl'):
+                    db_data = pickle_load(f'{DATA_LOC}/local_out/{table_name}.pkl')
+                    db_data = db_data[db_data['MODEL_ID'].values != model_id]
+                    pickle_dump(db_data, f'{DATA_LOC}/local_out/{table_name}.pkl')
+            elif not self.READ_ONLY:
                 sql = f"""
                     DELETE FROM {table_name}
                     WHERE
-                        MODEL_ID='{model_id}'
+                        {PredictResultField.MODEL_ID.value}='{model_id}'
                 """
                 engine.execute(sql)
 
@@ -948,6 +892,9 @@ class MimosaDB:
                     chunksize=10000,
                     method='multi',
                     index=False)
+
+            if self.WRITE_LOCAL:
+                pickle_dump(latest_data, f'{DATA_LOC}/local_out/{table_name}.pkl')
             logging.info('Saving model latest results finished')
         except Exception as e:
             logging.error('Save model latest results failed, save except data')
@@ -960,7 +907,7 @@ class MimosaDB:
             pickle_dump(except_catches, EXCPT_DATA_PATH)
             logging.error(traceback.format_exc())
             raise e
-    
+
     def update_model_accuracy(self):
         """ 呼叫 SP 計算當前各模型準確率
 
@@ -975,7 +922,7 @@ class MimosaDB:
         if not self.READ_ONLY:
             logging.info('start update FCST model accuracy')
             engine=  self._engine()
-            sql = f'CALL SP_UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP()'
+            sql = f'CALL {StoredProcedule.UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP.value}()'
             with engine.begin() as db_conn:
                 db_conn.execute(sql)
             logging.info('Update FCST model accuracy finished')
@@ -994,7 +941,7 @@ class MimosaDB:
         if not self.READ_ONLY:
             logging.info('start checkout FCST data')
             engine = self._engine()
-            sql = f"CALL SP_SWAP_FCST()"
+            sql = f"CALL {StoredProcedule.SWAP_FCST.value}()"
             with engine.begin() as db_conn:
                 db_conn.execute(sql)
             logging.info('Checkout FCST data finished')
@@ -1042,7 +989,7 @@ class MimosaDB:
         if not self.READ_ONLY:
             try:
                 data.to_sql(
-                    'FCST_MODEL_MKT_VALUE_HISTORY_SWAP',
+                    f'{TableName.PREDICT_RESULT_HISTORY.value}_SWAP',
                     engine,
                     if_exists='append',
                     chunksize=10000,
@@ -1051,7 +998,9 @@ class MimosaDB:
             except Exception as e:
                 logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
                 logging.debug(traceback.format_exc())
-            logging.info('Saving model results finished')
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MODEL_MKT_VALUE_HISTORY_SWAP.pkl')
+        logging.info('Saving model results finished')
 
     def get_market_data(self, market_id:str, begin_date:Optional[datetime.date]=None):
         """Get market data from the designated date to the latest from DB.
@@ -1109,14 +1058,15 @@ class MimosaDB:
                 ModelExecution.ADD_PREDICT.value,
                 ModelExecution.ADD_BACKTEST.value]:
                 sql = f"""
-                    DELETE FROM FCST_MODEL_EXECUTION
-                    WHERE MODEL_ID='{model_id}' AND STATUS_CODE='{exection}'
+                    DELETE FROM {TableName.MODEL_EXECUTION.value}
+                    WHERE {ModelExecutionField.MODEL_ID.value}='{model_id}' AND 
+                    {ModelExecutionField.STATUS_CODE.value}='{exection}'
                 """
                 engine.execute(sql)
 
             # 取得 EXEC_ID
-            logging.info('Call SP_GET_SERIAL_NO')
-            sql = f"CALL SP_GET_SERIAL_NO('EXEC_ID', @EXEC_ID)"
+            logging.info(f'Call {StoredProcedule.GET_SERIAL_NO.value}')
+            sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('EXEC_ID', @EXEC_ID)"
             with engine.begin() as db_conn:
                 db_conn.execute(sql)
                 results = db_conn.execute('SELECT @EXEC_ID').fetchone()
@@ -1125,8 +1075,12 @@ class MimosaDB:
 
             # 建立 status
             COLUMNS = [
-                'CREATE_BY', 'CREATE_DT', 'EXEC_ID',
-                'MODEL_ID', 'STATUS_CODE', 'START_DT', 'END_DT'
+                'CREATE_BY', 'CREATE_DT', 
+                ModelExecutionField.EXEC_ID.value,
+                ModelExecutionField.MODEL_ID.value, 
+                ModelExecutionField.STATUS_CODE.value, 
+                ModelExecutionField.START_DT.value, 
+                ModelExecutionField.END_DT.value
                 ]
             now = datetime.datetime.now()
             create_by = self.CREATE_BY
@@ -1138,7 +1092,7 @@ class MimosaDB:
                 model_id, exection, start_dt, end_dt]]
             data = pd.DataFrame(data, columns=COLUMNS)
             data.to_sql(
-                'FCST_MODEL_EXECUTION',
+                TableName.MODEL_EXECUTION.value,
                 engine,
                 if_exists='append',
                 chunksize=10000,
@@ -1170,13 +1124,13 @@ class MimosaDB:
 
         sql = f"""
             SELECT
-                STATUS_CODE
+                {ModelExecutionField.STATUS_CODE.value}
             FROM
-                FCST_MODEL_EXECUTION
+                {TableName.MODEL_EXECUTION.value}
             WHERE
-                EXEC_ID='{exec_id}';
+                {ModelExecutionField.EXEC_ID.value}='{exec_id}';
         """
-        exec_data = pd.read_sql_query(sql, engine)['STATUS_CODE']
+        exec_data = pd.read_sql_query(sql, engine)[ModelExecutionField.STATUS_CODE.value]
         if len(exec_data) == 0:
             raise Exception('call set_model_execution_complete before set_model_execution_start')
 
@@ -1184,11 +1138,14 @@ class MimosaDB:
         if not self.READ_ONLY:
             sql = f"""
             UPDATE
-                FCST_MODEL_EXECUTION
+                {TableName.MODEL_EXECUTION.value}
             SET
-                END_DT='{now}', MODIFY_DT='{now}', MODIFY_BY='{self.MODIFY_BY}', STATUS_CODE='{status}'
+                {ModelExecutionField.END_DT.value}='{now}',
+                MODIFY_DT='{now}', 
+                MODIFY_BY='{self.MODIFY_BY}',
+                {ModelExecutionField.STATUS_CODE.value}='{status}'
             WHERE
-                EXEC_ID='{exec_id}';
+                {ModelExecutionField.EXEC_ID.value}='{exec_id}';
             """
             engine.execute(sql)
 
@@ -1214,33 +1171,37 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                model.MODEL_ID, me.STATUS_CODE, me.END_DT
+                model.{ModelInfoField.MODEL_ID.value}, 
+                me.{ModelExecutionField.STATUS_CODE.value}, 
+                me.{ModelExecutionField.END_DT.value}
             FROM
-                FCST_MODEL AS model
+                {TableName.MODEL_INFO.value} AS model
             LEFT JOIN
                 (
                     SELECT
-                        MODEL_ID, STATUS_CODE, END_DT
+                        {ModelExecutionField.MODEL_ID.value}, 
+                        {ModelExecutionField.STATUS_CODE.value}, 
+                        {ModelExecutionField.END_DT.value}
                     FROM
-                        FCST_MODEL_EXECUTION
+                        {TableName.MODEL_EXECUTION.value}
                 ) AS me
-            ON model.MODEL_ID=me.MODEL_ID
+            ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
         """
         data = pd.read_sql_query(sql, engine)
-        group_data = data.groupby("MODEL_ID")
+        group_data = data.groupby(ModelInfoField.MODEL_ID.value)
         results = []
         for model_id, model_state_info in group_data:
             model_add_predict_info = model_state_info[
-                model_state_info['STATUS_CODE'].values==
+                model_state_info[ModelExecutionField.STATUS_CODE.value].values==
                 ModelExecution.ADD_PREDICT.value]
             model_add_predict_finished_info = model_state_info[
-                model_state_info['STATUS_CODE'].values==
+                model_state_info[ModelExecutionField.STATUS_CODE.value].values==
                 ModelExecution.ADD_PREDICT_FINISHED.value]
             model_add_backtest_info = model_state_info[
-                model_state_info['STATUS_CODE'].values==
+                model_state_info[ModelExecutionField.STATUS_CODE.value].values==
                 ModelExecution.ADD_BACKTEST.value]
             model_add_backtest_finished_info = model_state_info[
-                model_state_info['STATUS_CODE'].values==
+                model_state_info[ModelExecutionField.STATUS_CODE.value].values==
                 ModelExecution.ADD_BACKTEST_FINISHED.value]
             # ADD_PREDICT 未建立就掛掉
             if (len(model_add_predict_info) == 0) and (len(model_add_predict_finished_info) == 0):
@@ -1281,12 +1242,14 @@ class MimosaDB:
         logging.info(f'Save pattern event')
         if not self.READ_ONLY:
             data.to_sql(
-                'FCST_PAT_MKT_EVENT_SWAP',
+                f'{TableName.PATTERN_RESULT.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT_SWAP.pkl')
         logging.info(f'Save pattern event finished')
 
     def save_latest_pattern_distribution(self, data: pd.DataFrame):
@@ -1325,12 +1288,14 @@ class MimosaDB:
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
-                'FCST_PAT_MKT_DIST_SWAP',
+                f'{TableName.PAT_MKT_DIST.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST_SWAP.pkl')
         logging.info(f'Save pattern distribution finished')
 
     def save_latest_pattern_occur(self, data: pd.DataFrame):
@@ -1360,12 +1325,14 @@ class MimosaDB:
         if not self.READ_ONLY:
         # 新增最新資料
             data.to_sql(
-                'FCST_PAT_MKT_OCCUR_SWAP',
+                f'{TableName.PAT_MKT_OCCUR.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR_SWAP.pkl')
         logging.info(f'Save pattern occur finished')
 
     def save_mkt_score(self, data: pd.DataFrame):
@@ -1402,12 +1369,14 @@ class MimosaDB:
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
-                'FCST_MKT_SCORE_SWAP',
+                f'{TableName.MKT_SCORE.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_SCORE_SWAP.pkl')
         logging.info('Save market score finished')
 
     def _save_latest_mkt_period(self, data: pd.DataFrame):
@@ -1434,8 +1403,8 @@ class MimosaDB:
         data_net_change_rate = data[MarketPeriodField.NET_CHANGE_RATE.value].values * 100
 
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value, 
-            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value, 
+            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value,
+            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value,
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
         data[MarketPeriodField.PRICE_DATE.value] = data[MarketPeriodField.PRICE_DATE.value].astype('datetime64[D]')
@@ -1455,12 +1424,14 @@ class MimosaDB:
         if not self.READ_ONLY:
             # 新增最新資料
             latest_data.to_sql(
-                'FCST_MKT_PERIOD_SWAP',
+                f'{TableName.MKT_PERIOD.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(latest_data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.pkl')
         logging.info('Save market period finished')
 
     def save_mkt_period(self, data: pd.DataFrame):
@@ -1499,12 +1470,14 @@ class MimosaDB:
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
-                'FCST_MKT_PERIOD_HISTORY_SWAP',
+                f'{TableName.MKT_PERIOD_HISTORY.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_HISTORY_SWAP.pkl')
         logging.info('Save market period history finished')
 
     def save_mkt_dist(self, data: pd.DataFrame):
@@ -1532,7 +1505,7 @@ class MimosaDB:
         data_return_std = data[MarketStatField.RETURN_STD.value].values * 100
 
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketStatField.MARKET_ID.value, 
+            'CREATE_BY', 'CREATE_DT', MarketStatField.MARKET_ID.value,
             MarketStatField.DATE_PERIOD.value, MarketStatField.RETURN_CNT.value]]
         data[MarketStatField.RETURN_MEAN.value] = data_return_mean
         data[MarketStatField.RETURN_STD.value] = data_return_std
@@ -1541,12 +1514,14 @@ class MimosaDB:
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
-                'FCST_MKT_DIST_SWAP',
+                f'{TableName.MKT_DIST.value}_SWAP',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_DIST_SWAP.pkl')
         logging.info('Save market distribution finished')
 
     def get_score_meta_info(self):
@@ -1575,13 +1550,15 @@ class MimosaDB:
             result.append((score, upper_bound, lower_bound))
         return result
 
-    def update_latest_pattern_occur(self, data: pd.DataFrame):
+    def update_latest_pattern_occur(self, pattern_id: str, data: pd.DataFrame):
         """ 儲存新增的最新現象發生後次數統計
         儲存發生指定現象後, 指定市場, 指定天期下的發生與未發生總數,
         上漲總數, 持平總數與下跌總數
 
         Parameters
         ----------
+        pattern_id: `str`
+            要更新的現象 ID
         data: `pd.DataFrame`
             要儲存的資料
 
@@ -1598,19 +1575,34 @@ class MimosaDB:
         data['CREATE_BY'] = create_by
         data['CREATE_DT'] = create_dt
 
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl')
+                db_data = db_data[db_data['PATTERN_ID'].values != pattern_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl')
+        elif not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM {TableName.PAT_MKT_OCCUR.value}
+                WHERE
+                    {MarketOccurField.PATTERN_ID.value}='{pattern_id}'
+            """
+            engine.execute(sql)
+
         logging.info(f'Update pattern occur')
         if not self.READ_ONLY:
         # 新增最新資料
             data.to_sql(
-                'FCST_PAT_MKT_OCCUR',
+                f'{TableName.PAT_MKT_OCCUR.value}',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_OCCUR.pkl')
         logging.info(f'Update pattern occur finished')
-    
-    def update_latest_pattern_distribution(self, data: pd.DataFrame):
+
+    def update_latest_pattern_distribution(self, pattern_id: str, data: pd.DataFrame):
         """ 儲存新增的最新現象統計分布統計量
         儲存發生指定現象後, 指定市場, 指定天期下的報酬分布統計量
         這個方法在儲存均值和標準差時會將結果轉換為 % , 因此會做
@@ -1618,6 +1610,8 @@ class MimosaDB:
 
         Parameters
         ----------
+        pattern_id: `str`
+            要更新的現象 ID
         data: `pd.DataFrame`
             要儲存的資料
 
@@ -1642,23 +1636,40 @@ class MimosaDB:
         data[MarketDistField.RETURN_MEAN.value] = data_mean
         data[MarketDistField.RETURN_STD.value] = data_std
 
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl')
+                db_data = db_data[db_data['PATTERN_ID'].values != pattern_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl')
+        elif not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM {TableName.PAT_MKT_DIST.value}
+                WHERE
+                    {MarketDistField.PATTERN_ID.value}='{pattern_id}'
+            """
+            engine.execute(sql)
+
         logging.info(f'Update pattern distribution')
         if not self.READ_ONLY:
             # 新增最新資料
             data.to_sql(
-                'FCST_PAT_MKT_DIST',
+                f'{TableName.PAT_MKT_DIST.value}',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_DIST.pkl')
         logging.info(f'Update pattern distribution finished')
 
-    def update_latest_pattern_results(self, data: pd.DataFrame):
+    def update_latest_pattern_results(self, pattern_id: str, data: pd.DataFrame):
         """儲存新增的最新現象當前發生資訊至資料表
 
         Parameters
         ----------
+        pattern_id: `str`
+            要更新的現象 ID
         data: Pandas's DataFrame
             A table of pattern results with columns for market_id, pattern_id,
             price_date and value.
@@ -1676,15 +1687,30 @@ class MimosaDB:
         data['CREATE_BY'] = self.CREATE_BY
         data['CREATE_DT'] = create_dt
 
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl')
+                db_data = db_data[db_data['PATTERN_ID'].values != pattern_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl')
+        elif not self.READ_ONLY:
+            sql = f"""
+                DELETE FROM {TableName.PATTERN_RESULT.value}
+                WHERE
+                    {PatternResultField.PATTERN_ID.value}='{pattern_id}'
+            """
+            engine.execute(sql)
+
         logging.info(f'Update pattern event')
         if not self.READ_ONLY:
             data.to_sql(
-                'FCST_PAT_MKT_EVENT',
+                f'{TableName.PATTERN_RESULT.value}',
                 engine,
                 if_exists='append',
                 chunksize=10000,
                 method='multi',
                 index=False)
+        if self.WRITE_LOCAL:
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT.pkl')
         logging.info(f'Update pattern event end')
 
     def get_pattern_info(self, pattern_id: str) -> PatternInfo:
@@ -1704,59 +1730,91 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                ptn.PATTERN_ID, mcr.FUNC_CODE, para.PARAM_CODE, para.PARAM_VALUE, mp.PARAM_TYPE
+                ptn.{PatternInfoField.PATTERN_ID.value}, 
+                mcr.{MacroInfoField.FUNC_CODE.value}, 
+                para.{PatternParamField.PARAM_CODE.value}, 
+                para.{PatternParamField.PARAM_VALUE.value}, 
+                mp.{MacroParamField.PARAM_TYPE.value}
             FROM
-                FCST_PAT AS ptn
+                {TableName.PAT_INFO.value} AS ptn
             LEFT JOIN
                 (
                     SELECT
-                        PATTERN_ID, MACRO_ID, PARAM_CODE, PARAM_VALUE
+                        {PatternParamField.PATTERN_ID.value}, 
+                        {PatternParamField.MACRO_ID.value}, 
+                        {PatternParamField.PARAM_CODE.value}, 
+                        {PatternParamField.PARAM_VALUE.value}
                     FROM
-                        FCST_PAT_PARAM
+                        {TableName.PAT_PARAM.value}
                 ) AS para
-            ON ptn.PATTERN_ID=para.PATTERN_ID
+            ON ptn.{PatternInfoField.PATTERN_ID.value}=para.{PatternParamField.PATTERN_ID.value}
             LEFT JOIN
                 (
                     SELECT
-                        MACRO_ID, FUNC_CODE
+                        {MacroInfoField.MACRO_ID.value}, 
+                        {MacroInfoField.FUNC_CODE.value}
                     FROM
-                        FCST_MACRO
+                        {TableName.MACRO_INFO.value}
                 ) AS mcr
-            ON ptn.MACRO_ID=mcr.MACRO_ID
+            ON ptn.{PatternInfoField.MACRO_ID.value}=mcr.{MacroInfoField.MACRO_ID.value}
             LEFT JOIN
                 (
                     SELECT
-                        MACRO_ID, PARAM_CODE, PARAM_TYPE
+                        {MacroParamField.MACRO_ID.value}, 
+                        {MacroParamField.PARAM_CODE.value}, 
+                        {MacroParamField.PARAM_TYPE.value}
                     FROM
-                        FCST_MACRO_PARAM
+                        {TableName.MACRO_PARAM.value}
                 ) AS mp
-            ON ptn.MACRO_ID=mp.MACRO_ID AND para.PARAM_CODE=mp.PARAM_CODE
-            ORDER BY ptn.PATTERN_ID, mcr.FUNC_CODE ASC;
+            ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND 
+            para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
+            ORDER BY 
+                ptn.{PatternInfoField.PATTERN_ID.value}, 
+                mcr.{MacroInfoField.FUNC_CODE.value} ASC;
         """
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
             record = data.iloc[i]
-            pid = record['PATTERN_ID']
+            pid = record[PatternInfoField.PATTERN_ID.value]
             if pid in result:
                 continue
-            func = record['FUNC_CODE']
+            func = record[MacroInfoField.FUNC_CODE.value]
             params = {}
-            ptn_record = data[data['PATTERN_ID'].values==pid]
+            ptn_record = data[data[PatternInfoField.PATTERN_ID.value].values==pid]
             for j in range(len(ptn_record)):
                 param_record = ptn_record.iloc[j]
-                param_type = param_record['PARAM_TYPE']
-                param_val = param_record['PARAM_VALUE']
+                param_type = param_record[MacroParamField.PARAM_TYPE.value]
+                param_val = param_record[PatternParamField.PARAM_VALUE.value]
                 if param_type == "int":
-                    param_val = int(param_record['PARAM_VALUE'])
+                    param_val = int(param_record[PatternParamField.PARAM_VALUE.value])
                 elif param_type == "float":
-                    param_val = float(param_record['PARAM_VALUE'])
+                    param_val = float(param_record[PatternParamField.PARAM_VALUE.value])
                 elif param_type == "string":
-                    param_val = str(param_record['PARAM_VALUE'])
-                params[param_record['PARAM_CODE']] = param_val
+                    param_val = str(param_record[PatternParamField.PARAM_VALUE.value])
+                params[param_record[PatternParamField.PARAM_CODE.value]] = param_val
             result[pid] = PatternInfo(pid, func, params)
         if pattern_id not in result:
             raise Exception(f'get_pattern_info: pattern info not found in db: {pattern_id}')
         result = result[pattern_id]
         logging.info(f'Get pattern info {pattern_id} from db finished')
         return result
+
+    def truncate_swap_tables(self):
+        """ 清除資料庫中執行批次時需要為空的 SWAP 表
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        if not self.READ_ONLY:
+            logging.info('Start truncate swap tables')
+            engine = self._engine()
+            sql = f"CALL {StoredProcedule.TRUNCATE_AI_SWAP.value}()"
+            with engine.begin() as db_conn:
+                db_conn.execute(sql)
+            logging.info('Start truncate swap tables finished')
