@@ -2133,7 +2133,7 @@ def get_pattern_occur(market_id: str, pattern_id):
 
 def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     def func(vs):
-        cnts, occurs = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs]).sum(axis=0)
+        cnts, occurs = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs]).sum(axis=0).tolist()
         return occurs, cnts - occurs
     if smd.isempty():
         return 0, 0
@@ -2148,10 +2148,13 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     return func(values)
 
+def get_pattern_occur_cnt(pattern_id, market_type=None, category_code=None):
+    return get_mix_pattern_occur_cnt([pattern_id], market_type, category_code)
+
 def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=None):
     def func(v, r):
         ret = r[(v==1).all(axis=1) & (r==r)]
-        return len(ret), (ret>0).sum()
+        return len(ret), (ret>0).sum().tolist()
 
     if smd.isempty():
         return 0
@@ -2169,6 +2172,9 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     stats = np.array([func(v, r) for v, r in zip(values, returns)])
     cnts, ups = stats.sum(axis=0)
     return ups / cnts
+
+def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=None):
+    return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
 
 def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
     def func(v, r):
@@ -2190,6 +2196,9 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(v, r) for v, r in zip(values, returns)])
     return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
+
+def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_code=None):
+    return get_mix_pattern_mkt_dist_info([pattern_id], period, market_type, category_code)
 
 def add_pattern(pid):
     smd_lock.acquire()
