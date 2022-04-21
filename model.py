@@ -113,15 +113,16 @@ class SMD:
     @classmethod
     def load(cls):
         ret = cls()
-        if os.path.exists(cls.LOCAL_FILE):
-            smd_lock.acquire()
-            recv = pickle_load(f'{LOCAL_DB}/smd_{smd_idx}.pkl')
-            smd_lock.release()
+        smd_lock.acquire()
+        file = f'{LOCAL_DB}/smd_{smd_idx}.pkl'
+        if os.path.exists(file):
+            recv = pickle_load(file)
             ret._mids = recv['mids']
             ret._pids = recv['pids']
             ret._mdates = recv['mdates']
             ret._pvalues = recv['pvalues']
             ret._freturns = recv['freturns']
+        smd_lock.release()
         return ret
 
     @property
