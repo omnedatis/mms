@@ -1568,7 +1568,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController, batch_type:Ba
                     if not controller.isactive:
                         logging.info('model backtest terminated')
                         return
-                    result = _model_predict(model, mid, tdate, period, cur_x)
+                    result = _model_predict(model, mid, tdate, period, cur_x, batch_type=batch_type)
                     if result is not None:
                         result_buffer.append(result)
                 # 將該市場此輪的回測資料自回測資料中移除

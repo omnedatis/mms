@@ -31,6 +31,7 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
  get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
+ get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt,
  add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT
 from dao import MimosaDB
@@ -85,25 +86,6 @@ def api_remove_model():
     t.start()
     return {"status":202, "message":"accepted", "data":None}
 
-@app.route("/pattern/dates", methods=["POST"])
-def api_get_pattern():
-    try:
-        logging.info(f"api_get_pattern receiving: {request.data}")
-        data = json.loads(request.data)
-        pattern_id = data['patternId']
-        market_id = data['marketId']
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status":400,
-                "message":"Invalid request argument",
-                "data":None}
-    try:
-        ret = get_pattern_occur(market_id, pattern_id)
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status":200, "message":"OK", "data":ret}
-
 @app.route("/pattern/compound/dates", methods=["POST"])
 def api_get_compound_pattern():
     try:
@@ -121,12 +103,31 @@ def api_get_compound_pattern():
     except Exception as esp:
         logging.error(traceback.format_exc())
         raise Exception
-    return {"status":200, "message":"OK", "data":ret}
+    return {"status":200, "message":"OK", "data":{"occurDates":ret}}
+
+@app.route("/pattern/dates", methods=["POST"])
+def api_get_pattern():
+    try:
+        logging.info(f"api_get_pattern receiving: {request.data}")
+        data = json.loads(request.data)
+        pattern_id = data['patternId']
+        market_id = data['marketId']
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        return {"status":400,
+                "message":"Invalid request argument",
+                "data":None}
+    try:
+        ret = get_pattern_occur(market_id, pattern_id)
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        raise Exception
+    return {"status":200, "message":"OK", "data":{"occurDates":ret}}
 
 @app.route("/pattern/compound/count", methods=["POST"])
-def api_get_pattern_count():
+def api_get_compound_pattern_count():
     try:
-        logging.info(f"api_get_pattern_count receiving: {request.data}")
+        logging.info(f"api_get_compound_pattern_count receiving: {request.data}")
         data = json.loads(request.data)
         patterns = data['patterns']
         market_type = data.get('marketType')
@@ -137,18 +138,38 @@ def api_get_pattern_count():
                 "message":"Invalid request argument",
                 "data":None}
     try:
-        logging.info(f'{patterns}, {market_type}, {category_code}')
         occur, non_occur = get_mix_pattern_occur_cnt(patterns, market_type, category_code)
 
     except Exception as esp:
         logging.error(traceback.format_exc())
         raise Exception
-    return {"status":200, "message":"OK", "data":[int(occur), int(non_occur)]}
+    return {"status":200, "message":"OK", "data":{"occurCnt":int(occur), "nonOccurCnt":int(non_occur)}}
+
+@app.route("/pattern/count", methods=["POST"])
+def api_get_pattern_count():
+    try:
+        logging.info(f"api_get_pattern_count receiving: {request.data}")
+        data = json.loads(request.data)
+        pattern_id = data['patternId']
+        market_type = data.get('marketType')
+        category_code = data.get('categoryCode')
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        return {"status":400,
+                "message":"Invalid request argument",
+                "data":None}
+    try:
+        occur, non_occur = get_pattern_occur_cnt(pattern_id, market_type, category_code)
+
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        raise Exception
+    return {"status":200, "message":"OK", "data":{"occurCnt":int(occur), "nonOccurCnt":int(non_occur)}}
 
 @app.route("/pattern/compound/upprob", methods=["POST"])
-def api_get_pattern_upprob():
+def api_get_compound_pattern_upprob():
     try:
-        logging.info(f"api_get_pattern_upprob receiving: {request.data}")
+        logging.info(f"api_get_compound_pattern_upprob receiving: {request.data}")
         data =  json.loads(request.data)
         patterns = data['patterns']
         date_period = data['datePeriod']
@@ -164,12 +185,33 @@ def api_get_pattern_upprob():
     except Exception as esp:
         logging.error(traceback.format_exc())
         raise Exception
-    return {"status":200, "message":"OK", "data":float(ret)}
+    return {"status":200, "message":"OK", "data":{"positiveWeight":float(ret)}}
+
+@app.route("/pattern/upprob", methods=["POST"])
+def api_get_pattern_upprob():
+    try:
+        logging.info(f"api_get_pattern_upprob receiving: {request.data}")
+        data =  json.loads(request.data)
+        pattern_id = data['patternId']
+        date_period = data['datePeriod']
+        market_type = data.get('marketType')
+        category_code = data.get('categoryCode')
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        return {"status":400,
+                "message":"Invalid request argument",
+                "data":None}
+    try:
+        ret = get_pattern_rise_prob(pattern_id, date_period, market_type, category_code)
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        raise Exception
+    return {"status":200, "message":"OK", "data":{"positiveWeight":float(ret)}}
 
 @app.route("/pattern/compound/distribution", methods=["POST"])
-def api_get_pattern_distribution():
+def api_get_compound_pattern_distribution():
     try:
-        logging.info(f"api_get_pattern_distribution receiving: {request.data}")
+        logging.info(f"api_get_compound_pattern_distribution receiving: {request.data}")
         data =  json.loads(request.data)
         patterns = data['patterns']
         date_period = data['datePeriod']
@@ -182,7 +224,29 @@ def api_get_pattern_distribution():
                 "data":None}
     try:
         ret = get_mix_pattern_mkt_dist_info(patterns, date_period, market_type, category_code)
-        ret = [[key, float(mean), float(std), int(counts)] for key, (mean, std, counts) in ret.items()]
+        ret = [{"marketCode":key, "returnMean":float(mean), "returnStd":float(std), "samples":int(counts)} for key, (mean, std, counts) in ret.items()]
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        raise Exception
+    return {"status":200, "message":"OK", "data":ret}
+
+@app.route("/pattern/distribution", methods=["POST"])
+def api_get_pattern_distribution():
+    try:
+        logging.info(f"api_get_pattern_distribution receiving: {request.data}")
+        data =  json.loads(request.data)
+        pattern_id = data['patternId']
+        date_period = data['datePeriod']
+        market_type = data.get('marketType')
+        category_code = data.get('categoryCode')
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        return {"status":400,
+                "message":"Invalid request argument",
+                "data":None}
+    try:
+        ret = get_pattern_mkt_dist_info(pattern_id, date_period, market_type, category_code)
+        ret = [{"marketCode":key, "returnMean":float(mean), "returnStd":float(std), "samples":int(counts)} for key, (mean, std, counts) in ret.items()]
     except Exception as esp:
         logging.error(traceback.format_exc())
         raise Exception
