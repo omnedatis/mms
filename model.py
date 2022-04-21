@@ -317,7 +317,7 @@ def get_pattern_results(market_id, patterns, begin_date=None, batch_type:BatchTy
     dates = mdates[midx]
     if patterns:
         columns = patterns
-        pidxs = [pids[pid] for pid in pids]
+        pidxs = [pids[pid] for pid in patterns]
         values = values[:, pidxs]
     else:
         columns = list(pids.keys())
