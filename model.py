@@ -2201,6 +2201,9 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(v, r) for v, r in zip(values, returns)])
+    drops = ~np.isnan(stats).any(axis=1)
+    markets = np.array(markets)[drops].tolist()
+    stats = stats[drops]
     return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
 
 def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_code=None):
