@@ -2075,7 +2075,10 @@ def _batch(batch_type):
             clean_db_cache()
             clone_db_cache(batch_type)
             logging.info("Start pattern update")
-            ts = pattern_update(controller, batch_type) or []
+            if batch_type == BatchType.INIT_BATCH and not smd.isempty():
+                ts = []
+            else:
+                ts = pattern_update(controller, batch_type) or []
             logging.info("End pattern update")
             if controller.isactive and (batch_type == BatchType.INIT_BATCH):
                 swap_smd_index()
