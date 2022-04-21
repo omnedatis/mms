@@ -621,7 +621,7 @@ class MimosaDB:
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
-            market_id = data.iloc[i][{PredictResultField.MARKET_ID.value}]
+            market_id = data.iloc[i][PredictResultField.MARKET_ID.value]
             result[market_id] = datetime.datetime.strptime(
                 str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
         return result
@@ -656,7 +656,7 @@ class MimosaDB:
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
-            market_id = data.iloc[i][{PredictResultField.MARKET_ID.value}]
+            market_id = data.iloc[i][PredictResultField.MARKET_ID.value]
             result[market_id] = datetime.datetime.strptime(
                 str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
         return result
