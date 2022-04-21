@@ -1186,7 +1186,7 @@ class MimosaDB:
             UPDATE
                 FCST_MODEL_EXECUTION
             SET
-                END_DT='{now}', MODIFY_DT='{now}', STATUS_CODE='{status}'
+                END_DT='{now}', MODIFY_DT='{now}', MODIFY_BY='{self.MODIFY_BY}', STATUS_CODE='{status}'
             WHERE
                 EXEC_ID='{exec_id}';
             """
