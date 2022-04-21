@@ -2115,6 +2115,8 @@ def _batch(batch_type):
 
 
 def get_mix_pattern_occur(market_id: str, patterns: List):
+    if smd.isempty():
+        return []
     smd_lock.acquire()
     mids, pids, mdates, pvalues, _ = smd.raw_data
     smd_lock.release()
@@ -2133,6 +2135,8 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     def func(vs):
         cnts, occurs = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs]).sum(axis=0)
         return occurs, cnts - occurs
+    if smd.isempty():
+        return 0, 0
 
     smd_lock.acquire()
     mids, pids, mdates, pvalues, _ = smd.raw_data
@@ -2148,6 +2152,9 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     def func(v, r):
         ret = r[(v==1).all(axis=1) & (r==r)]
         return len(ret), (ret>0).sum()
+
+    if smd.isempty():
+        return 0
 
     smd_lock.acquire()
     mids, pids, _, pvalues, freturns = smd.raw_data
@@ -2167,6 +2174,9 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     def func(v, r):
         ret = r[(v==1).all(axis=1) & (r==r)]
         return ret.mean(), ret.std(), len(ret)
+
+    if smd.isempty():
+        return {}
 
     smd_lock.acquire()
     mids, pids, _, pvalues, freturns = smd.raw_data
