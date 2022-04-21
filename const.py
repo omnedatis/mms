@@ -105,10 +105,12 @@ class StoredProcedule(Enum):
     
     Membors
     -------
+    TRUNCATE_AI_SWAP: 清空計算時所需要為空的資料表的 SP
     GET_SERIAL_NO: 取得觀點執行代碼的 SP
     UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP: 統計觀點準確率的 SP
     SWAP_FCST: 將 SWAP 切換至正式資料表的SP
     """
+    TRUNCATE_AI_SWAP = "SP_TRUNCATE_AI_SWAP"
     GET_SERIAL_NO = "SP_GET_SERIAL_NO"
     UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP = "SP_UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP"
     SWAP_FCST = "SP_SWAP_FCST"

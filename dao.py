@@ -1799,3 +1799,22 @@ class MimosaDB:
         result = result[pattern_id]
         logging.info(f'Get pattern info {pattern_id} from db finished')
         return result
+
+    def truncate_swap_tables(self):
+        """ 清除資料庫中執行批次時需要為空的 SWAP 表
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        if not self.READ_ONLY:
+            logging.info('Start truncate swap tables')
+            engine = self._engine()
+            sql = f"CALL {StoredProcedule.TRUNCATE_AI_SWAP.value}()"
+            with engine.begin() as db_conn:
+                db_conn.execute(sql)
+            logging.info('Start truncate swap tables finished')
