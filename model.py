@@ -2080,15 +2080,15 @@ def _batch(batch_type):
                 ts = []
             else:
                 ts = pattern_update(controller, batch_type) or []
+                if controller.isactive:
+                    swap_smd_index()
+                    swap_smd()
             logging.info("End pattern update")
             if controller.isactive and (batch_type == BatchType.INIT_BATCH):
-                swap_smd_index()
-                swap_smd()
                 logging.info('Start model execution recover')
                 model_execution_recover(batch_type)
                 logging.info('End model execution recover')
             if batch_type == BatchType.SERVICE_BATCH:
-
                 logging.info("Start model update")
                 for model in get_models():
                     t = model_update(model, controller, batch_type)
