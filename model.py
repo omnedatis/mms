@@ -2177,7 +2177,7 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(v, r) for v, r in zip(values, returns)])
     cnts, ups = stats.sum(axis=0)
-    return ups / cnts
+    return ups / cnts * 100
 
 def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
@@ -2185,7 +2185,7 @@ def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=No
 def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
     def func(v, r):
         ret = r[(v==1).all(axis=1) & (r==r)]
-        return ret.mean(), ret.std(), len(ret)
+        return ret.mean() * 100, ret.std() * 100, len(ret)
 
     if smd.isempty():
         return {}
@@ -2250,3 +2250,23 @@ def add_pattern(pid):
     else:
         smd.update(pids=pids, pvalues=pvalues)
     smd_lock.release()
+
+def get_market_rise_prob(period, market_type=None, category_code=None):
+    def func(r):
+        ret = r[(r==r)]
+        return len(ret), (ret>0).sum().tolist()
+
+    if smd.isempty():
+        return 0
+
+    smd_lock.acquire()
+    mids, pids, _, pvalues, freturns = smd.raw_data
+    smd_lock.release()
+
+    markets = get_markets(market_type, category_code)
+    pidx = PREDICT_PERIODS.index(period)
+    midxs = [mids[mid] for mid in markets]
+    returns = [freturns[idx][:,pidx] for idx in midxs]
+    stats = np.array([func(r) for r in returns])
+    cnts, ups = stats.sum(axis=0)
+    return (ups / cnts) * 100
