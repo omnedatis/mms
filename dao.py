@@ -1142,6 +1142,7 @@ class MimosaDB:
             SET
                 {ModelExecutionField.END_DT.value}='{now}',
                 MODIFY_DT='{now}', 
+                MODIFY_BY='{self.MODIFY_BY}',
                 {ModelExecutionField.STATUS_CODE.value}='{status}'
             WHERE
                 {ModelExecutionField.EXEC_ID.value}='{exec_id}';
