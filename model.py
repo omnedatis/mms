@@ -216,6 +216,10 @@ def get_markets(market_type=None, category_code=None):
     result = db.get_markets(market_type, category_code)
     return result
 
+def truncate_swap_tables():
+    db = get_db()
+    db.truncate_swap_tables()
+
 def get_pattern_info(pid) -> PatternInfo:
     """get patterns from DB.
 
@@ -2076,6 +2080,8 @@ def _batch(batch_type):
             clean_db_cache()
             clone_db_cache(batch_type)
             logging.info("Start pattern update")
+            if batch_type == BatchType.SERVICE_BATCH:
+                truncate_swap_tables()
             if batch_type == BatchType.INIT_BATCH and not smd.isempty():
                 ts = []
             else:
