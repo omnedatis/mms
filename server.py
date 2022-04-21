@@ -236,7 +236,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=level, format=fmt, handlers=[stream_hdlr, file_hdlr, sys_hdlr])
         model_queue.start()
         pattern_queue.start()
-        set_db(MimosaDB(mode=ExecMode.get(mode), read_only=True, write_local=True))
+        set_db(MimosaDB(mode=ExecMode.get(mode)))
         set_market_data_provider(MarketDataFromDb())
 
     except Exception as esp:
