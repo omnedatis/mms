@@ -129,6 +129,9 @@ class SMD:
         # Without copy, be careful!!
         return self._mids, self._pids, self._mdates, self._pvalues, self._freturns
 
+    def isempty(self):
+        return len(self._mids) == 0
+
 db = None
 
 batch_lock = Lock()
