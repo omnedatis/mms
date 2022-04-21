@@ -24,8 +24,18 @@ import logging
 from logging import handlers
 from func._td import MD_CACHE
 
+smd_lock = Lock()
+SMD_IDX_FILE = f'{LOCAL_DB}/smd_idx.pkl'
+smd_idx = pickle_load(SMD_IDX_FILE) if os.path.exists(SMD_IDX_FILE) else 1
+
+def swap_smd_index():
+    global smd_idx
+    smd_lock.acquire()
+    smd_idx = (smd_idx + 1) % 2
+    pickle_dump(smd_idx, SMD_IDX_FILE)
+    smd_lock.release()
+
 class SMD:
-    LOCAL_FILE = f'{LOCAL_DB}/smd.pkl'
     def __init__(self, mids: List[str]=[], pids: List[str]=[], mdates: List[np.ndarray]=[],
                        pvalues: List[np.ndarray]=[], freturns: List[np.ndarray]=[]):
         self._mids = {mid: idx for idx, mid in enumerate(mids)}
@@ -93,15 +103,20 @@ class SMD:
             self._freturns = freturns
 
     def dump(self):
+        smd_lock.acquire()
+        idx = (smd_idx + 1) % 2
         pickle_dump({'mids': self._mids, 'pids': self._pids,
                      'mdates': self._mdates, 'pvalues': self._pvalues,
-                     'freturns': self._freturns}, self.LOCAL_FILE)
+                     'freturns': self._freturns}, f'{LOCAL_DB}/smd_{idx}.pkl')
+        smd_lock.release()
 
     @classmethod
     def load(cls):
         ret = cls()
         if os.path.exists(cls.LOCAL_FILE):
-            recv = pickle_load(cls.LOCAL_FILE)
+            smd_lock.acquire()
+            recv = pickle_load(f'{LOCAL_DB}/smd_{smd_idx}.pkl')
+            smd_lock.release()
             ret._mids = recv['mids']
             ret._pids = recv['pids']
             ret._mdates = recv['mdates']
@@ -119,7 +134,7 @@ db = None
 batch_lock = Lock()
 smd = SMD.load()
 smd_swap = SMD()
-smd_lock = Lock()
+
 
 def get_db():
     return db
@@ -132,8 +147,8 @@ def set_db(_db):
 def swap_smd():
     smd_lock.acquire()
     smd.copy_from(smd_swap)
-    smd_lock.release()
     smd_swap.clear()
+    smd_lock.release()
 
 class PatternInfo(NamedTuple):
     """Pattern Info.
@@ -1586,7 +1601,7 @@ class CatchableTread:
             self.esp = traceback.format_exc()
 
     def join(self):
-        self._thread.join() 
+        self._thread.join()
 class ExecQueue:
 
     def __init__(self, limit, name):
@@ -1600,7 +1615,7 @@ class ExecQueue:
 
     def _run(self):
         while self.isactive:
-            # logging.debug(self._occupants) 
+            # logging.debug(self._occupants)
             if self._queue:
                 func, args, size = self._pop(0)
                 self._occupants += size
@@ -1621,7 +1636,7 @@ class ExecQueue:
                     self.cut_line(func, args=args, size=size)
                     self._occupants -= size
             time.sleep(1)
-    
+
     def start(self):
         self._thread.start()
 
@@ -2060,12 +2075,13 @@ def _batch(batch_type):
             ts = pattern_update(controller, batch_type) or []
             logging.info("End pattern update")
             if controller.isactive and (batch_type == BatchType.INIT_BATCH):
+                swap_smd_index()
                 swap_smd()
                 logging.info('Start model execution recover')
                 model_execution_recover(batch_type)
                 logging.info('End model execution recover')
             if batch_type == BatchType.SERVICE_BATCH:
-                
+
                 logging.info("Start model update")
                 for model in get_models():
                     t = model_update(model, controller, batch_type)
@@ -2079,8 +2095,9 @@ def _batch(batch_type):
                 if controller.isactive:
                     update_model_accuracy()
                     checkout_fcst_data()
+                    swap_smd_index()
                     swap_smd()
-   
+
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info(f"End batch")
 
