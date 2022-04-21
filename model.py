@@ -8,7 +8,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 import datetime
 import os
 import shutil
-from threading import Lock, Semaphore
+from threading import Lock
 import time
 import threading as mt
 from typing import Any, List, Optional, NamedTuple, Dict, Callable
@@ -21,14 +21,15 @@ from const import *
 from utils import *
 from func._tp import *
 import logging
+from logging import handlers
 from func._td import MD_CACHE
 
 class SMD:
     LOCAL_FILE = f'{LOCAL_DB}/smd.pkl'
     def __init__(self, mids: List[str]=[], pids: List[str]=[], mdates: List[np.ndarray]=[],
                        pvalues: List[np.ndarray]=[], freturns: List[np.ndarray]=[]):
-        self._mids = {mid: idx for idx in enumerate(mids)}
-        self._pids = {pid: idx for idx in enumerate(pids)}
+        self._mids = {mid: idx for idx, mid in enumerate(mids)}
+        self._pids = {pid: idx for idx, pid in enumerate(pids)}
         self._mdates = mdates
         self._pvalues = pvalues
         self._freturns = freturns
@@ -115,8 +116,7 @@ class SMD:
 
 db = None
 
-model_semaphore = Semaphore(QUEUE_LIMIT)
-
+batch_lock = Lock()
 smd = SMD.load()
 smd_swap = SMD()
 smd_lock = Lock()
@@ -267,7 +267,7 @@ def clone_db_cache(batch_type):
     db = get_db()
     db.clone_db_cache(batch_type)
 
-def get_pattern_results(market_id, patterns, begin_date=None):
+def get_pattern_results(market_id, patterns, begin_date=None, batch_type:BatchType=None):
     """Get pattern results from begining date to the latest of given market from DB.
 
     Parameters
@@ -287,7 +287,10 @@ def get_pattern_results(market_id, patterns, begin_date=None):
 
     """
     smd_lock.acquire()
-    mids, pids, mdates, pvalues, _ = smd.raw_data
+    if batch_type == BatchType.INIT_BATCH:
+        mids, pids, mdates, pvalues, _ = smd.raw_data
+    elif batch_type == BatchType.SERVICE_BATCH:
+        mids, pids, mdates, pvalues, _ = smd_swap.raw_data
     smd_lock.release()
 
     midx = mids[market_id]
@@ -295,7 +298,7 @@ def get_pattern_results(market_id, patterns, begin_date=None):
     dates = mdates[midx]
     if patterns:
         columns = patterns
-        pidxs = [self._pids[pid] for pid in pids]
+        pidxs = [pids[pid] for pid in pids]
         values = values[:, [pidxs]]
     else:
         columns = list(pids.keys())
@@ -319,7 +322,7 @@ def gen_future_return(market: str, period: int):
     return ret
 
 
-def get_future_return(market_id, period, begin_date):
+def get_future_return(market_id, period, begin_date, batch_type:BatchType = None):
     """Get future return from begining date to the latest of given market from DB.
 
     Parameters
@@ -339,10 +342,13 @@ def get_future_return(market_id, period, begin_date):
 
     """
     smd_lock.acquire()
-    mids, _, mdates, _, freturns = smd.raw_data
+    if batch_type == BatchType.INIT_BATCH:
+        mids, _, mdates, _, freturns = smd.raw_data
+    elif batch_type == BatchType.SERVICE_BATCH:
+        mids, _, mdates, _, freturns = smd_swap.raw_data
     smd_lock.release()
 
-    midx = self._mids[market_id]
+    midx = mids[market_id]
     pidx = PREDICT_PERIODS.index(period)
     values = SMD.rdecode(freturns[midx][:, pidx])
     dates = SMD.ddecode(mdates[midx])
@@ -925,7 +931,7 @@ def _get_ycoder_file(model_id: str, market: str, tdate: datetime.date,
     return f'{_get_model_dir(model_id)}/{tdate}/{period}/{market}.pkl'
 
 
-def get_model(model: ModelInfo, tdate: datetime.date, period: int) -> Dtc:
+def get_model(model: ModelInfo, tdate: datetime.date, period: int, batch_type:BatchType = None) -> Dtc:
     """取得指定的預測模型
 
         如果該模型已經存在，則直接載入並回傳之；否則，先建立該模型
@@ -951,11 +957,12 @@ def get_model(model: ModelInfo, tdate: datetime.date, period: int) -> Dtc:
     """
     file = _get_model_file(model.model_id, tdate, period)
     if not os.path.exists(file):
-        model_train(model, tdate)
+        model_train(model, tdate, batch_type=batch_type)
     return pickle_load(file)
 
 
-def gen_ycoder(model: ModelInfo, market: str, tdate: datetime.date, period: int):
+def gen_ycoder(model: ModelInfo, market: str, tdate: datetime.date, period: int,
+               batch_type:BatchType = None):
     """建立指定的預測模型、指定市場的Y-coder
 
     Parameters
@@ -977,15 +984,15 @@ def gen_ycoder(model: ModelInfo, market: str, tdate: datetime.date, period: int)
     """
     train_begin = model.train_begin
     train_end = tdate
-    y_data = get_ydata(market, period, train_begin, train_end).dropna().values
+    y_data = get_ydata(market, period, train_begin, train_end, batch_type=batch_type).dropna().values
     ycoder = Labelization()
     if len(y_data) >= MIN_Y_SAMPLES:
         ycoder.fit(y_data, outlier=Y_OUTLIER)
     ycoder.save(_get_ycoder_file(model.model_id, market, tdate, period))
 
 
-def get_ycoder(model: ModelInfo, market: str, tdate: datetime.date, period: int
-               ) -> Labelization:
+def get_ycoder(model: ModelInfo, market: str, tdate: datetime.date, period: int,
+               batch_type:BatchType = None) -> Labelization:
     """取得指定的預測模型、指定市場的Y-coder
 
         如果該Y-coder已經存在，則直接載入並回傳之；否則，先建立該Y-coder
@@ -1013,13 +1020,14 @@ def get_ycoder(model: ModelInfo, market: str, tdate: datetime.date, period: int
     """
     file = _get_ycoder_file(model.model_id, market, tdate, period)
     if not os.path.exists(file):
-        gen_ycoder(model, market, tdate, period)
+        gen_ycoder(model, market, tdate, period, batch_type=batch_type)
     return Labelization.load(file)
 
 
 def get_xdata(market: str, patterns: List[str],
               begin_date: Optional[datetime.date] = None,
-              end_date: Optional[datetime.date] = None) -> pd.DataFrame:
+              end_date: Optional[datetime.date] = None,
+              batch_type:BatchType = None) -> pd.DataFrame:
     """取得指定市場在指定期間內的指定現象集數據
 
     Parameters
@@ -1043,7 +1051,7 @@ def get_xdata(market: str, patterns: List[str],
     get_pattern_results
 
     """
-    ret = get_pattern_results(market, patterns, begin_date)
+    ret = get_pattern_results(market, patterns, begin_date, batch_type=batch_type)
     if end_date:
         ret = ret[ret.index.values.astype('datetime64[D]') < end_date]
     return ret
@@ -1051,7 +1059,8 @@ def get_xdata(market: str, patterns: List[str],
 
 def get_ydata(market: str, period: int,
               begin_date: datetime.date,
-              end_date: datetime.date) -> pd.Series:
+              end_date: datetime.date,
+              batch_type:BatchType = None) -> pd.Series:
     """取得指定市場在指定期間內的指定天期未來報酬率
 
     Parameters
@@ -1071,14 +1080,14 @@ def get_ydata(market: str, period: int,
         A time-series of floating.
 
     """
-    ret = get_future_return(market, period, begin_date)
+    ret = get_future_return(market, period, begin_date, batch_type=batch_type)
     # cps = get_market_data(market, begin_date)['CP']
     # ret = cps.shift(-period) / cps - 1
     ret = ret[ret.index.values.astype('datetime64[D]') < end_date]
     return ret
 
 
-def model_train(model: ModelInfo, tdate: datetime.date):
+def model_train(model: ModelInfo, tdate: datetime.date, batch_type:BatchType = None):
     """建立(訓練)各預測天期的指定預測模型
 
     Parameters
@@ -1096,7 +1105,7 @@ def model_train(model: ModelInfo, tdate: datetime.date):
     # Step1: 取得各市場的x_data
     x_data = {mid: get_xdata(mid, model.patterns,
                              begin_date=model.train_begin,
-                             end_date=tdate) for mid in markets}
+                             end_date=tdate, batch_type=batch_type) for mid in markets}
     for period in PREDICT_PERIODS:
         cur_x = []
         cur_y = []
@@ -1106,7 +1115,7 @@ def model_train(model: ModelInfo, tdate: datetime.date):
         # 3. 建立Y-coder並對未來報酬進行編碼產生y_data
         for mid in markets:
             temp = pd.concat([x_data[mid],
-                              get_ydata(mid, period, model.train_begin, tdate)],
+                              get_ydata(mid, period, model.train_begin, tdate, batch_type=batch_type)],
                              axis=1, sort=True).dropna()
             ycoder = Labelization()
             if len(temp) >= MIN_Y_SAMPLES:
@@ -1124,7 +1133,7 @@ def model_train(model: ModelInfo, tdate: datetime.date):
 
 
 def _model_predict(model: ModelInfo, market: str, tdate: datetime.date,
-                   period: int, x_data: pd.DataFrame) -> Optional[pd.DataFrame]:
+                   period: int, x_data: pd.DataFrame, batch_type:BatchType = None) -> Optional[pd.DataFrame]:
     """使用指定預測模型對目標市場進行預測
 
     Parameters
@@ -1166,10 +1175,10 @@ def _model_predict(model: ModelInfo, market: str, tdate: datetime.date,
     # 2. 取得指定預測模型、指定市場的Y-coder
     # 3. 若Y-coder is fitted，則用x-data進行預測後，再用Y-coder取得預測結果對應
     #    之預測報酬下界、預測報酬下界、預測報酬率與預測趨勢觀點
-    tree = get_model(model, tdate, period)
+    tree = get_model(model, tdate, period, batch_type=batch_type)
     if tree is None:
         return None
-    ycoder = get_ycoder(model, market, tdate, period)
+    ycoder = get_ycoder(model, market, tdate, period, batch_type=batch_type)
     if ycoder.isfitted:
         y_result = tree.predict(x_data.values)
         ret = pd.DataFrame(
@@ -1186,8 +1195,8 @@ def _model_predict(model: ModelInfo, market: str, tdate: datetime.date,
 def model_predict(model: ModelInfo, market: str,
                   latest_date: Optional[datetime.date] = None,
                   max_len: Optional[int] = MIN_BACKTEST_LEN,
-                  controller: Optional[ThreadController] = None
-                  ) -> Optional[pd.DataFrame]:
+                  controller: Optional[ThreadController] = None,
+                  batch_type:BatchType = None) -> Optional[pd.DataFrame]:
     """使用指定預測模型對目標市場進行預測
 
     此函數目的為系統批次的model_update提供指定模型/指定市場的預測結果服務，主要
@@ -1227,9 +1236,9 @@ def model_predict(model: ModelInfo, market: str,
     """
     if latest_date:
         x_data = get_xdata(market, model.patterns,
-                           latest_date + datetime.timedelta(1)).dropna()
+                           latest_date + datetime.timedelta(1), batch_type=batch_type).dropna()
     else:
-        x_data = get_xdata(market, model.patterns).dropna()[-max_len:]
+        x_data = get_xdata(market, model.patterns, batch_type=batch_type).dropna()[-max_len:]
     if len(x_data) <= 0:
         return  # donothing
     ret_buffer = []
@@ -1248,7 +1257,7 @@ def model_predict(model: ModelInfo, market: str,
             bidx, eidx = eidx, (dates < next_tdate).sum()
             if bidx < eidx:
                 result = _model_predict(model, market, cur_tdate, period,
-                                        x_data=x_data[bidx: eidx])
+                                        x_data=x_data[bidx: eidx], batch_type=batch_type)
                 if result is not None:
                     result_buffer.append(result)
         if result_buffer:
@@ -1308,9 +1317,9 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             return
         if mid in latest_dates:
             ret_buffer.append(model_predict(model, mid, latest_dates[mid],
-                                            controller=controller))
+                                            controller=controller, batch_type=batch_type))
         else:
-            ret_buffer.append(model_predict(model, mid, controller=controller))
+            ret_buffer.append(model_predict(model, mid, controller=controller, batch_type=batch_type))
     def save_result(data, model_id, exection_id, controller):
         if data and not _is_all_none(data):
             ret = pd.concat(data, axis=0)
@@ -1342,28 +1351,25 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
-
-    model_semaphore.acquire()
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
-        model_semaphore.release()
         return
     try:
         model = get_model_info(model_id)
         model_create(model, controller)
         model_backtest(model, controller)
         MT_MANAGER.release(model_id)
-        model_semaphore.release()
+
     except Exception as esp:
         MT_MANAGER.release(model_id)
-        model_semaphore.release()
+
         logging.error(f"add model failed ")
         logging.error(traceback.format_exc())
         return
 
 
-def model_recover(model_id: str, status: ModelStatus):
+def model_recover(model_id: str, status: ModelStatus, batch_type:BatchType):
     """重啟模型
 
     此函數目的為重啟因故中斷的模型：
@@ -1391,8 +1397,8 @@ def model_recover(model_id: str, status: ModelStatus):
     try:
         model = get_model_info(model_id)
         if status < ModelStatus.CREATED:
-            model_create(model, controller)
-        model_backtest(model, controller)
+            model_create(model, controller, batch_type)
+        model_backtest(model, controller, batch_type)
         MT_MANAGER.release(model_id)
 
     except Exception as esp:
@@ -1419,6 +1425,7 @@ def remove_model(model_id):
     model_create, model_backtest
 
     """
+    logging.info('start remove model')
     MT_MANAGER.acquire(model_id).switch_off()
     MT_MANAGER.release(model_id)
     while MT_MANAGER.exists(model_id):
@@ -1427,9 +1434,10 @@ def remove_model(model_id):
     model_dir = _get_model_dir(model_id)
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
+    logging.info('finish remove model')
 
 
-def model_create(model: ModelInfo, controller: ThreadController):
+def model_create(model: ModelInfo, controller: ThreadController, batch_type:BatchType):
     """建立模型
 
         建立模型的工作流程如下：
@@ -1462,7 +1470,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
             logging.info('model create terminated')
             return
         ret_buffer.append(model_predict(
-            model, mid, max_len=1, controller=controller))
+            model, mid, max_len=1, controller=controller, batch_type=batch_type))
     if ret_buffer:
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
@@ -1473,7 +1481,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
         set_model_execution_complete(exection_id)
 
 
-def model_backtest(model: ModelInfo, controller: ThreadController):
+def model_backtest(model: ModelInfo, controller: ThreadController, batch_type:BatchType):
     """執行模型回測
 
         執行模型回測的工作流程如下：
@@ -1508,7 +1516,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         # 取得所有市場的目標回測資料
         x_data = {mid: get_xdata(mid, model.patterns,
                                  end_date=earliest_dates[mid] if mid in earliest_dates else None
-                                 ).dropna()[-MIN_BACKTEST_LEN:]
+                                 ,batch_type=batch_type).dropna()[-MIN_BACKTEST_LEN:]
                   for mid in markets}
         tdate = max(earliest_dates.values()) if earliest_dates else datetime.date.today()
         while x_data:
@@ -1556,54 +1564,6 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
-class ExecQueue:
-
-    def __init__(self):
-        self._occupants = 0
-        self._queue = []
-        self.isactive = True
-        self._lock = Lock()
-        self._thread = CatchableTread(self._run)
-        self._thread.start()
-        self.threads = []
-
-    def _run(self):
-        try:
-            while self.isactive:
-                if self._occupants < QUEUE_LIMIT and self._queue:
-                    func, args, size = self._queue.pop(0)
-                    self._occupants += size
-                    def callback():
-                        ret = func(*args)
-                        self._occupants -= size
-                        return ret
-                    t = CatchableTread(target=callback)
-                    t.start()
-                    self.threads.append(t)
-
-                time.sleep(1)
-        except Exception as esp:
-            logging.error(traceback.format_exc())
-
-    def push(self, func:Callable, args:tuple, size:int):
-        self._lock.acquire()
-        assert size <= QUEUE_LIMIT, 'exceed queue size'
-        self._queue.append((func, args, size))
-        self._lock.release()
-
-    def cut_line(self, func:Callable, args:tuple, size:int):
-        self._lock.acquire()
-        assert size <= QUEUE_LIMIT, 'exceed queue size'
-        self._queue.insert(0, (func, args, size))
-        self._lock.release()
-
-    def stop(self):
-        self.isactive = False
-
-    def collect_threads(self):
-        self._thread.join()
-        return self.threads
-
 class CatchableTread:
 
     def __init__(self, target, args=None, name=None):
@@ -1622,12 +1582,78 @@ class CatchableTread:
             else:
                 self._target()
         except Exception as esp:
+            logging.error(traceback.format_exc())
             self.esp = traceback.format_exc()
 
-
     def join(self):
-        self._thread.join()
+        self._thread.join() 
+class ExecQueue:
 
+    def __init__(self, limit, name):
+        self._limit = limit
+        self._occupants = 0
+        self._queue = []
+        self.isactive = True
+        self.threads = []
+        self._lock = Lock()
+        self._thread = CatchableTread(self._run, name=name)
+
+    def _run(self):
+        while self.isactive:
+            # logging.debug(self._occupants) 
+            if self._queue:
+                func, args, size = self._pop(0)
+                self._occupants += size
+                if self._occupants <= self._limit:
+                    def callback():
+                        cur_size = size
+                        logging.info(f'Do {func.__name__}')
+                        if args is not None:
+                            ret = func(*args)
+                        else:
+                            ret = func()
+                        self._occupants -= cur_size
+                        return ret
+                    t = CatchableTread(target=callback)
+                    t.start()
+                    self.threads.append(t)
+                else:
+                    self.cut_line(func, args=args, size=size)
+                    self._occupants -= size
+            time.sleep(1)
+    
+    def start(self):
+        self._thread.start()
+
+    def _pop(self, index):
+        self._lock.acquire()
+        item = self._queue.pop(index)
+        self._lock.release()
+        return item
+
+    def push(self, func:Callable, *, size:int, args:tuple=None):
+        self._lock.acquire()
+        assert size <= self._limit, 'exceed queue size'
+        self._queue.append((func, args, size))
+        self._lock.release()
+
+
+    def cut_line(self, func:Callable, *, size:int, args:tuple=None):
+        self._lock.acquire()
+        assert size <= self._limit, 'exceed queue size'
+        self._queue.insert(0, (func, args, size))
+        self._lock.release()
+
+    def stop(self):
+        self.isactive = False
+
+    def collect_threads(self):
+        self._thread.join()
+        self.threads.append(self._thread)
+        return self.threads
+
+model_queue = ExecQueue(MODEL_QUEUE_LIMIT, 'm_queue')
+pattern_queue = ExecQueue(PATTERN_QUEUE_LIMIT, 'p_queue')
 class DbWriterBase(metaclass=ABCMeta):
     def __init__(self, controller: ThreadController, stime=1):
         self._controller = controller
@@ -1820,9 +1846,6 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     if len(patterns) <= 0 or len(markets) <= 0:
         return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
-    ret_buffer = []
-    ret_market_dist = []
-    ret_market_occur = []
     if batch_type == BatchType.SERVICE_BATCH:
         market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
@@ -1989,46 +2012,60 @@ def get_pattern_stats_info_v2(pattern, freturn, market):
         ret_buffer_2.append(cur_2)
     return pd.concat(ret_buffer_1, axis=0), pd.concat(ret_buffer_2, axis=0)
 
-def model_execution_recover():
+def model_execution_recover(batch_type:BatchType):
     logging.info('Start model execution recover')
     for model, etype in get_recover_model_execution():
         if etype == ModelExecution.ADD_PREDICT:
-            model_recover(model, ModelStatus.ADDED)
+            model_recover(model, ModelStatus.ADDED, batch_type)
         if etype == ModelExecution.ADD_BACKTEST:
-            model_recover(model, ModelStatus.CREATED)
+            model_recover(model, ModelStatus.CREATED, batch_type)
     logging.info('End model execution recover')
 
 def init_db():
     try:
         logging.info('start initiate db')
-        for each in range(QUEUE_LIMIT):
-            model_semaphore.acquire()
-        batch("init", BatchType.INIT_BATCH)
-        for each in range(QUEUE_LIMIT):
-            model_semaphore.release()
+        model_queue.cut_line(batch, size=MODEL_QUEUE_LIMIT, args=(BatchType.INIT_BATCH,))
+        pattern_queue.cut_line(batch, size=PATTERN_QUEUE_LIMIT, args=(BatchType.INIT_BATCH,))
         logging.info('init finished')
     except Exception as esp:
-        for each in range(QUEUE_LIMIT):
-            model_semaphore.release()
         logging.error(f"init db failed")
         logging.error(traceback.format_exc())
 
+def batch(batch_type=BatchType.SERVICE_BATCH):
+    batch_lock.acquire()
+    if MT_MANAGER.exists('batch executing'):
+        batch_lock.release()
+        while MT_MANAGER.exists('batch executing'):
+            time.sleep(1)
+        return
+    else:
+        MT_MANAGER.acquire('batch executing')
+        batch_lock.release()
+        _batch(batch_type)
+        MT_MANAGER.release('batch executing')
+        return
 
-def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
+def _batch(batch_type):
+    MT_MANAGER.acquire(BATCH_EXE_CODE).switch_off()
+    MT_MANAGER.release(BATCH_EXE_CODE)
+    while MT_MANAGER.exists(BATCH_EXE_CODE):
+        time.sleep(1)
     controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     try:
         if controller.isactive:
-            logging.info(f"Start batch {excute_id}")
+            logging.info(f"Start batch ")
             clean_db_cache()
             clone_db_cache(batch_type)
             logging.info("Start pattern update")
             ts = pattern_update(controller, batch_type) or []
             logging.info("End pattern update")
             if controller.isactive and (batch_type == BatchType.INIT_BATCH):
+                swap_smd()
                 logging.info('Start model execution recover')
-                model_execution_recover()
+                model_execution_recover(batch_type)
                 logging.info('End model execution recover')
             if batch_type == BatchType.SERVICE_BATCH:
+                
                 logging.info("Start model update")
                 for model in get_models():
                     t = model_update(model, controller, batch_type)
@@ -2042,10 +2079,10 @@ def batch(excute_id, batch_type=BatchType.SERVICE_BATCH):
                 if controller.isactive:
                     update_model_accuracy()
                     checkout_fcst_data()
-                    update_mp_cache()
-            MP_CACHE.clear()
+                    swap_smd()
+   
             MT_MANAGER.release(BATCH_EXE_CODE)
-            logging.info(f"End batch {excute_id}")
+            logging.info(f"End batch")
 
     except Exception as esp:
         logging.error(f"batch failed")
@@ -2065,8 +2102,8 @@ def get_mix_pattern_occur(market_id: str, patterns: List):
     ret = SMD.ddecode(dates[(valeus==1).all(axis=1)]).tolist()
     return ret
 
-def get_pattern_occur_v2(market_id: str, pattern_id):
-    return get_mix_pattern_occur_v2(market_id, [pattern_id])
+def get_pattern_occur(market_id: str, pattern_id):
+    return get_mix_pattern_occur(market_id, [pattern_id])
 
 def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     def func(vs):

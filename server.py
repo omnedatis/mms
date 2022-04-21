@@ -23,16 +23,16 @@ Batch api call could fail to execute if the previous controller
 has not yet being released.
 """
 import argparse
+from concurrent.futures import thread
 import os
 import traceback
 import threading as mt
-import datetime
 import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
  get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
- add_pattern, add_model, remove_model, MarketDataFromDb, CatchableTread, MT_MANAGER)
-from const import BATCH_EXE_CODE, ExecMode, PORT, LOG_LOC
+ add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
+from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT
 from dao import MimosaDB
 from flask import Flask, request
 from waitress import serve
@@ -41,7 +41,6 @@ import logging
 from logging import handlers
 import json
 import warnings
-
 app =  Flask(__name__)
 
 parser = argparse.ArgumentParser(prog="Program start server")
@@ -53,54 +52,36 @@ args = parser.parse_args()
 @app.route("/model/batch", methods=["GET"])
 def api_batch():
     """ Run batch. """
-    MT_MANAGER.acquire(BATCH_EXE_CODE).switch_off()
-    MT_MANAGER.release(BATCH_EXE_CODE)
-    while MT_MANAGER.exists(BATCH_EXE_CODE):
-        time.sleep(1)
-    excute_id = datetime.datetime.now()
-
-    t = mt.Thread(target=batch, args=(excute_id,))
-    t.start()
-
+    model_queue.cut_line(batch, size=MODEL_QUEUE_LIMIT)
+    pattern_queue.cut_line(batch, size=PATTERN_QUEUE_LIMIT)
     return {"status":202, "message":"accepted", "data":None}
 
 @app.route("/model", methods=["POST"])
 def api_add_model():
     """ Create new model. """
-    excute_id = datetime.datetime.now()
-    data = json.loads(request.data)
-    logging.info(f"api_add_model {excute_id} start, receiving: {data}")
     try:
+        logging.info(f"api_add_model  receiving: {request.data}")
+        data = json.loads(request.data)
         model_id = data['modelId']
     except KeyError as esp:
         return {"status":400,
                 "message":"Invalid request argument",
                 "data":None}
-    def _add_model(model_id):
-        add_model(model_id)
-        logging.info(f"api_add_model {excute_id} complete")
-        return
-    t = mt.Thread(target=_add_model, args=(model_id,))
-    t.start()
+    model_queue.push(add_model, size=1, args=(model_id,))
     return {"status":202, "message":"accepted", "data":data}
 
 @app.route("/model", methods=["DELETE"])
 def api_remove_model():
     """ Remove model. """
-    excute_id = datetime.datetime.now()
-    data = json.loads(request.data)
-    logging.info(f"api_remove_model {excute_id} receiving: {data}")
     try:
+        logging.info(f"api_remove_model  receiving: {request.data}")
+        data = json.loads(request.data)
         model_id = data['modelId']
     except KeyError as esp:
         return {"status":400,
                 "message":"Invalid request argument",
                 "data":None}
-    def _remove_model(model_id):
-        remove_model(model_id)
-        logging.info(f"api_remove_model {excute_id} complete")
-        return
-    t = mt.Thread(target=_remove_model, args=(model_id,))
+    t = mt.Thread(target=remove_model, args=(model_id,))
     t.start()
     return {"status":202, "message":"accepted", "data":None}
 
@@ -209,9 +190,18 @@ def api_get_pattern_distribution():
 
 @app.route("/patterns/<string:pattern_id>", methods=["GET"])
 def api_add_pattern(pattern_id):
-    t = mt.Thread(target=add_pattern, args=(pattern_id,))
-    t.start()
+    pattern_queue.push(add_pattern, size=1, args=(pattern_id,))
     return {"status":202, "message":"accepted", "data":None}
+
+@app.route("/test", methods=["GET"])
+def api_test_queue():
+    def test_queue():
+        for each in range(10):
+            time.sleep(1)
+            logging.info(each)
+    model_queue.push(test_queue, size=1)
+    return {"status":200, "message":"OK", "data":None}
+
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
@@ -237,11 +227,18 @@ if __name__ == '__main__':
         os.mkdir(LOG_LOC)
     try:
         stream_hdlr = logging.StreamHandler()
+        sys_hdlr = handlers.SysLogHandler()
         file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/.log', when='D', backupCount=7)
-        level = {ExecMode.DEV.value:logging.DEBUG, ExecMode.UAT.value:logging.INFO, ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
-        logging.basicConfig(level=level, format='%(asctime)s - %(threadName)s: %(filename)s - line %(lineno)d: %(message)s', handlers=[stream_hdlr, file_hdlr])
+        fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
+        level = {ExecMode.DEV.value:logging.DEBUG,
+                 ExecMode.UAT.value:logging.INFO,
+                 ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
+        logging.basicConfig(level=level, format=fmt, handlers=[stream_hdlr, file_hdlr, sys_hdlr])
+        model_queue.start()
+        pattern_queue.start()
         set_db(MimosaDB(mode=ExecMode.get(mode)))
         set_market_data_provider(MarketDataFromDb())
+
     except Exception as esp:
         logging.error(f"setting up failed")
         logging.error(traceback.format_exc())     
@@ -249,5 +246,5 @@ if __name__ == '__main__':
         t = mt.Thread(target=init_db)
         t.start()
     if (not args.motionless):
-        serve(app, port=PORT)
+        serve(app, port=PORT, threads=10)
     
