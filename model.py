@@ -2197,7 +2197,9 @@ def get_mix_pattern_occur(market_id: str, patterns: List):
     mids, pids, mdates, pvalues, _ = smd.raw_data
     smd_lock.release()
 
-    midx = mids[market_id]
+    midx = mids.get(market_id)
+    if midx is None:
+        return []
     pidxs = [pids[pid] for pid in patterns]
     valeus = pvalues[midx][:,pidxs]
     dates = mdates[midx]
@@ -2209,7 +2211,10 @@ def get_pattern_occur(market_id: str, pattern_id):
 
 def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     def func(vs):
-        cnts, occurs = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs]).sum(axis=0).tolist()
+        recv = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs])
+        if len(vs) <= 0:
+            return 0, 0
+        cnts, occurs = recv.sum(axis=0).tolist()
         return occurs, cnts - occurs
     if smd.isempty():
         return 0, 0
@@ -2219,6 +2224,8 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     smd_lock.release()
 
     markets = get_markets(market_type, category_code)
+    if not markets:
+        return 0, 0
     midxs = [mids[mid] for mid in markets]
     pidxs = [pids[pid] for pid in patterns]
     values = [pvalues[idx][:,pidxs] for idx in midxs]
@@ -2240,6 +2247,8 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     smd_lock.release()
 
     markets = get_markets(market_type, category_code)
+    if not markets:
+        return 0
     pidx = PREDICT_PERIODS.index(period)
     midxs = [mids[mid] for mid in markets]
     pidxs = [pids[pid] for pid in patterns]
@@ -2265,6 +2274,8 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     smd_lock.release()
 
     markets = get_markets(market_type, category_code)
+    if not markets:
+        return {}
     pidx = PREDICT_PERIODS.index(period)
     midxs = [mids[mid] for mid in markets]
     pidxs = [pids[pid] for pid in patterns]
@@ -2334,6 +2345,8 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
     smd_lock.release()
 
     markets = get_markets(market_type, category_code)
+    if not markets:
+        return 0
     pidx = PREDICT_PERIODS.index(period)
     midxs = [mids[mid] for mid in markets]
     returns = [freturns[idx][:,pidx] for idx in midxs]
