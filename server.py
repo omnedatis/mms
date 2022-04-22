@@ -31,7 +31,7 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
  get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
- get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt, set_exec_mode,
+ get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt, get_market_rise_prob,
  add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT
 from dao import MimosaDB
@@ -257,14 +257,21 @@ def api_add_pattern(pattern_id):
     pattern_queue.push(add_pattern, size=1, args=(pattern_id,))
     return {"status":202, "message":"accepted", "data":None}
 
-@app.route("/test", methods=["GET"])
-def api_test_queue():
-    def test_queue():
-        for each in range(10):
-            time.sleep(1)
-            logging.info(each)
-    model_queue.push(test_queue, size=1)
-    return {"status":200, "message":"OK", "data":None}
+@app.route("/markets/upprob", methods=["GET"])
+def api_market_upprob():
+    try:
+        logging.info(f"api_market_upprob receiving: {request.args}")
+        data = request.args
+        date_period = data["datePeriod"]
+        market_type = data.get("marketType") or None
+        category_code = data.get("categoryCode") or None
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        return {"status":400,
+                "message":"Invalid request argument",
+                "data":None}
+    ret = get_market_rise_prob(int(date_period), market_type, category_code)
+    return {"status":200, "message":"OK", "data":{"positiveWeight":float(ret)}}
 
 
 @app.errorhandler(MethodNotAllowed)
@@ -293,7 +300,7 @@ if __name__ == '__main__':
     try:
         stream_hdlr = logging.StreamHandler()
         sys_hdlr = handlers.SysLogHandler()
-        file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/.log', when='D', backupCount=7)
+        file_hdlr = handlers.TimedRotatingFileHandler(filename=f'{LOG_LOC}/app.log', when='D', backupCount=7)
         fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
         level = {ExecMode.DEV.value:logging.DEBUG,
                  ExecMode.UAT.value:logging.INFO,
