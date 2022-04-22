@@ -32,7 +32,7 @@ from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
  get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
  get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt, get_market_rise_prob,
- add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
+ set_exec_mode, add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT
 from dao import MimosaDB
 from flask import Flask, request
