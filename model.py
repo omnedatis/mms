@@ -2152,13 +2152,16 @@ def _batch(batch_type):
             logging.info("Start pattern update")
             if batch_type == BatchType.SERVICE_BATCH:
                 truncate_swap_tables()
-            if batch_type == BatchType.INIT_BATCH and not smd.isempty():
-                ts = []
+            if batch_type == BatchType.INIT_BATCH:
+                if smd.isempty():
+                    ts = pattern_update(controller, batch_type) or []
+                    if controller.isactive:
+                        swap_smd_index()
+                        swap_smd()
+                else:
+                    ts = []
             else:
                 ts = pattern_update(controller, batch_type) or []
-                if controller.isactive:
-                    swap_smd_index()
-                    swap_smd()
             logging.info("End pattern update")
             if controller.isactive and (batch_type == BatchType.INIT_BATCH):
                 logging.info('Start model execution recover')
