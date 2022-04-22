@@ -22,6 +22,7 @@ PATTERN_QUEUE_LIMIT = 1
 PORT = 8080
 FUNC_CACHE_SIZE = 2000
 MULTI_PATTERN_CACHE_SIZE = 2000 * 100
+MIN_DB_WRITING_LENGTH = 10000
 
 class BatchType(str, Enum):
     """Batch 的執行型態
@@ -102,7 +103,7 @@ class TableName(Enum):
 
 class StoredProcedule(Enum):
     """SP名稱
-    
+
     Membors
     -------
     TRUNCATE_AI_SWAP: 清空計算時所需要為空的資料表的 SP

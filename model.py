@@ -11,6 +11,7 @@ import shutil
 from threading import Lock
 import time
 import threading as mt
+import multiprocessing as mp
 from typing import Any, List, Optional, NamedTuple, Dict, Callable
 import numpy as np
 import pandas as pd
@@ -27,6 +28,15 @@ from func._td import MD_CACHE
 smd_lock = Lock()
 SMD_IDX_FILE = f'{LOCAL_DB}/smd_idx.pkl'
 smd_idx = pickle_load(SMD_IDX_FILE) if os.path.exists(SMD_IDX_FILE) else 1
+
+exec_mode = ExecMode.DEV.value
+
+def get_exec_mode():
+    return exec_mode
+
+def set_exec_mode(mode):
+    global exec_mode
+    exec_mode = mode
 
 def swap_smd_index():
     global smd_idx
@@ -193,6 +203,12 @@ def save_mkt_period(data: pd.DataFrame):
     db = get_db()
     db.save_mkt_period(data)
 
+def save_mkt_period_mp(data: pd.DataFrame, mode):
+    """save mkt period to DB."""
+    from dao import MimosaDB
+    db = MimosaDB(mode=mode, read_only=True)
+    db.save_mkt_period(data)
+
 def save_mkt_dist(data: pd.DataFrame):
     """save mkt dist to DB."""
     db = get_db()
@@ -259,6 +275,24 @@ def save_latest_pattern_results(data):
 
     """
     db = get_db()
+    db.save_latest_pattern_results(data)
+
+def save_latest_pattern_results_mp(data, mode):
+    """Save latest pattern results to DB.
+
+    Parameters
+    ----------
+    data: Pandas's DataFrame
+        A table of pattern results with columns for market_id, pattern_id,
+        price_date and value.
+
+    See Also
+    --------
+    PatternResultField
+
+    """
+    from dao import MimosaDB
+    db = MimosaDB(mode=mode, read_only=True)
     db.save_latest_pattern_results(data)
 
 def update_latest_pattern_results(pid: str, data: pd.DataFrame):
@@ -422,6 +456,17 @@ def save_latest_pattern_occur(data: pd.DataFrame):
     db = get_db()
     db.save_latest_pattern_occur(data)
 
+def save_latest_pattern_occur_mp(data: pd.DataFrame, mode):
+    """Save pattern occured info
+
+    Parameters
+    ----------
+    data: pd.DataFram
+    """
+    from dao import MimosaDB
+    db = MimosaDB(mode=mode, read_only=True)
+    db.save_latest_pattern_occur(data)
+
 def update_latest_pattern_occur(pid: str, data: pd.DataFrame):
     """Save pattern occured info
 
@@ -442,6 +487,17 @@ def save_latest_pattern_distribution(data: pd.DataFrame):
     data: pd.DataFram
     """
     db = get_db()
+    db.save_latest_pattern_distribution(data)
+
+def save_latest_pattern_distribution_mp(data: pd.DataFrame, mode):
+    """Save pattern occured info
+
+    Parameters
+    ----------
+    data: pd.DataFram
+    """
+    from dao import MimosaDB
+    db = MimosaDB(mode=mode, read_only=True)
     db.save_latest_pattern_distribution(data)
 
 def update_latest_pattern_distribution(pid: str, data: pd.DataFrame):
@@ -1677,8 +1733,9 @@ class ExecQueue:
 
 model_queue = ExecQueue(MODEL_QUEUE_LIMIT, 'm_queue')
 pattern_queue = ExecQueue(PATTERN_QUEUE_LIMIT, 'p_queue')
+
 class DbWriterBase(metaclass=ABCMeta):
-    def __init__(self, controller: ThreadController, stime=1):
+    def __init__(self, controller: ThreadController, stime=5):
         self._controller = controller
         self._active = False
         self._pool = []
@@ -1710,6 +1767,11 @@ class DbWriterBase(metaclass=ABCMeta):
             if self._pool:
                 self._lock.acquire()
                 data = pd.concat(self._pool, axis=0)
+                if self._active and len(data) < MIN_DB_WRITING_LENGTH:
+                    self._pool = [data]
+                    self._lock.release()
+                    time.sleep(stime)
+                    continue
                 self._pool = []
                 self._lock.release()
                 self._save(data)
@@ -1728,16 +1790,20 @@ class DbWriterBase(metaclass=ABCMeta):
 class HistoryReturnWriter(DbWriterBase):
 
     def _save(self, data):
-        save_mkt_period(data)
+        p = mp.Process(target=save_mkt_period_mp, args=(data, get_exec_mode()))
+        p.start()
+        p.join()
 
     @property
     def _TASK_NAME(self):
-        return 'market return values'
+        return 'market period values'
 
 class PatternOccurWriter(DbWriterBase):
 
     def _save(self, data):
-        save_latest_pattern_occur(data)
+        p = mp.Process(target=save_latest_pattern_occur_mp, args=(data, get_exec_mode()))
+        p.start()
+        p.join()
 
     @property
     def _TASK_NAME(self):
@@ -1746,7 +1812,9 @@ class PatternOccurWriter(DbWriterBase):
 class PatternDistWriter(DbWriterBase):
 
     def _save(self, data):
-        save_latest_pattern_distribution(data)
+        p = mp.Process(target=save_latest_pattern_distribution_mp, args=(data, get_exec_mode()))
+        p.start()
+        p.join()
 
     @property
     def _TASK_NAME(self):
@@ -1775,7 +1843,9 @@ class LatestPatternWriter(DbWriterBase):
 
     @classmethod
     def _save(self, data):
-        save_latest_pattern_results(data)
+        p = mp.Process(target=save_latest_pattern_results_mp, args=(data, get_exec_mode()))
+        p.start()
+        p.join()
 
     @property
     def _TASK_NAME(self):

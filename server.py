@@ -31,7 +31,7 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
  get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
- get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt,
+ get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt, set_exec_mode,
  add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT
 from dao import MimosaDB
@@ -282,10 +282,11 @@ def handle_internal_server_error(e):
 
 if __name__ == '__main__':
     mode = args.mode
-    if ExecMode.get(mode) is None:
+    exec_mode = ExecMode.get(mode)
+    if exec_mode is None:
         logging.error(f'invalid execution mode {mode}')
         raise RuntimeError(f'invalid execution mode {mode}')
-    if ExecMode.get(mode) == ExecMode.PROD.value or ExecMode.get(mode) == ExecMode.UAT.value:
+    if exec_mode == ExecMode.PROD.value or exec_mode == ExecMode.UAT.value:
         warnings.filterwarnings("ignore")
     if not os.path.exists(LOG_LOC):
         os.mkdir(LOG_LOC)
@@ -296,19 +297,19 @@ if __name__ == '__main__':
         fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
         level = {ExecMode.DEV.value:logging.DEBUG,
                  ExecMode.UAT.value:logging.INFO,
-                 ExecMode.PROD.value:logging.ERROR}[ExecMode.get(mode)]
+                 ExecMode.PROD.value:logging.ERROR}[exec_mode]
         logging.basicConfig(level=level, format=fmt, handlers=[stream_hdlr, file_hdlr, sys_hdlr])
         model_queue.start()
         pattern_queue.start()
-        set_db(MimosaDB(mode=ExecMode.get(mode)))
+        set_exec_mode(exec_mode)
+        set_db(MimosaDB(mode=exec_mode))
         set_market_data_provider(MarketDataFromDb())
 
     except Exception as esp:
         logging.error(f"setting up failed")
-        logging.error(traceback.format_exc())     
+        logging.error(traceback.format_exc())
     if (not args.motionless) and (not args.batchless):
         t = mt.Thread(target=init_db)
         t.start()
     if (not args.motionless):
         serve(app, port=PORT, threads=10)
-    
