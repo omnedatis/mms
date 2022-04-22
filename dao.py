@@ -621,7 +621,7 @@ class MimosaDB:
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
-            market_id = data.iloc[i][{PredictResultField.MARKET_ID.value}]
+            market_id = data.iloc[i][PredictResultField.MARKET_ID.value]
             result[market_id] = datetime.datetime.strptime(
                 str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
         return result
@@ -656,7 +656,7 @@ class MimosaDB:
         data = pd.read_sql_query(sql, engine)
         result = {}
         for i in range(len(data)):
-            market_id = data.iloc[i][{PredictResultField.MARKET_ID.value}]
+            market_id = data.iloc[i][PredictResultField.MARKET_ID.value]
             result[market_id] = datetime.datetime.strptime(
                 str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
         return result
@@ -889,7 +889,7 @@ class MimosaDB:
                     table_name,
                     engine,
                     if_exists='append',
-                    chunksize=10000,
+                    chunksize=1000,
                     method='multi',
                     index=False)
 
@@ -992,7 +992,7 @@ class MimosaDB:
                     f'{TableName.PREDICT_RESULT_HISTORY.value}_SWAP',
                     engine,
                     if_exists='append',
-                    chunksize=10000,
+                    chunksize=1000,
                     method='multi',
                     index=False)
             except Exception as e:
@@ -1095,7 +1095,7 @@ class MimosaDB:
                 TableName.MODEL_EXECUTION.value,
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         return exec_id
@@ -1245,7 +1245,7 @@ class MimosaDB:
                 f'{TableName.PATTERN_RESULT.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1291,7 +1291,7 @@ class MimosaDB:
                 f'{TableName.PAT_MKT_DIST.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1328,7 +1328,7 @@ class MimosaDB:
                 f'{TableName.PAT_MKT_OCCUR.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1372,7 +1372,7 @@ class MimosaDB:
                 f'{TableName.MKT_SCORE.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1427,7 +1427,7 @@ class MimosaDB:
                 f'{TableName.MKT_PERIOD.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1473,7 +1473,7 @@ class MimosaDB:
                 f'{TableName.MKT_PERIOD_HISTORY.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1517,7 +1517,7 @@ class MimosaDB:
                 f'{TableName.MKT_DIST.value}_SWAP',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1595,7 +1595,7 @@ class MimosaDB:
                 f'{TableName.PAT_MKT_OCCUR.value}',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1656,7 +1656,7 @@ class MimosaDB:
                 f'{TableName.PAT_MKT_DIST.value}',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
@@ -1706,7 +1706,7 @@ class MimosaDB:
                 f'{TableName.PATTERN_RESULT.value}',
                 engine,
                 if_exists='append',
-                chunksize=10000,
+                chunksize=1000,
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
