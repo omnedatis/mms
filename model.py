@@ -206,7 +206,7 @@ def save_mkt_period(data: pd.DataFrame):
 def save_mkt_period_mp(data: pd.DataFrame, mode):
     """save mkt period to DB."""
     from dao import MimosaDB
-    db = MimosaDB(mode=mode, read_only=True)
+    db = MimosaDB(mode=mode)
     db.save_mkt_period(data)
 
 def save_mkt_dist(data: pd.DataFrame):
@@ -292,7 +292,7 @@ def save_latest_pattern_results_mp(data, mode):
 
     """
     from dao import MimosaDB
-    db = MimosaDB(mode=mode, read_only=True)
+    db = MimosaDB(mode=mode)
     db.save_latest_pattern_results(data)
 
 def update_latest_pattern_results(pid: str, data: pd.DataFrame):
@@ -464,7 +464,7 @@ def save_latest_pattern_occur_mp(data: pd.DataFrame, mode):
     data: pd.DataFram
     """
     from dao import MimosaDB
-    db = MimosaDB(mode=mode, read_only=True)
+    db = MimosaDB(mode=mode)
     db.save_latest_pattern_occur(data)
 
 def update_latest_pattern_occur(pid: str, data: pd.DataFrame):
@@ -497,7 +497,7 @@ def save_latest_pattern_distribution_mp(data: pd.DataFrame, mode):
     data: pd.DataFram
     """
     from dao import MimosaDB
-    db = MimosaDB(mode=mode, read_only=True)
+    db = MimosaDB(mode=mode)
     db.save_latest_pattern_distribution(data)
 
 def update_latest_pattern_distribution(pid: str, data: pd.DataFrame):
@@ -1775,7 +1775,7 @@ class DbWriterBase(metaclass=ABCMeta):
                 self._pool = []
                 self._lock.release()
                 self._save(data)
-                logging.debug(f'writing {self._TASK_NAME}: #{tlen} ~ #{tlen + len(data)} records')
+                logging.info(f'writing {self._TASK_NAME}: #{tlen} ~ #{tlen + len(data)} records')
                 tlen = tlen + len(data)
             else:
                 if self._active:
