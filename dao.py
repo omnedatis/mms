@@ -10,7 +10,7 @@ import threading as mt
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
-from model import (ModelInfo, PatternInfo,
+from model import (ModelInfo, PatternInfo, CatchableTread,
                 pickle_dump, pickle_load,
                 get_filed_name_of_future_return)
 from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, MarketOccurField, ModelMarketHitSumField, PatternResultField,
@@ -71,12 +71,14 @@ class MimosaDB:
                               port, db_name, charset))
       return engine
 
-    def _clone_model_results(self, clean_first: bool=False):
+    def _clone_model_results(self, controller, clean_first: bool=False):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
 
         Parameters
         ----------
+        controller: ThreadController
+            用於強制中斷 Thread
         clean_first: bool
             是否要在執行複製前先清空本地端資料
 
@@ -134,6 +136,8 @@ class MimosaDB:
             result = {}
             # 儲存各市場預測結果
             for market_id in market_ids:
+                if not controller.isactive:
+                    return
                 mkt_data_cond = (
                     data[PredictResultField.MARKET_ID.value] == market_id)
                 mkt_data = data[mkt_data_cond][[
@@ -147,12 +151,14 @@ class MimosaDB:
             logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
         logging.info('Clone model predict result from db finished')
     
-    def clone_model_results(self, clean_first: bool=False):
+    def clone_model_results(self, controller, clean_first: bool=False):
         """非同步取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
 
         Parameters
         ----------
+        controller: ThreadController
+            用於強制中斷 Thread
         clean_first: bool
             是否要在執行複製前先清空本地端資料
 
@@ -160,7 +166,7 @@ class MimosaDB:
         -------
         None.
         """
-        t = mt.Thread(target=self._clone_model_results, args=(clean_first, ))
+        t = CatchableTread(target=self._clone_model_results, args=(controller, clean_first, ))
         t.start()
 
     def get_model_results(self, model_id: str) -> Dict[str, pd.DataFrame]:
