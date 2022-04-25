@@ -198,15 +198,24 @@ def save_mkt_score(data: pd.DataFrame):
     db = get_db()
     db.save_mkt_score(data)
 
+def save_latest_mkt_period(data: pd.DataFrame):
+    """save mkt period to DB."""
+    db = get_db()
+    db.save_latest_mkt_period(data)
+
+def save_model_hit_sum(data: pd.DataFrame):
+    """save mkt score to DB."""
+    db = get_db()
+    db.save_model_hit_sum(data)
+
+def get_model_results(model_id: str):
+    """save mkt period to DB."""
+    db = get_db()
+    return db.get_model_results(model_id)
+
 def save_mkt_period(data: pd.DataFrame):
     """save mkt period to DB."""
     db = get_db()
-    db.save_mkt_period(data)
-
-def save_mkt_period_mp(data: pd.DataFrame, mode):
-    """save mkt period to DB."""
-    from dao import MimosaDB
-    db = MimosaDB(mode=mode)
     db.save_mkt_period(data)
 
 def save_mkt_dist(data: pd.DataFrame):
@@ -277,24 +286,6 @@ def save_latest_pattern_results(data):
     db = get_db()
     db.save_latest_pattern_results(data)
 
-def save_latest_pattern_results_mp(data, mode):
-    """Save latest pattern results to DB.
-
-    Parameters
-    ----------
-    data: Pandas's DataFrame
-        A table of pattern results with columns for market_id, pattern_id,
-        price_date and value.
-
-    See Also
-    --------
-    PatternResultField
-
-    """
-    from dao import MimosaDB
-    db = MimosaDB(mode=mode)
-    db.save_latest_pattern_results(data)
-
 def update_latest_pattern_results(pid: str, data: pd.DataFrame):
     """Save latest pattern results to DB.
 
@@ -319,10 +310,10 @@ def clean_db_cache():
     db = get_db()
     db.clean_db_cache()
 
-def clone_db_cache(batch_type):
+def clone_db_cache(batch_type, controller):
     """Build local cache from db."""
     db = get_db()
-    db.clone_db_cache(batch_type)
+    db.clone_db_cache(batch_type, controller)
 
 def get_pattern_results(market_id, patterns, begin_date=None, batch_type:BatchType=None):
     """Get pattern results from begining date to the latest of given market from DB.
@@ -456,17 +447,6 @@ def save_latest_pattern_occur(data: pd.DataFrame):
     db = get_db()
     db.save_latest_pattern_occur(data)
 
-def save_latest_pattern_occur_mp(data: pd.DataFrame, mode):
-    """Save pattern occured info
-
-    Parameters
-    ----------
-    data: pd.DataFram
-    """
-    from dao import MimosaDB
-    db = MimosaDB(mode=mode)
-    db.save_latest_pattern_occur(data)
-
 def update_latest_pattern_occur(pid: str, data: pd.DataFrame):
     """Save pattern occured info
 
@@ -487,17 +467,6 @@ def save_latest_pattern_distribution(data: pd.DataFrame):
     data: pd.DataFram
     """
     db = get_db()
-    db.save_latest_pattern_distribution(data)
-
-def save_latest_pattern_distribution_mp(data: pd.DataFrame, mode):
-    """Save pattern occured info
-
-    Parameters
-    ----------
-    data: pd.DataFram
-    """
-    from dao import MimosaDB
-    db = MimosaDB(mode=mode)
     db.save_latest_pattern_distribution(data)
 
 def update_latest_pattern_distribution(pid: str, data: pd.DataFrame):
@@ -1354,6 +1323,37 @@ def _is_all_none(recv: List[Any]) -> bool:
     return True
 
 
+def get_hit_sum(data, market_id, batch_type):
+    if data is not None and len(data) > 0:
+        hits = []
+        cnts = []
+        for period in PREDICT_PERIODS:
+            cur = data[[PredictResultField.DATE.value,
+                       PredictResultField.UPPER_BOUND.value,
+                       PredictResultField.LOWER_BOUND.value]][data[PredictResultField.PERIOD.value].values == period
+                       ].set_index(PredictResultField.DATE.value).sort_index()
+            if len(cur) <= 0:
+                cnts.append(0)
+                hits.append(0)
+                continue
+            frs = get_future_return(market_id, period, cur.index.values[0].astype('datetime64[D]').tolist(), batch_type) * 100
+            values = pd.concat([cur, frs], axis=1, sort=True).dropna().values
+            if len(values) > 0:
+                cnts.append(len(values))
+                hits.append(((values[:,0] >= values[:,-1]) & (values[:,1] <= values[:,-1])).sum())
+            else:
+                cnts.append(0)
+                hits.append(0)
+    else:
+        hits = [0 for p in PREDICT_PERIODS]
+        cnts = [0 for p in PREDICT_PERIODS]
+    ret = pd.DataFrame()
+    ret[ModelMarketHitSumField.HIT.value] = hits
+    ret[ModelMarketHitSumField.FCST_CNT.value] = cnts
+    ret[ModelMarketHitSumField.DATE_PERIOD.value] = PREDICT_PERIODS
+    ret[ModelMarketHitSumField.MARKET_CODE.value] = market_id
+    return ret
+
 def model_update(model_id: str, batch_controller: ThreadController, batch_type:BatchType):
     """更新模型預測結果
 
@@ -1383,8 +1383,10 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
     model = get_model_info(model_id)
     logging.info(f'start model update on {model_id}')
     latest_dates = model.get_latest_dates()
+    old_results = get_model_results(model_id)
     markets = model.markets if model.markets else get_markets()
     ret_buffer = []
+    ret_hit_sums = []
     for mid in markets:
         if not controller.isactive:
             MT_MANAGER.release(model_id)
@@ -1395,21 +1397,36 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             logging.info('batch terminated')
             return
         if mid in latest_dates:
-            ret_buffer.append(model_predict(model, mid, latest_dates[mid],
-                                            controller=controller, batch_type=batch_type))
+            cur = model_predict(model, mid, latest_dates[mid], controller=controller, batch_type=batch_type)
+            ret_buffer.append(cur)
+            if cur is not None:
+                cur = cur.copy()
+                cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
+                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100    
+            ret_hit_sums.append(get_hit_sum(pd.concat([old_results[mid], cur[old_results[mid].columns]], axis=0), mid, batch_type))
         else:
-            ret_buffer.append(model_predict(model, mid, controller=controller, batch_type=batch_type))
-    def save_result(data, model_id, exection_id, controller):
-        if data and not _is_all_none(data):
-            ret = pd.concat(data, axis=0)
-            ret.index = np.arange(len(ret))
+            cur = model_predict(model, mid, controller=controller, batch_type=batch_type)
+            ret_buffer.append(cur)
+            if cur is not None:
+                cur = cur.copy()
+                cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
+                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100          
+            ret_hit_sums.append(get_hit_sum(cur, mid, batch_type))
+    def save_result(data_1, data_2, model_id, exection_id, controller):
+        if data_1 and not _is_all_none(data_1):
+            ret_1 = pd.concat(data_1, axis=0)
+            ret_1.index = np.arange(len(ret_1))
+            ret_2 = pd.concat(data_2, axis=0)
+            ret_2.index = np.arange(len(ret_2))
+            ret_2['MODEL_ID'] = model_id
             logging.info(f'finish model update on {model_id}')
             if controller.isactive:
-                save_model_results(model_id, ret, ModelExecution.BATCH_PREDICT)
+                save_model_hit_sum(ret_2)
+                save_model_results(model_id, ret_1, ModelExecution.BATCH_PREDICT)
         if controller.isactive:
             set_model_execution_complete(exection_id)
         MT_MANAGER.release(model_id)
-    t = CatchableTread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
+    t = CatchableTread(target=save_result, args=(ret_buffer, ret_hit_sums, model_id, exection_id, controller))
     t.start()
     return t
 
@@ -1735,7 +1752,7 @@ model_queue = ExecQueue(MODEL_QUEUE_LIMIT, 'm_queue')
 pattern_queue = ExecQueue(PATTERN_QUEUE_LIMIT, 'p_queue')
 
 class DbWriterBase(metaclass=ABCMeta):
-    def __init__(self, controller: ThreadController, stime=5):
+    def __init__(self, controller: ThreadController, stime=1):
         self._controller = controller
         self._active = False
         self._pool = []
@@ -1790,20 +1807,25 @@ class DbWriterBase(metaclass=ABCMeta):
 class HistoryReturnWriter(DbWriterBase):
 
     def _save(self, data):
-        p = mp.Process(target=save_mkt_period_mp, args=(data, get_exec_mode()))
-        p.start()
-        p.join()
+        save_mkt_period(data)
 
     @property
     def _TASK_NAME(self):
         return 'market period values'
 
+class LatestReturnWriter(DbWriterBase):
+
+    def _save(self, data):
+        save_latest_mkt_period(data)
+
+    @property
+    def _TASK_NAME(self):
+        return 'market latest period values'
+
 class PatternOccurWriter(DbWriterBase):
 
     def _save(self, data):
-        p = mp.Process(target=save_latest_pattern_occur_mp, args=(data, get_exec_mode()))
-        p.start()
-        p.join()
+        save_latest_pattern_occur(data)
 
     @property
     def _TASK_NAME(self):
@@ -1812,9 +1834,7 @@ class PatternOccurWriter(DbWriterBase):
 class PatternDistWriter(DbWriterBase):
 
     def _save(self, data):
-        p = mp.Process(target=save_latest_pattern_distribution_mp, args=(data, get_exec_mode()))
-        p.start()
-        p.join()
+        save_latest_pattern_distribution()
 
     @property
     def _TASK_NAME(self):
@@ -1843,9 +1863,7 @@ class LatestPatternWriter(DbWriterBase):
 
     @classmethod
     def _save(self, data):
-        p = mp.Process(target=save_latest_pattern_results_mp, args=(data, get_exec_mode()))
-        p.start()
-        p.join()
+        save_latest_pattern_results(data)
 
     @property
     def _TASK_NAME(self):
@@ -1931,6 +1949,70 @@ def get_latest_patterns(mids, pids, dates, pvalues):
     ret[PatternResultField.PATTERN_ID.value] = pids
     return ret
 
+def gen_return_value_v2(mid: str):
+    cps = get_market_data(mid)['CP'].dropna()
+    ds = cps.index.values
+    vs = cps.values
+    mis = []
+    dps = []
+    pds = []
+    dds = []
+    ncs = []
+    ncrs = []
+    rps = []
+    rms = []
+    rss = []
+    rcs = []
+    frs = []
+    for p in PREDICT_PERIODS:
+        if len(vs) <= p:
+            frs.append(np.full(len(vs), np.nan))
+            continue
+        dps.append(p)
+        pds.append(ds[-1])
+        dds.append(ds[-p-1])
+        nc = vs[p:] - vs[:-p]
+        ncs.append(nc[-1])
+        ncr = nc / vs[:-p]
+        ncrs.append(ncr[-1])
+        frs.append(np.concatenate([ncr, np.full(p, np.nan)]))
+        rps.append(p)
+        rms.append(ncr.mean())
+        rss.append(ncr.std())
+    ret = pd.DataFrame()
+    if dps:
+        ret[MarketPeriodField.DATE_PERIOD.value] = dps
+        ret[MarketPeriodField.PRICE_DATE.value] = np.array(pds)
+        ret[MarketPeriodField.DATA_DATE.value] = np.array(dds)
+        ret[MarketPeriodField.NET_CHANGE.value] = np.array(ncs)
+        ret[MarketPeriodField.NET_CHANGE_RATE.value] = np.array(ncrs)
+        ret[MarketPeriodField.MARKET_ID.value] = mid
+
+    ret_1 = np.array(frs).T
+    ret_2 = pd.DataFrame()
+    if rms:
+        dps = []
+        mss = []
+        ubs = []
+        lbs = []
+
+        s_, l_, u_ = list(zip(*get_score_meta_info()))
+        s_ = np.array(s_)
+        l_ = np.array(l_)
+        u_ = np.array(u_)
+        for p, m, s in zip(rps, rms, rss):
+            dps.append(np.full(len(s_), p))
+            mss.append(s_)
+            ubs.append(m + s * u_)
+            lbs.append(m + s * l_)
+
+        ret_2[MarketScoreField.DATE_PERIOD.value] = np.concatenate(dps)
+        ret_2[MarketScoreField.MARKET_SCORE.value] = np.concatenate(mss)
+        ret_2[MarketScoreField.UPPER_BOUND.value] = np.concatenate(ubs)
+        ret_2[MarketScoreField.LOWER_BOUND.value] = np.concatenate(lbs)
+        ret_2[MarketScoreField.MARKET_ID.value] = mid
+    return ret, ret_1, ret_2
+
 def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
     MD_CACHE.clear()
     smd_buffer = {}
@@ -1940,11 +2022,12 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         return
     logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
     if batch_type == BatchType.SERVICE_BATCH:
-        market_return_writer = HistoryReturnWriter(controller)
+        #market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
-        pattern_occur_writer = PatternOccurWriter(controller)
-        pattern_dist_writer = PatternDistWriter(controller)
-        ret_mstats = []
+        #pattern_occur_writer = PatternOccurWriter(controller)
+        #pattern_dist_writer = PatternDistWriter(controller)
+        #ret_mstats = []
+        ret_values = []
         ret_mscores = []
     smd_buffer['mids'] = {mid: idx for idx, mid in enumerate(markets)}
     pids = [each.pid for each in patterns]
@@ -1954,10 +2037,11 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     smd_buffer['freturns'] = []
     for market in markets:
         if batch_type == BatchType.SERVICE_BATCH:
-            r1, r2, r3 = gen_return_value(market)
-            market_return_writer.add(r1)
-            ret_mstats.append(r2)
-            ret_mscores.append(r3)
+            rvalues, freturns, mscores = gen_return_value_v2(market)
+            #market_return_writer.add(rvalues)
+            #ret_mstats.append(r2)
+            ret_values.append(rvalues)
+            ret_mscores.append(mscores)
         result_buffer = []
         for pattern in patterns:
             if not controller.isactive:
@@ -1968,47 +2052,47 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         if not controller.isactive:
             logging.info('batch terminated')
             return
-        result_buffer = []
-        for period in PREDICT_PERIODS:
-            if not controller.isactive:
-                logging.info('batch terminated')
-                return
-            result_buffer.append(gen_future_return(market, period))
-        return_result = fast_concat(result_buffer)
+        #result_buffer = []
+        #for period in PREDICT_PERIODS:
+        #    if not controller.isactive:
+        #        logging.info('batch terminated')
+        #        return
+        #    result_buffer.append(gen_future_return(market, period))
+        #return_result = fast_concat(result_buffer)
         mdates = SMD.dencode(pattern_result.index.values)
         pvalues = SMD.pencode(pattern_result.values)
-        freturns = SMD.rencode(return_result.values)
+        freturns = SMD.rencode(freturns)
         smd_buffer['mdates'].append(mdates)
         smd_buffer['pvalues'].append(pvalues)
         smd_buffer['freturns'].append(freturns)
         if batch_type == BatchType.SERVICE_BATCH and len(pattern_result) > 0:
             latest_pattern_writer.add(get_latest_patterns(market, pids, mdates[-1], pvalues[-1]))
-            market_dist, market_occur = get_pattern_stats_info_v2(pattern_result, return_result, market)
-            pattern_dist_writer.add(market_dist)
-            pattern_occur_writer.add(market_occur)
+            #market_dist, market_occur = get_pattern_stats_info_v2(pattern_result, return_result, market)
+            #pattern_dist_writer.add(market_dist)
+            #pattern_occur_writer.add(market_occur)
         logging.debug(f'update patterns: {market}')
     smd_swap.update(**smd_buffer)
     del smd_buffer
-    tsmd = mt.Thread(target=smd_swap.dump)
+    tsmd = CatchableTread(target=smd_swap.dump)
     tsmd.start()
     ret = [tsmd]
     if batch_type == BatchType.SERVICE_BATCH:
         return_score_writer = ReturnScoreWriter(controller)
         return_score_writer.add(pd.concat(ret_mscores, axis=0))
-        return_dist_writer = ReturnDistWriter(controller)
-        return_dist_writer.add(pd.concat(ret_mstats, axis=0))
-        market_return_writer.stop()
+        market_return_writer = LatestReturnWriter(controller)
+        market_return_writer.add(pd.concat(ret_values, axis=0))
+        #market_return_writer.stop()
         latest_pattern_writer.stop()
-        pattern_dist_writer.stop()
-        pattern_occur_writer.stop()
+        #pattern_dist_writer.stop()
+        #pattern_occur_writer.stop()
         return_score_writer.stop()
-        return_dist_writer.stop()
+        #return_dist_writer.stop()
+        market_return_writer.stop()
         if not controller.isactive:
             logging.info('batch terminated')
             return
         ret += [market_return_writer.get_thread(), latest_pattern_writer.get_thread(),
-                pattern_dist_writer.get_thread(), pattern_occur_writer.get_thread(),
-                return_score_writer.get_thread(), return_dist_writer.get_thread()]
+                return_score_writer.get_thread()]
     return ret
 
 
@@ -2148,7 +2232,7 @@ def _batch(batch_type):
         if controller.isactive:
             logging.info(f"Start batch ")
             clean_db_cache()
-            clone_db_cache(batch_type)
+            clone_db_cache(batch_type, controller)
             logging.info("Start pattern update")
             if batch_type == BatchType.SERVICE_BATCH:
                 truncate_swap_tables()
