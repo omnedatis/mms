@@ -100,6 +100,7 @@ class TableName(Enum):
     PREDICT_RESULT = "FCST_MODEL_MKT_VALUE"
     PREDICT_RESULT_HISTORY = "FCST_MODEL_MKT_VALUE_HISTORY"
     SCORE_META = "FCST_SCORE"
+    MODEL_MKT_HIT_SUM = "MODEL_MKT_HIT_SUM"
 
 class StoredProcedule(Enum):
     """SP名稱
@@ -478,3 +479,20 @@ class ModelExecutionField(Enum):
     STATUS_CODE = "STATUS_CODE"
     START_DT = "START_DT"
     END_DT = "END_DT"
+
+class ModelMarketHitSumField(Enum):
+    """觀點準確率資訊
+
+    Members
+    -------
+    MODEL_ID: 觀點ID
+    MARKET_CODE: 市場代碼
+    DATE_PERIOD: 預測天期
+    HIT: 命中次數
+    FCST_CNT: 預測總數
+    """
+    MODEL_ID = "MODEL_ID"
+    MARKET_CODE = "MARKET_CODE"
+    DATE_PERIOD = "DATE_PERIOD"
+    HIT = "HIT"
+    FCST_CNT = "FCST_CNT"

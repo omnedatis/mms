@@ -6,13 +6,14 @@ import os
 import pandas as pd
 import pickle
 import traceback
+import threading as mt
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 from model import (ModelInfo, PatternInfo,
                 pickle_dump, pickle_load,
                 get_filed_name_of_future_return)
-from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, MarketOccurField, PatternResultField,
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, MarketOccurField, ModelMarketHitSumField, PatternResultField,
                    TableName, MarketDistField, ModelExecution, PredictResultField,
                    MarketPeriodField, MarketScoreField, MarketHistoryPriceField,
                    MarketInfoField, DSStockInfoField, PatternInfoField,
@@ -69,6 +70,119 @@ class MimosaDB:
                               (engine_conf, user, password, ip_addr,
                               port, db_name, charset))
       return engine
+
+    def _clone_model_results(self, clean_first: bool=False):
+        """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
+        , 則將會沿用舊資料, 不會進行下載
+
+        Parameters
+        ----------
+        clean_first: bool
+            是否要在執行複製前先清空本地端資料
+
+        Returns
+        -------
+        None.
+        """
+        if clean_first:
+            if os.path.exists(f"{DATA_LOC}/model_results"):
+                files = os.listdir(f'{DATA_LOC}/model_results')
+                for file in files:
+                    os.remove(f'{DATA_LOC}/model_results/{file}')
+                os.rmdir(f'{DATA_LOC}/model_results')
+        if not os.path.exists(f"{DATA_LOC}/model_results"):
+            logging.info('Clone model predict result from db')
+            os.makedirs(f'{DATA_LOC}/model_results', exist_ok=True)
+        engine = self._engine()
+        # 這邊犧牲效能, 換取較小的記憶體消耗量
+        # 取得所有觀點ID
+        sql = f"""
+            SELECT
+                {ModelInfoField.MODEL_ID.value}
+            FROM
+                {TableName.MODEL_INFO.value}
+        """
+        model_ids = (pd.read_sql_query(sql, engine)
+            [ModelInfoField.MODEL_ID.value].values.tolist())
+        
+        sql = f"""
+            SELECT
+                {MarketInfoField.MARKET_CODE.value}
+            FROM
+                {TableName.MKT_INFO.value}
+        """
+        market_ids = (pd.read_sql_query(sql, engine)
+            [MarketInfoField.MARKET_CODE.value].values.tolist())
+        
+        for model_id_i, model_id in enumerate(model_ids):
+            logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id}')
+            if os.path.exists(f'{DATA_LOC}/model_results/{model_id}.pkl'):
+                continue
+            sql = f"""
+                SELECT
+                    {PredictResultField.MARKET_ID.value},
+                    {PredictResultField.PERIOD.value}, 
+                    {PredictResultField.DATE.value}, 
+                    {PredictResultField.UPPER_BOUND.value},
+                    {PredictResultField.LOWER_BOUND.value}
+                FROM
+                    {TableName.PREDICT_RESULT_HISTORY.value}
+                WHERE
+                    {PredictResultField.MODEL_ID.value}='{model_id}'
+            """
+            data = pd.read_sql_query(sql, engine)
+            result = {}
+            # 儲存各市場預測結果
+            for market_id in market_ids:
+                mkt_data_cond = (
+                    data[PredictResultField.MARKET_ID.value] == market_id)
+                mkt_data = data[mkt_data_cond][[
+                        PredictResultField.PERIOD.value,
+                        PredictResultField.DATE.value,
+                        PredictResultField.UPPER_BOUND.value,
+                        PredictResultField.LOWER_BOUND.value
+                    ]]
+                result[market_id] = mkt_data
+            pickle_dump(result, f'{DATA_LOC}/model_results/{model_id}.pkl')
+            logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
+        logging.info('Clone model predict result from db finished')
+    
+    def clone_model_results(self, clean_first: bool=False):
+        """非同步取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
+        , 則將會沿用舊資料, 不會進行下載
+
+        Parameters
+        ----------
+        clean_first: bool
+            是否要在執行複製前先清空本地端資料
+
+        Returns
+        -------
+        None.
+        """
+        t = mt.Thread(target=self._clone_model_results, args=(clean_first, ))
+        t.start()
+
+    def get_model_results(self, model_id: str) -> Dict[str, pd.DataFrame]:
+        """取得指定模型的歷史預測結果資料
+
+        Parameters
+        ----------
+        model_id: str
+            觀點 ID
+
+        Returns
+        -------
+        data: Dict[str, pd.DataFrame]
+            指定模型下的各市場預測結果, 欄位資料有
+             - PredictResultField.PERIOD.value,  
+             - PredictResultField.DATE.value,  
+             - PredictResultField.UPPER_BOUND.value,  
+             - PredictResultField.LOWER_BOUND.value  
+        """
+        self._clone_model_results()
+        data = pickle_load(f'{DATA_LOC}/model_results/{model_id}.pkl')
+        return data
 
     def _clean_market_data(self):
         """ 清除當前本地端市場歷史資料
@@ -1379,7 +1493,7 @@ class MimosaDB:
             pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_SCORE_SWAP.pkl')
         logging.info('Save market score finished')
 
-    def _save_latest_mkt_period(self, data: pd.DataFrame):
+    def save_latest_mkt_period(self, data: pd.DataFrame):
         """ 儲存市場各天期最新歷史報酬
         儲存各市場各天期最新歷史報酬
 
@@ -1408,22 +1522,11 @@ class MimosaDB:
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
         data[MarketPeriodField.PRICE_DATE.value] = data[MarketPeriodField.PRICE_DATE.value].astype('datetime64[D]')
-
-        # 移除傳入各天期報酬中較舊的報酬
-        group_data = data.groupby([
-            MarketPeriodField.MARKET_ID.value,
-            MarketPeriodField.DATE_PERIOD.value])
-        latest_data = []
-        for group_i, group in group_data:
-            max_date = np.max(group[MarketPeriodField.PRICE_DATE.value].values)
-            latest_data.append(
-                group[group[MarketPeriodField.PRICE_DATE.value].values == max_date])
-        latest_data = pd.concat(latest_data, axis=0)
         
         logging.info('Save market period')
         if not self.READ_ONLY:
             # 新增最新資料
-            latest_data.to_sql(
+            data.to_sql(
                 f'{TableName.MKT_PERIOD.value}_SWAP',
                 engine,
                 if_exists='append',
@@ -1431,7 +1534,7 @@ class MimosaDB:
                 method='multi',
                 index=False)
         if self.WRITE_LOCAL:
-            pickle_dump(latest_data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.pkl')
+            pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MKT_PERIOD_SWAP.pkl')
         logging.info('Save market period finished')
 
     def save_mkt_period(self, data: pd.DataFrame):
@@ -1451,7 +1554,7 @@ class MimosaDB:
         engine = self._engine()
 
         # 儲存最新市場各天期報酬
-        self._save_latest_mkt_period(data.copy(deep=True))
+        self.save_latest_mkt_period(data.copy(deep=True))
 
         now = datetime.datetime.now()
         create_by = self.CREATE_BY
@@ -1818,3 +1921,43 @@ class MimosaDB:
             with engine.begin() as db_conn:
                 db_conn.execute(sql)
             logging.info('Start truncate swap tables finished')
+
+    def save_model_hit_sum(self, data:pd.DataFrame):
+        """儲存模型預測結果準確率
+        
+        Parameters
+        ----------
+        data: pd.DataFrame
+            模型預測結果準確率
+        
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        now = datetime.datetime.now()
+        create_dt = now
+        data['CREATE_BY'] = self.CREATE_BY
+        data['CREATE_DT'] = create_dt
+        model_id = data.iloc[0][ModelMarketHitSumField.MODEL_ID.value]
+
+        if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl')
+                db_data = db_data[db_data[ModelMarketHitSumField.MODEL_ID.value].values != model_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl')
+
+        logging.info(f'Update model hit sum')
+        if not self.READ_ONLY:
+            data.to_sql(
+                f'{TableName.MODEL_MKT_HIT_SUM.value}_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        if self.WRITE_LOCAL:
+            db_data = pickle_load(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl')
+            db_data = pd.concat([db_data, data], axis=0)
+            pickle_dump(db_data, f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl')
+        logging.info(f'Update model hit sum finished')
