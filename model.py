@@ -2266,7 +2266,7 @@ def _batch(batch_type):
         if controller.isactive:
             logging.info(f"Start batch ")
             clean_db_cache()
-            clone_db_cache(batch_type, controller)
+            clone_db_cache(batch_type)
             mrt = clone_model_results(controller, True)
             logging.info("Start pattern update")
             if batch_type == BatchType.SERVICE_BATCH:
