@@ -164,10 +164,12 @@ class MimosaDB:
 
         Returns
         -------
-        None.
+        t: CatchableTread
+            下載資料的執行緒
         """
         t = CatchableTread(target=self._clone_model_results, args=(controller, clean_first, ))
         t.start()
+        return t
 
     def get_model_results(self, model_id: str) -> Dict[str, pd.DataFrame]:
         """取得指定模型的歷史預測結果資料
