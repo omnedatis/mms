@@ -31,8 +31,9 @@ import time
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
  get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
- get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt, get_market_rise_prob,
- set_exec_mode, add_pattern, add_model, remove_model, MarketDataFromDb, model_queue, pattern_queue)
+ get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt,
+ get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
+ remove_model, MarketDataFromDb, model_queue, pattern_queue)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT
 from dao import MimosaDB
 from flask import Flask, request
@@ -273,6 +274,22 @@ def api_market_upprob():
     ret = get_market_rise_prob(int(date_period), market_type, category_code)
     return {"status":200, "message":"OK", "data":{"positiveWeight":float(ret)}}
 
+@app.route("/markets/distribution", methods=["GET"])
+def api_market_distribution():
+    try:
+        logging.info(f"api_market_distribution receiving: {request.args}")
+        data = request.args
+        date_period = data["datePeriod"]
+        market_type = data.get("marketType") or None
+        category_code = data.get("categoryCode") or None
+    except Exception as esp:
+        logging.error(traceback.format_exc())
+        return {"status":400,
+                "message":"Invalid request argument",
+                "data":None}
+    ret = get_mkt_dist_info(int(date_period), market_type, category_code)
+    ret = [{"marketCode":key, "returnMean":float(mean), "returnStd":float(std), "samples":int(counts)} for key, (mean, std, counts) in ret.items()]
+    return {"status":200, "message":"OK", "data":ret}
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
