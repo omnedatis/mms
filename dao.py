@@ -1948,6 +1948,46 @@ class MimosaDB:
         model_id = data.iloc[0][ModelMarketHitSumField.MODEL_ID.value]
 
         if self.WRITE_LOCAL and self.READ_ONLY:
+            if os.path.exists(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}_SWAP.pkl'):
+                db_data = pickle_load(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}_SWAP.pkl')
+                db_data = db_data[db_data[ModelMarketHitSumField.MODEL_ID.value].values != model_id]
+                pickle_dump(db_data, f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}_SWAP.pkl')
+
+        logging.info(f'Insert into model hit sum swap')
+        if not self.READ_ONLY:
+            data.to_sql(
+                f'{TableName.MODEL_MKT_HIT_SUM.value}_SWAP',
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        if self.WRITE_LOCAL:
+            db_data = pickle_load(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}_SWAP.pkl')
+            db_data = pd.concat([db_data, data], axis=0)
+            pickle_dump(db_data, f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}_SWAP.pkl')
+        logging.info(f'Insert into model hit sum swap finished')
+
+    def update_model_hit_sum(self, data:pd.DataFrame):
+        """儲存模型預測結果準確率至當前準確率表
+        
+        Parameters
+        ----------
+        data: pd.DataFrame
+            模型預測結果準確率
+        
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        now = datetime.datetime.now()
+        create_dt = now
+        data['CREATE_BY'] = self.CREATE_BY
+        data['CREATE_DT'] = create_dt
+        model_id = data.iloc[0][ModelMarketHitSumField.MODEL_ID.value]
+
+        if self.WRITE_LOCAL and self.READ_ONLY:
             if os.path.exists(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl'):
                 db_data = pickle_load(f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl')
                 db_data = db_data[db_data[ModelMarketHitSumField.MODEL_ID.value].values != model_id]
@@ -1956,7 +1996,7 @@ class MimosaDB:
         logging.info(f'Update model hit sum')
         if not self.READ_ONLY:
             data.to_sql(
-                f'{TableName.MODEL_MKT_HIT_SUM.value}_SWAP',
+                f'{TableName.MODEL_MKT_HIT_SUM.value}',
                 engine,
                 if_exists='append',
                 chunksize=10000,
