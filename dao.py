@@ -106,7 +106,7 @@ class MimosaDB:
         """
         model_ids = (pd.read_sql_query(sql, engine)
             [ModelInfoField.MODEL_ID.value].values.tolist())
-        
+
         sql = f"""
             SELECT
                 {MarketInfoField.MARKET_CODE.value}
@@ -115,7 +115,7 @@ class MimosaDB:
         """
         market_ids = (pd.read_sql_query(sql, engine)
             [MarketInfoField.MARKET_CODE.value].values.tolist())
-        
+
         for model_id_i, model_id in enumerate(model_ids):
             logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id}')
             if os.path.exists(f'{DATA_LOC}/model_results/{model_id}.pkl'):
@@ -123,8 +123,8 @@ class MimosaDB:
             sql = f"""
                 SELECT
                     {PredictResultField.MARKET_ID.value},
-                    {PredictResultField.PERIOD.value}, 
-                    {PredictResultField.DATE.value}, 
+                    {PredictResultField.PERIOD.value},
+                    {PredictResultField.DATE.value},
                     {PredictResultField.UPPER_BOUND.value},
                     {PredictResultField.LOWER_BOUND.value}
                 FROM
@@ -133,6 +133,9 @@ class MimosaDB:
                     {PredictResultField.MODEL_ID.value}='{model_id}'
             """
             data = pd.read_sql_query(sql, engine)
+            data[PredictResultField.DATE.value
+                 ] = data[PredictResultField.DATE.value
+                          ].values.astype('datetime64[D]')
             result = {}
             # 儲存各市場預測結果
             for market_id in market_ids:
@@ -150,7 +153,7 @@ class MimosaDB:
             pickle_dump(result, f'{DATA_LOC}/model_results/{model_id}.pkl')
             logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
         logging.info('Clone model predict result from db finished')
-    
+
     def clone_model_results(self, controller, clean_first: bool=False):
         """非同步取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
@@ -183,10 +186,10 @@ class MimosaDB:
         -------
         data: Dict[str, pd.DataFrame]
             指定模型下的各市場預測結果, 欄位資料有
-             - PredictResultField.PERIOD.value,  
-             - PredictResultField.DATE.value,  
-             - PredictResultField.UPPER_BOUND.value,  
-             - PredictResultField.LOWER_BOUND.value  
+             - PredictResultField.PERIOD.value,
+             - PredictResultField.DATE.value,
+             - PredictResultField.UPPER_BOUND.value,
+             - PredictResultField.LOWER_BOUND.value
         """
         self._clone_model_results()
         data = pickle_load(f'{DATA_LOC}/model_results/{model_id}.pkl')
@@ -232,11 +235,11 @@ class MimosaDB:
             engine = self._engine()
             sql = f"""
                 SELECT
-                    {MarketHistoryPriceField.MARKET_CODE.value}, 
-                    {MarketHistoryPriceField.PRICE_DATE.value}, 
-                    {MarketHistoryPriceField.OPEN_PRICE.value}, 
-                    {MarketHistoryPriceField.HIGH_PRICE.value}, 
-                    {MarketHistoryPriceField.LOW_PRICE.value}, 
+                    {MarketHistoryPriceField.MARKET_CODE.value},
+                    {MarketHistoryPriceField.PRICE_DATE.value},
+                    {MarketHistoryPriceField.OPEN_PRICE.value},
+                    {MarketHistoryPriceField.HIGH_PRICE.value},
+                    {MarketHistoryPriceField.LOW_PRICE.value},
                     {MarketHistoryPriceField.CLOSE_PRICE.value}
                 FROM
                     {table_name}
@@ -244,10 +247,10 @@ class MimosaDB:
             data = pd.read_sql_query(sql, engine)
             result = pd.DataFrame(
                 data[[
-                    MarketHistoryPriceField.MARKET_CODE.value, 
-                    MarketHistoryPriceField.OPEN_PRICE.value, 
-                    MarketHistoryPriceField.HIGH_PRICE.value, 
-                    MarketHistoryPriceField.LOW_PRICE.value, 
+                    MarketHistoryPriceField.MARKET_CODE.value,
+                    MarketHistoryPriceField.OPEN_PRICE.value,
+                    MarketHistoryPriceField.HIGH_PRICE.value,
+                    MarketHistoryPriceField.LOW_PRICE.value,
                     MarketHistoryPriceField.CLOSE_PRICE.value]].values,
                 index=data[MarketHistoryPriceField.PRICE_DATE.value].values.astype('datetime64[D]'),
                 columns=['MARKET_CODE', 'OP', 'HP', 'LP', 'CP']
@@ -374,19 +377,19 @@ class MimosaDB:
             engine = self._engine()
             sql = f"""
                 SELECT
-                    ptn.{PatternInfoField.PATTERN_ID.value}, 
-                    mcr.{MacroInfoField.FUNC_CODE.value}, 
-                    para.{PatternParamField.PARAM_CODE.value}, 
-                    para.{PatternParamField.PARAM_VALUE.value}, 
+                    ptn.{PatternInfoField.PATTERN_ID.value},
+                    mcr.{MacroInfoField.FUNC_CODE.value},
+                    para.{PatternParamField.PARAM_CODE.value},
+                    para.{PatternParamField.PARAM_VALUE.value},
                     mp.{MacroParamField.PARAM_TYPE.value}
                 FROM
                     {TableName.PAT_INFO.value} AS ptn
                 LEFT JOIN
                     (
                         SELECT
-                            {PatternParamField.PATTERN_ID.value}, 
-                            {PatternParamField.MACRO_ID.value}, 
-                            {PatternParamField.PARAM_CODE.value}, 
+                            {PatternParamField.PATTERN_ID.value},
+                            {PatternParamField.MACRO_ID.value},
+                            {PatternParamField.PARAM_CODE.value},
                             {PatternParamField.PARAM_VALUE.value}
                         FROM
                             {TableName.PAT_PARAM.value}
@@ -395,7 +398,7 @@ class MimosaDB:
                 LEFT JOIN
                     (
                         SELECT
-                            {MacroInfoField.MACRO_ID.value}, 
+                            {MacroInfoField.MACRO_ID.value},
                             {MacroInfoField.FUNC_CODE.value}
                         FROM
                             {TableName.MACRO_INFO.value}
@@ -404,16 +407,16 @@ class MimosaDB:
                 LEFT JOIN
                     (
                         SELECT
-                            {MacroParamField.MACRO_ID.value}, 
-                            {MacroParamField.PARAM_CODE.value}, 
+                            {MacroParamField.MACRO_ID.value},
+                            {MacroParamField.PARAM_CODE.value},
                             {MacroParamField.PARAM_TYPE.value}
                         FROM
                             {TableName.MACRO_PARAM.value}
                     ) AS mp
-                ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND 
+                ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND
                 para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
-                ORDER BY 
-                    ptn.{PatternInfoField.PATTERN_ID.value}, 
+                ORDER BY
+                    ptn.{PatternInfoField.PATTERN_ID.value},
                     mcr.{MacroInfoField.FUNC_CODE.value} ASC;
             """
             data = pd.read_sql_query(sql, engine)
@@ -473,8 +476,8 @@ class MimosaDB:
                 INNER JOIN
                     (
                         SELECT
-                            {ModelExecutionField.MODEL_ID.value}, 
-                            {ModelExecutionField.STATUS_CODE.value}, 
+                            {ModelExecutionField.MODEL_ID.value},
+                            {ModelExecutionField.STATUS_CODE.value},
                             {ModelExecutionField.END_DT.value}
                         FROM
                             {TableName.MODEL_EXECUTION.value}
@@ -731,7 +734,7 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                {PredictResultField.MARKET_ID.value}, 
+                {PredictResultField.MARKET_ID.value},
                 MAX({PredictResultField.DATE.value}) AS DATA_DATE
             FROM
                 {TableName.PREDICT_RESULT.value}
@@ -766,7 +769,7 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                {PredictResultField.MARKET_ID.value}, 
+                {PredictResultField.MARKET_ID.value},
                 MIN({PredictResultField.DATE.value}) AS DATA_DATE
             FROM
                 {TableName.PREDICT_RESULT_HISTORY.value}
@@ -938,7 +941,7 @@ class MimosaDB:
                 latest_data.append(
                     group[group[PredictResultField.DATE.value].values == max_date])
             latest_data = pd.concat(latest_data, axis=0)
-            
+
             db_data = pd.DataFrame(columns=latest_data.columns)
             if self.WRITE_LOCAL and self.READ_ONLY:
                 if os.path.exists(f'{DATA_LOC}/local_out/{table_name}.pkl'):
@@ -950,13 +953,13 @@ class MimosaDB:
                 db_data = None
                 sql = f"""
                     SELECT
-                        CREATE_BY, CREATE_DT, 
-                        {PredictResultField.MODEL_ID.value}, 
+                        CREATE_BY, CREATE_DT,
+                        {PredictResultField.MODEL_ID.value},
                         {PredictResultField.MARKET_ID.value},
-                        {PredictResultField.PERIOD.value}, 
-                        {PredictResultField.DATE.value}, 
-                        {PredictResultField.PREDICT_VALUE.value}, 
-                        {PredictResultField.UPPER_BOUND.value}, 
+                        {PredictResultField.PERIOD.value},
+                        {PredictResultField.DATE.value},
+                        {PredictResultField.PREDICT_VALUE.value},
+                        {PredictResultField.UPPER_BOUND.value},
                         {PredictResultField.LOWER_BOUND.value}
                     FROM
                         {TableName.PREDICT_RESULT.value}
@@ -1181,7 +1184,7 @@ class MimosaDB:
                 ModelExecution.ADD_BACKTEST.value]:
                 sql = f"""
                     DELETE FROM {TableName.MODEL_EXECUTION.value}
-                    WHERE {ModelExecutionField.MODEL_ID.value}='{model_id}' AND 
+                    WHERE {ModelExecutionField.MODEL_ID.value}='{model_id}' AND
                     {ModelExecutionField.STATUS_CODE.value}='{exection}'
                 """
                 engine.execute(sql)
@@ -1196,11 +1199,11 @@ class MimosaDB:
 
             # 建立 status
             COLUMNS = [
-                'CREATE_BY', 'CREATE_DT', 
+                'CREATE_BY', 'CREATE_DT',
                 ModelExecutionField.EXEC_ID.value,
-                ModelExecutionField.MODEL_ID.value, 
-                ModelExecutionField.STATUS_CODE.value, 
-                ModelExecutionField.START_DT.value, 
+                ModelExecutionField.MODEL_ID.value,
+                ModelExecutionField.STATUS_CODE.value,
+                ModelExecutionField.START_DT.value,
                 ModelExecutionField.END_DT.value
                 ]
             now = datetime.datetime.now()
@@ -1262,7 +1265,7 @@ class MimosaDB:
                 {TableName.MODEL_EXECUTION.value}
             SET
                 {ModelExecutionField.END_DT.value}='{now}',
-                MODIFY_DT='{now}', 
+                MODIFY_DT='{now}',
                 MODIFY_BY='{self.MODIFY_BY}',
                 {ModelExecutionField.STATUS_CODE.value}='{status}'
             WHERE
@@ -1292,16 +1295,16 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                model.{ModelInfoField.MODEL_ID.value}, 
-                me.{ModelExecutionField.STATUS_CODE.value}, 
+                model.{ModelInfoField.MODEL_ID.value},
+                me.{ModelExecutionField.STATUS_CODE.value},
                 me.{ModelExecutionField.END_DT.value}
             FROM
                 {TableName.MODEL_INFO.value} AS model
             LEFT JOIN
                 (
                     SELECT
-                        {ModelExecutionField.MODEL_ID.value}, 
-                        {ModelExecutionField.STATUS_CODE.value}, 
+                        {ModelExecutionField.MODEL_ID.value},
+                        {ModelExecutionField.STATUS_CODE.value},
                         {ModelExecutionField.END_DT.value}
                     FROM
                         {TableName.MODEL_EXECUTION.value}
@@ -1363,21 +1366,21 @@ class MimosaDB:
         logging.info(f'Save pattern event')
         if not self.READ_ONLY:
             sql_template = f"""
-                INSERT INTO 
-                    {TableName.PATTERN_RESULT.value}_SWAP 
+                INSERT INTO
+                    {TableName.PATTERN_RESULT.value}_SWAP
                 (
-                    CREATE_BY, CREATE_DT, 
-                    {PatternResultField.PATTERN_ID.value}, 
+                    CREATE_BY, CREATE_DT,
+                    {PatternResultField.PATTERN_ID.value},
                     {PatternResultField.MARKET_ID.value},
                     {PatternResultField.DATE.value},
                     {PatternResultField.VALUE.value}
                 )
-                VALUES 
+                VALUES
             """
             vals = [
                 str(
                     (
-                        str(x[0]), 
+                        str(x[0]),
                         datetime.datetime.strftime(x[1], '%Y-%m-%d %H:%M:%S'),
                         str(x[2]),
                         str(x[3]),
@@ -1385,7 +1388,7 @@ class MimosaDB:
                         str(x[5])
                     )
                 ) for x in data[[
-                    'CREATE_BY', 'CREATE_DT', 
+                    'CREATE_BY', 'CREATE_DT',
                     PatternResultField.PATTERN_ID.value,
                     PatternResultField.MARKET_ID.value,
                     PatternResultField.DATE.value,
@@ -1563,7 +1566,7 @@ class MimosaDB:
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
         data[MarketPeriodField.PRICE_DATE.value] = data[MarketPeriodField.PRICE_DATE.value].astype('datetime64[D]')
-        
+
         logging.info('Save market period')
         if not self.READ_ONLY:
             # 新增最新資料
@@ -1605,8 +1608,8 @@ class MimosaDB:
         data_net_change_rate = data[MarketPeriodField.NET_CHANGE_RATE.value].values * 100
 
         data = data[[
-            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value, 
-            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value, 
+            'CREATE_BY', 'CREATE_DT', MarketPeriodField.MARKET_ID.value,
+            MarketPeriodField.DATE_PERIOD.value, MarketPeriodField.PRICE_DATE.value,
             MarketPeriodField.DATA_DATE.value, MarketPeriodField.NET_CHANGE.value]]
         data[MarketPeriodField.NET_CHANGE_RATE.value] = data_net_change_rate
 
@@ -1874,19 +1877,19 @@ class MimosaDB:
         engine = self._engine()
         sql = f"""
             SELECT
-                ptn.{PatternInfoField.PATTERN_ID.value}, 
-                mcr.{MacroInfoField.FUNC_CODE.value}, 
-                para.{PatternParamField.PARAM_CODE.value}, 
-                para.{PatternParamField.PARAM_VALUE.value}, 
+                ptn.{PatternInfoField.PATTERN_ID.value},
+                mcr.{MacroInfoField.FUNC_CODE.value},
+                para.{PatternParamField.PARAM_CODE.value},
+                para.{PatternParamField.PARAM_VALUE.value},
                 mp.{MacroParamField.PARAM_TYPE.value}
             FROM
                 {TableName.PAT_INFO.value} AS ptn
             LEFT JOIN
                 (
                     SELECT
-                        {PatternParamField.PATTERN_ID.value}, 
-                        {PatternParamField.MACRO_ID.value}, 
-                        {PatternParamField.PARAM_CODE.value}, 
+                        {PatternParamField.PATTERN_ID.value},
+                        {PatternParamField.MACRO_ID.value},
+                        {PatternParamField.PARAM_CODE.value},
                         {PatternParamField.PARAM_VALUE.value}
                     FROM
                         {TableName.PAT_PARAM.value}
@@ -1895,7 +1898,7 @@ class MimosaDB:
             LEFT JOIN
                 (
                     SELECT
-                        {MacroInfoField.MACRO_ID.value}, 
+                        {MacroInfoField.MACRO_ID.value},
                         {MacroInfoField.FUNC_CODE.value}
                     FROM
                         {TableName.MACRO_INFO.value}
@@ -1904,16 +1907,16 @@ class MimosaDB:
             LEFT JOIN
                 (
                     SELECT
-                        {MacroParamField.MACRO_ID.value}, 
-                        {MacroParamField.PARAM_CODE.value}, 
+                        {MacroParamField.MACRO_ID.value},
+                        {MacroParamField.PARAM_CODE.value},
                         {MacroParamField.PARAM_TYPE.value}
                     FROM
                         {TableName.MACRO_PARAM.value}
                 ) AS mp
-            ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND 
+            ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND
             para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
-            ORDER BY 
-                ptn.{PatternInfoField.PATTERN_ID.value}, 
+            ORDER BY
+                ptn.{PatternInfoField.PATTERN_ID.value},
                 mcr.{MacroInfoField.FUNC_CODE.value} ASC;
         """
         data = pd.read_sql_query(sql, engine)
@@ -1965,12 +1968,12 @@ class MimosaDB:
 
     def save_model_hit_sum(self, data:pd.DataFrame):
         """儲存模型預測結果準確率
-        
+
         Parameters
         ----------
         data: pd.DataFrame
             模型預測結果準確率
-        
+
         Returns
         -------
         None.
@@ -2005,12 +2008,12 @@ class MimosaDB:
 
     def update_model_hit_sum(self, data:pd.DataFrame):
         """儲存模型預測結果準確率至當前準確率表
-        
+
         Parameters
         ----------
         data: pd.DataFrame
             模型預測結果準確率
-        
+
         Returns
         -------
         None.
