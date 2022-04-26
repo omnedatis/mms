@@ -2476,3 +2476,27 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
     stats = np.array([func(r) for r in returns])
     cnts, ups = stats.sum(axis=0)
     return (ups / cnts) * 100
+
+def get_mkt_dist_info(period, market_type=None, category_code=None):
+    def func(r):
+        ret = r[(r==r)]
+        return ret.mean() * 100, ret.std() * 100, len(ret)
+
+    if smd.isempty():
+        return {}
+
+    smd_lock.acquire()
+    mids, pids, _, pvalues, freturns = smd.raw_data
+    smd_lock.release()
+
+    markets = get_markets(market_type, category_code)
+    if not markets:
+        return {}
+    pidx = PREDICT_PERIODS.index(period)
+    midxs = [mids[mid] for mid in markets]
+    returns = [freturns[idx][:,pidx] for idx in midxs]
+    stats = np.array([func(r) for r in returns])
+    drops = ~np.isnan(stats).any(axis=1)
+    markets = np.array(markets)[drops].tolist()
+    stats = stats[drops]
+    return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
