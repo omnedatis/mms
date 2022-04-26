@@ -208,6 +208,11 @@ def save_model_hit_sum(data: pd.DataFrame):
     db = get_db()
     db.save_model_hit_sum(data)
 
+def update_model_hit_sum(data: pd.DataFrame):
+    """save mkt score to DB."""
+    db = get_db()
+    db.update_model_hit_sum(data)
+
 def get_model_results(model_id: str):
     """save mkt period to DB."""
     db = get_db()
@@ -1402,7 +1407,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             if cur is not None:
                 cur = cur.copy()
                 cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
-                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100    
+                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100
             ret_hit_sums.append(get_hit_sum(pd.concat([old_results[mid], cur[old_results[mid].columns]], axis=0), mid, batch_type))
         else:
             cur = model_predict(model, mid, controller=controller, batch_type=batch_type)
@@ -1410,7 +1415,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             if cur is not None:
                 cur = cur.copy()
                 cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
-                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100          
+                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100
             ret_hit_sums.append(get_hit_sum(cur, mid, batch_type))
     def save_result(data_1, data_2, model_id, exection_id, controller):
         if data_1 and not _is_all_none(data_1):
@@ -1447,14 +1452,30 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
+    def _get_hit_sum(mid, data):
+        data[PredictResultField.UPPER_BOUND.value] = data[PredictResultField.UPPER_BOUND.value].values * 100
+        data[PredictResultField.LOWER_BOUND.value] = data[PredictResultField.LOWER_BOUND.value].values * 100
+        return get_hit_sum(data, mid, BatchType.INIT_BATCH)
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
         return
     try:
+        ret_buffer = []
         model = get_model_info(model_id)
-        model_create(model, controller)
-        model_backtest(model, controller)
+        recv = model_create(model, controller)
+        if recv is not None:
+            ret_buffer.append(recv)
+        recv = model_backtest(model, controller)
+        if recv is not None:
+            ret_buffer.append(recv)
+        if ret_buffer:
+            ret = [_get_hit_sum(mid, data) for mid, data in pd.concat(ret_buffer).groupby(PredictResultField.MARKET_ID.value)]
+            if ret:
+                ret = pd.concat(ret, axis=0)
+                ret.index = np.arange(len(ret))
+                ret['MODEL_ID'] = model_id
+                update_model_hit_sum(ret)
         MT_MANAGER.release(model_id)
 
     except Exception as esp:
@@ -1533,7 +1554,7 @@ def remove_model(model_id):
     logging.info('finish remove model')
 
 
-def model_create(model: ModelInfo, controller: ThreadController, batch_type:BatchType):
+def model_create(model: ModelInfo, controller: ThreadController):
     """建立模型
 
         建立模型的工作流程如下：
@@ -1553,6 +1574,7 @@ def model_create(model: ModelInfo, controller: ThreadController, batch_type:Batc
     ModelExecution, model_predict
 
     """
+    batch_type = BatchType.INIT_BATCH
     logging.info('start model create')
     if not controller.isactive:
         logging.info('model create terminated')
@@ -1575,9 +1597,11 @@ def model_create(model: ModelInfo, controller: ThreadController, batch_type:Batc
             save_model_results(model.model_id, ret, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
+    if ret_buffer:
+        return ret
 
 
-def model_backtest(model: ModelInfo, controller: ThreadController, batch_type:BatchType):
+def model_backtest(model: ModelInfo, controller: ThreadController):
     """執行模型回測
 
         執行模型回測的工作流程如下：
@@ -1600,6 +1624,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController, batch_type:Ba
     ModelExecution, model_predict
 
     """
+    batch_type = BatchType.INIT_BATCH
     logging.info('start model backtest')
     if not controller.isactive:
         logging.info('model backtest terminated')
@@ -1615,6 +1640,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController, batch_type:Ba
                                  ,batch_type=batch_type).dropna()[-MIN_BACKTEST_LEN:]
                   for mid in markets}
         tdate = max(earliest_dates.values()) if earliest_dates else datetime.date.today()
+        all_results = []
         while x_data:
             ret_buffer = []
             # 在每輪迴圈開始時，tdate是上輪迴圈模型可預測的最小日期
@@ -1657,9 +1683,13 @@ def model_backtest(model: ModelInfo, controller: ThreadController, batch_type:Ba
                 # 將此輪所有市場的回測結果上傳至DB
                 logging.info('finish model backtest')
                 save_model_results(model.model_id, ret, ModelExecution.ADD_BACKTEST)
+                all_results.append(ret)
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
+    if all_results:
+        return pd.concat(all_results, axis=0)
+
 class CatchableTread:
 
     def __init__(self, target, args=None, name=None):
