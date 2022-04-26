@@ -1361,13 +1361,47 @@ class MimosaDB:
 
         logging.info(f'Save pattern event')
         if not self.READ_ONLY:
-            data.to_sql(
-                f'{TableName.PATTERN_RESULT.value}_SWAP',
-                engine,
-                if_exists='append',
-                chunksize=10000,
-                method='multi',
-                index=False)
+            sql_template = f"""
+                INSERT INTO 
+                    {TableName.PATTERN_RESULT.value}_SWAP 
+                (
+                    CREATE_BY, CREATE_DT, 
+                    {PatternResultField.PATTERN_ID.value}, 
+                    {PatternResultField.MARKET_ID.value},
+                    {PatternResultField.DATE.value},
+                    {PatternResultField.VALUE.value}
+                )
+                VALUES 
+            """
+            vals = [
+                str(
+                    (
+                        str(x[0]), 
+                        datetime.datetime.strftime(x[1], '%Y-%m-%d %H:%M:%S'),
+                        str(x[2]),
+                        str(x[3]),
+                        str(x[4])[:10],
+                        str(x[5])
+                    )
+                ) for x in data[[
+                    'CREATE_BY', 'CREATE_DT', 
+                    PatternResultField.PATTERN_ID.value,
+                    PatternResultField.MARKET_ID.value,
+                    PatternResultField.DATE.value,
+                    PatternResultField.VALUE.value
+                ]].values
+            ]
+            batch_size = 10000
+            batch_idxs = [i for i in range(0, len(vals)+batch_size, batch_size)]
+            logging.info(f'Pattern event len: {len(vals)}')
+            for idx_i, idx in enumerate(batch_idxs):
+                if idx_i == 0:
+                    continue
+                sql = sql_template + ','.join(vals[batch_idxs[idx_i-1]:idx])
+                logging.info(f'Save pattern event: #{batch_idxs[idx_i-1]} ~ #{idx}')
+                engine.execute(sql)
+                logging.info(f'Save pattern event: #{batch_idxs[idx_i-1]} ~ #{idx} finished')
+            logging.info(f'Pattern event len: {len(vals)} finished')
         if self.WRITE_LOCAL:
             pickle_dump(data, f'{DATA_LOC}/local_out/FCST_PAT_MKT_EVENT_SWAP.pkl')
         logging.info(f'Save pattern event finished')
