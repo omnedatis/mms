@@ -1188,10 +1188,9 @@ class MimosaDB:
 
             # 取得 EXEC_ID
             logging.info(f'Call {StoredProcedule.GET_SERIAL_NO.value}')
-            sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('EXEC_ID', @EXEC_ID)"
+            sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('EXEC_ID', null)"
             with engine.begin() as db_conn:
-                db_conn.execute(sql)
-                results = db_conn.execute('SELECT @EXEC_ID').fetchone()
+                results = db_conn.execute(sql).fetchone()
                 exec_id = results[0]
             logging.info(f"Get SERIAL_NO: {exec_id}")
 
