@@ -1409,11 +1409,16 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             cur = model_predict(model, mid, latest_dates[mid], controller=controller, batch_type=batch_type)
             ret_buffer.append(cur)
             if cur is not None:
+                # old and new
                 cur = cur.copy()
                 cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
                 cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100
-            ret_hit_sums.append(get_hit_sum(pd.concat([old_results[mid], cur[old_results[mid].columns]], axis=0), mid, batch_type))
+                ret_hit_sums.append(get_hit_sum(pd.concat([old_results[mid], cur[old_results[mid].columns]], axis=0), mid, batch_type))
+            else:
+                # only old
+                ret_hit_sums.append(get_hit_sum(old_results[mid], mid, batch_type))
         else:
+            # no old
             cur = model_predict(model, mid, controller=controller, batch_type=batch_type)
             ret_buffer.append(cur)
             if cur is not None:
