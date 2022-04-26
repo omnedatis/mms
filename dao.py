@@ -71,7 +71,7 @@ class MimosaDB:
                               port, db_name, charset))
       return engine
 
-    def _clone_model_results(self, controller, clean_first: bool=False):
+    def _clone_model_results(self, controller=None, clean_first: bool=False):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
 
@@ -136,7 +136,7 @@ class MimosaDB:
             result = {}
             # 儲存各市場預測結果
             for market_id in market_ids:
-                if not controller.isactive:
+                if controller is not None and not controller.isactive:
                     return
                 mkt_data_cond = (
                     data[PredictResultField.MARKET_ID.value] == market_id)
