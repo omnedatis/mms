@@ -2505,12 +2505,12 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
     else:
         didx = 0
     ret = []
-    mdates = mdates.tolist()
-    ext_dates = ext_dates.tolist()
+    mdates = np.concatenate([mdates[didx:], ext_dates]).tolist()
+    eidx = len(mdates) - PREDICT_PERIODS[-1]
     for period in PREDICT_PERIODS:
         ret += [{MarketPeriodField.DATA_DATE.value: a,
                  MarketPeriodField.PRICE_DATE.value: b,
                  MarketPeriodField.DATE_PERIOD.value: period
-                 } for a, b in zip(mdates[didx:],
-                                   mdates[didx + period:] + ext_dates[:period])]
+                 } for a, b in zip(mdates[:eidx],
+                                   mdates[period:eidx+period])]
     return ret
