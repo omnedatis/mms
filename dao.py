@@ -259,23 +259,13 @@ class MimosaDB:
         """
         fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
         self._sync_model_results()
-        # 取得所有市場代碼
-        mkt_info = pickle_load(f'{DATA_LOC}/market_info.pkl')
-        market_ids = mkt_info[MarketInfoField.MARKET_CODE.value].values.tolist()
 
         data = pickle_load(fp)
-        result = {}
-        # 儲存各市場預測結果
-        for market_id in market_ids:
-            mkt_data_cond = (
-                data[PredictResultField.MARKET_ID.value] == market_id)
-            mkt_data = data[mkt_data_cond][[
-                    PredictResultField.PERIOD.value,
-                    PredictResultField.DATE.value,
-                    PredictResultField.UPPER_BOUND.value,
-                    PredictResultField.LOWER_BOUND.value
-                ]]
-            result[market_id] = mkt_data
+        result = {
+            market_id: group 
+            for market_id, group in
+            data.groupby(PredictResultField.MARKET_ID.value)
+        }
         return result
 
     def _clean_market_data(self):
