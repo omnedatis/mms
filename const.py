@@ -78,6 +78,7 @@ class TableName(Enum):
     PREDICT_RESULT: 觀點最新預測結果資訊表
     PREDICT_RESULT_HISTORY: 觀點歷史預測結果資訊表
     SCORE_META: 分數標籤統計資訊表
+    MODEL_MKT_HIT_SUM: 觀點命中次數記錄表
     """
     DS_S_STOCK = "DS_S_STOCK"
     MKT_INFO = "FCST_MKT"

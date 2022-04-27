@@ -6,7 +6,7 @@ Created on Tue March 8 17:07:36 2021
 """
 import pickle
 import os
-from typing import Any, List, Union
+from typing import Any, List, Union, Dict
 import pandas as pd
 import numpy as np
 
@@ -72,6 +72,33 @@ def fast_concat(data: List[Union[pd.Series, pd.DataFrame]]) -> pd.DataFrame:
             columns.append(each.name)
             values.append(each.values)
     return pd.DataFrame(np.array(values).T, columns=columns, index=index)
+
+def dict_equals(dict_a: Dict, dict_b: Dict) -> bool:
+    """判斷兩個 dict 內容是否完全相等
+
+    Parameters
+    ----------
+    dict_a: Dict
+        字典 A
+    dict_b: Dict
+        字典 B
+    
+    Returns
+    -------
+    result: bool
+        傳入的兩個字典內容是否完全相等
+    """
+    result = True
+    if len(dict_a) != len(dict_b):
+        result = False
+    for key, value in dict_a.items():
+        if key not in dict_b:
+            result = False
+            break
+        if dict_b[key] != value:
+            result = False
+            break
+    return result
 
 class _CacheElement:
     def __init__(self, prev: int, next_: int, key: str, value: Any):
