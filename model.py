@@ -2286,7 +2286,6 @@ def _batch(batch_type):
                         logging.error(t.esp)
                 logging.info("End model update")
                 if controller.isactive:
-                    update_model_accuracy()
                     checkout_fcst_data()
                     swap_smd_index()
                     swap_smd()
