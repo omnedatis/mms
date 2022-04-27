@@ -320,9 +320,9 @@ def clone_db_cache(batch_type):
     db = get_db()
     db.clone_db_cache(batch_type)
 
-def clone_model_results(controller, clean_first):
+def clone_model_results(controller):
     db = get_db()
-    return db.clone_model_results(controller, clean_first)
+    return db.clone_model_results(controller)
 
 def get_pattern_results(market_id, patterns, begin_date=None, batch_type:BatchType=None):
     """Get pattern results from begining date to the latest of given market from DB.
@@ -2254,7 +2254,7 @@ def _batch(batch_type):
             logging.info(f"Start batch ")
             clean_db_cache()
             clone_db_cache(batch_type)
-            mrt = clone_model_results(controller, True)
+            mrt = clone_model_results(controller)
             logging.info("Start pattern update")
             if batch_type == BatchType.SERVICE_BATCH:
                 truncate_swap_tables()
