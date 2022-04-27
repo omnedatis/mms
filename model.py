@@ -1395,7 +1395,6 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
     old_results = get_model_results(model_id)
     markets = model.markets if model.markets else get_markets()
     ret_buffer = []
-    ret_hit_sums = []
     for mid in markets:
         if not controller.isactive:
             MT_MANAGER.release(model_id)
@@ -1407,40 +1406,27 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             return
         if mid in latest_dates:
             cur = model_predict(model, mid, latest_dates[mid], controller=controller, batch_type=batch_type)
-            ret_buffer.append(cur)
-            if cur is not None:
-                # old and new
-                cur = cur.copy()
-                cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
-                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100
-                ret_hit_sums.append(get_hit_sum(pd.concat([old_results[mid], cur[old_results[mid].columns]], axis=0), mid, batch_type))
-            else:
-                # only old
-                ret_hit_sums.append(get_hit_sum(old_results[mid], mid, batch_type))
         else:
-            # no old
             cur = model_predict(model, mid, controller=controller, batch_type=batch_type)
-            ret_buffer.append(cur)
-            if cur is not None:
-                cur = cur.copy()
-                cur[PredictResultField.UPPER_BOUND.value] = cur[PredictResultField.UPPER_BOUND.value].values * 100
-                cur[PredictResultField.LOWER_BOUND.value] = cur[PredictResultField.LOWER_BOUND.value].values * 100
-            ret_hit_sums.append(get_hit_sum(cur, mid, batch_type))
-    def save_result(data_1, data_2, model_id, exection_id, controller):
-        if data_1 and not _is_all_none(data_1):
-            ret_1 = pd.concat(data_1, axis=0)
-            ret_1.index = np.arange(len(ret_1))
-            ret_2 = pd.concat(data_2, axis=0)
-            ret_2.index = np.arange(len(ret_2))
-            ret_2['MODEL_ID'] = model_id
+        ret_buffer.append(cur)
+    def save_result(data, model_id, exection_id, controller):
+        if data and not _is_all_none(data):
+            ret = pd.concat(data, axis=0)
+            ret.index = np.arange(len(ret))
             logging.info(f'finish model update on {model_id}')
             if controller.isactive:
-                save_model_hit_sum(ret_2)
-                save_model_results(model_id, ret_1, ModelExecution.BATCH_PREDICT)
+                save_model_results(model_id, ret, ModelExecution.BATCH_PREDICT)
         if controller.isactive:
             set_model_execution_complete(exection_id)
+        if controller.isactive:
+            ret = [get_hit_sum(data, mid, BatchType.SERVICE_BATCH) for mid, data in get_model_results(model_id).items()]
+            if ret:
+                ret = pd.concat(ret, axis=0)
+                ret.index = np.arange(len(ret))
+                ret['MODEL_ID'] = model_id
+                save_model_hit_sum(ret)
         MT_MANAGER.release(model_id)
-    t = CatchableTread(target=save_result, args=(ret_buffer, ret_hit_sums, model_id, exection_id, controller))
+    t = CatchableTread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
     t.start()
     return t
 
@@ -1461,30 +1447,20 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
-    def _get_hit_sum(mid, data):
-        data[PredictResultField.UPPER_BOUND.value] = data[PredictResultField.UPPER_BOUND.value].values * 100
-        data[PredictResultField.LOWER_BOUND.value] = data[PredictResultField.LOWER_BOUND.value].values * 100
-        return get_hit_sum(data, mid, BatchType.INIT_BATCH)
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
         return
     try:
-        ret_buffer = []
         model = get_model_info(model_id)
-        recv = model_create(model, controller)
-        if recv is not None:
-            ret_buffer.append(recv)
-        recv = model_backtest(model, controller)
-        if recv is not None:
-            ret_buffer.append(recv)
-        if ret_buffer:
-            ret = [_get_hit_sum(mid, data) for mid, data in pd.concat(ret_buffer).groupby(PredictResultField.MARKET_ID.value)]
-            if ret:
-                ret = pd.concat(ret, axis=0)
-                ret.index = np.arange(len(ret))
-                ret['MODEL_ID'] = model_id
-                update_model_hit_sum(ret)
+        model_create(model, controller)
+        model_backtest(model, controller)
+        ret = [get_hit_sum(data, mid, BatchType.INIT_BATCH) for mid, data in get_model_results(model_id).items()]
+        if ret:
+            ret = pd.concat(ret, axis=0)
+            ret.index = np.arange(len(ret))
+            ret['MODEL_ID'] = model_id
+            update_model_hit_sum(ret)
         MT_MANAGER.release(model_id)
 
     except Exception as esp:
@@ -1495,7 +1471,7 @@ def add_model(model_id: str):
         return
 
 
-def model_recover(model_id: str, status: ModelStatus, batch_type:BatchType):
+def model_recover(model_id: str, status: ModelStatus):
     """重啟模型
 
     此函數目的為重啟因故中斷的模型：
@@ -1523,8 +1499,14 @@ def model_recover(model_id: str, status: ModelStatus, batch_type:BatchType):
     try:
         model = get_model_info(model_id)
         if status < ModelStatus.CREATED:
-            model_create(model, controller, batch_type)
-        model_backtest(model, controller, batch_type)
+            model_create(model, controller)
+        model_backtest(model, controller)
+        ret = [get_hit_sum(data, mid, BatchType.INIT_BATCH) for mid, data in get_model_results(model_id).items()]
+        if ret:
+            ret = pd.concat(ret, axis=0)
+            ret.index = np.arange(len(ret))
+            ret['MODEL_ID'] = model_id
+            update_model_hit_sum(ret)
         MT_MANAGER.release(model_id)
 
     except Exception as esp:
