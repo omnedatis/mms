@@ -2487,3 +2487,31 @@ def get_mkt_dist_info(period, market_type=None, category_code=None):
     markets = np.array(markets)[drops].tolist()
     stats = stats[drops]
     return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
+
+def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] = None):
+    def _extend_dates(bdate, length):
+        ext_dates = np.arange(1, (int(length / 5) + 1) * 7 + 1) + bdate
+        ext_dates = ext_dates[(ext_dates - 4) % 7 < 5][:length]
+        return ext_dates
+
+    smd_lock.acquire()
+    mids, _, mdates, _, _ = smd.raw_data
+    smd_lock.release()
+    midx = mids[market_id]
+    mdates = mdates[midx]
+    ext_dates = SMD.ddecode(_extend_dates(mdates[-1], PREDICT_PERIODS[-1]))
+    mdates = SMD.ddecode(mdates)
+    if begin_date:
+        didx = (mdates < begin_date).sum()
+    else:
+        didx = 0
+    ret = []
+    mdates = mdates.tolist()
+    ext_dates = ext_dates.tolist()
+    for period in PREDICT_PERIODS:
+        ret += [{MarketPeriodField.DATA_DATE.value: a,
+                 MarketPeriodField.PRICE_DATE.value: b,
+                 MarketPeriodField.DATE_PERIOD.value: period
+                 } for a, b in zip(mdates[didx:],
+                                   mdates[didx + period:] + ext_dates[:period])]
+    return ret
