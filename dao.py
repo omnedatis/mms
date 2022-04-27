@@ -21,6 +21,7 @@ from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, Mar
                    PatternParamField, MacroInfoField, MacroParamField,
                    ModelInfoField, ModelMarketMapField, ModelPatternMapField,
                    ModelExecutionField, StoredProcedule)
+from utils import dict_equals
 
 class MimosaDB:
     """
@@ -71,7 +72,82 @@ class MimosaDB:
                               port, db_name, charset))
       return engine
 
-    def _clone_model_results(self, controller=None, clean_first: bool=False):
+    def _convert_exec_to_status(self, exec_info: pd.DataFrame) -> Dict[str, Dict[str, datetime.date]]:
+        """將 EXECUTION RECORD 轉換為以完成狀態字典表示, 若 exec_info 長度為 0, 
+        則會回傳空字典 {}
+
+        Parameters
+        ----------
+        exec_info: pd.DataFrame
+            執行狀態直表
+        
+        Returns
+        -------
+        result: Dict[str, Dict[str, datetime.datetime]]
+            完成狀態字典, 格式為 [model_id] - [status_code] - end_dt
+        """
+        FINISHED_STATUS = [
+            ModelExecution.ADD_BACKTEST_FINISHED.value, 
+            ModelExecution.ADD_PREDICT_FINISHED.value, 
+            ModelExecution.BATCH_PREDICT_FINISHED.value
+            ]
+        exec_info = exec_info.copy()
+        exec_info[ModelExecutionField.START_DT.value] = (
+            exec_info[ModelExecutionField.START_DT.value].values.astype('datetime64[ms]')
+            )
+        exec_info[ModelExecutionField.END_DT.value] = (
+            exec_info[ModelExecutionField.END_DT.value].values.astype('datetime64[ms]')
+            )
+        status_records = exec_info.groupby(by=[
+            ModelExecutionField.MODEL_ID.value,
+            ModelExecutionField.STATUS_CODE.value
+            ])
+        result = {}
+        for (model_id, status_code), records in status_records:
+            if model_id not in result:
+                result[model_id] = {}
+            if status_code not in FINISHED_STATUS:
+                    continue
+            max_date = np.max(records[ModelExecutionField.END_DT.value].values)
+            # datetime64[ms] 轉型為 datetime.datetime
+            result[model_id][status_code] = max_date.tolist()
+        return result
+
+    def _sync_model_status(self):
+        """與資料庫同步本地端模型預測結果執行狀態, 
+        沒有紀錄 -> 不會寫檔, 
+        有部分記錄 -> 沒有完成狀態的不會寫 key
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        logging.info("Sync local model execution status")
+        # 取得所有觀點資訊
+        execution_info = pickle_load(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl')
+        model_status_info = self._convert_exec_to_status(execution_info)
+        for model_id in model_status_info:
+            fp = f'{LOCAL_DB}/views/{model_id}'
+            need_update = False
+            # 取得觀點執行狀態
+            status_fp = f"{fp}/status.pkl"
+            # 判斷是否需要更新歷史預測結果
+            if not os.path.exists(status_fp):
+                need_update = True
+            model_status = pickle_load(status_fp)
+            if not dict_equals(model_status, model_status_info[model_id]):
+                need_update = True
+            if need_update:
+                result = model_status_info[model_id]
+                os.makedirs(fp, exist_ok=True)
+                pickle_dump(result, f"{fp}/status.pkl")
+        logging.info("Sync local model execution status finished")
+
+    def _sync_model_results(self, controller=None):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
 
@@ -86,91 +162,80 @@ class MimosaDB:
         -------
         None.
         """
-        if clean_first:
-            if os.path.exists(f"{DATA_LOC}/model_results"):
-                files = os.listdir(f'{DATA_LOC}/model_results')
-                for file in files:
-                    os.remove(f'{DATA_LOC}/model_results/{file}')
-                os.rmdir(f'{DATA_LOC}/model_results')
         if not os.path.exists(f"{DATA_LOC}/model_results"):
             logging.info('Clone model predict result from db')
             os.makedirs(f'{DATA_LOC}/model_results', exist_ok=True)
         engine = self._engine()
         # 這邊犧牲效能, 換取較小的記憶體消耗量
         # 取得所有觀點ID
-        sql = f"""
-            SELECT
-                {ModelInfoField.MODEL_ID.value}
-            FROM
-                {TableName.MODEL_INFO.value}
-        """
-        model_ids = (pd.read_sql_query(sql, engine)
-            [ModelInfoField.MODEL_ID.value].values.tolist())
+        model_info = pickle_load(f'{DATA_LOC}/model_training_infos.pkl')
+        model_ids = model_info[ModelInfoField.MODEL_ID.value].values.tolist()
 
-        sql = f"""
-            SELECT
-                {MarketInfoField.MARKET_CODE.value}
-            FROM
-                {TableName.MKT_INFO.value}
-        """
-        market_ids = (pd.read_sql_query(sql, engine)
-            [MarketInfoField.MARKET_CODE.value].values.tolist())
+        # 取得最新執行狀態
+        model_exec_info = pickle_load(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl')
+        model_status_records = self._convert_exec_to_status(model_exec_info)
 
         for model_id_i, model_id in enumerate(model_ids):
             logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id}')
-            if os.path.exists(f'{DATA_LOC}/model_results/{model_id}.pkl'):
-                continue
-            sql = f"""
-                SELECT
-                    {PredictResultField.MARKET_ID.value},
-                    {PredictResultField.PERIOD.value},
-                    {PredictResultField.DATE.value},
-                    {PredictResultField.UPPER_BOUND.value},
-                    {PredictResultField.LOWER_BOUND.value}
-                FROM
-                    {TableName.PREDICT_RESULT_HISTORY.value}
-                WHERE
-                    {PredictResultField.MODEL_ID.value}='{model_id}'
-            """
-            data = pd.read_sql_query(sql, engine)
-            data[PredictResultField.DATE.value
-                 ] = data[PredictResultField.DATE.value
-                          ].values.astype('datetime64[D]')
-            result = {}
-            # 儲存各市場預測結果
-            for market_id in market_ids:
-                if controller is not None and not controller.isactive:
-                    return
-                mkt_data_cond = (
-                    data[PredictResultField.MARKET_ID.value] == market_id)
-                mkt_data = data[mkt_data_cond][[
-                        PredictResultField.PERIOD.value,
-                        PredictResultField.DATE.value,
-                        PredictResultField.UPPER_BOUND.value,
-                        PredictResultField.LOWER_BOUND.value
-                    ]]
-                result[market_id] = mkt_data
-            pickle_dump(result, f'{DATA_LOC}/model_results/{model_id}.pkl')
-            logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
+            if controller is not None and not controller.isactive:
+                return
+            fp = f'{LOCAL_DB}/views/{model_id}'
+            need_update = False
+            # 取得觀點執行狀態
+            status_fp = f'{LOCAL_DB}/views/{model_id}/status.pkl'
+            # 判斷是否需要更新歷史預測結果
+            if not os.path.exists(status_fp):
+                need_update = True
+            model_status = pickle_load(status_fp)
+            if not dict_equals(model_status, model_status_records[model_id]):
+                need_update = True
+            if need_update:
+                sql = f"""
+                    SELECT
+                        *
+                    FROM
+                        {TableName.PREDICT_RESULT_HISTORY.value}
+                    WHERE
+                        {PredictResultField.MODEL_ID.value}='{model_id}'
+                """
+                data = pd.read_sql_query(sql, engine)
+                data[PredictResultField.DATE.value
+                    ] = data[PredictResultField.DATE.value
+                            ].values.astype('datetime64[D]')
+                os.makedirs(fp, exist_ok=True)
+                pickle_dump(data, f'{fp}/history_values.pkl')
+                logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
         logging.info('Clone model predict result from db finished')
 
-    def clone_model_results(self, controller, clean_first: bool=False):
-        """非同步取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
-        , 則將會沿用舊資料, 不會進行下載
+    def _sync_local_model_results(self, controller=None):
+        """與資料庫同步本地端預測結果
 
         Parameters
         ----------
         controller: ThreadController
             用於強制中斷 Thread
-        clean_first: bool
-            是否要在執行複製前先清空本地端資料
+
+        Returns
+        -------
+        None.
+        """
+        self._sync_model_results(controller=controller)
+        self._sync_model_status()
+
+    def clone_model_results(self, controller):
+        """非同步取得所有模型歷史預測結果資料
+
+        Parameters
+        ----------
+        controller: ThreadController
+            用於強制中斷 Thread
 
         Returns
         -------
         t: CatchableTread
             下載資料的執行緒
         """
-        t = CatchableTread(target=self._clone_model_results, args=(controller, clean_first, ))
+        t = CatchableTread(target=self._sync_local_model_results, args=(controller, ))
         t.start()
         return t
 
@@ -191,9 +256,26 @@ class MimosaDB:
              - PredictResultField.UPPER_BOUND.value,
              - PredictResultField.LOWER_BOUND.value
         """
-        self._clone_model_results()
-        data = pickle_load(f'{DATA_LOC}/model_results/{model_id}.pkl')
-        return data
+        fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
+        self._sync_model_results()
+        # 取得所有市場代碼
+        mkt_info = pickle_load(f'{DATA_LOC}/market_info.pkl')
+        market_ids = mkt_info[MarketInfoField.MARKET_CODE.value].values.tolist()
+
+        data = pickle_load(fp)
+        result = {}
+        # 儲存各市場預測結果
+        for market_id in market_ids:
+            mkt_data_cond = (
+                data[PredictResultField.MARKET_ID.value] == market_id)
+            mkt_data = data[mkt_data_cond][[
+                    PredictResultField.PERIOD.value,
+                    PredictResultField.DATE.value,
+                    PredictResultField.UPPER_BOUND.value,
+                    PredictResultField.LOWER_BOUND.value
+                ]]
+            result[market_id] = mkt_data
+        return result
 
     def _clean_market_data(self):
         """ 清除當前本地端市場歷史資料
@@ -307,6 +389,36 @@ class MimosaDB:
             with open(f'{DATA_LOC}/market_info.pkl', 'wb') as fp:
                 pickle.dump(data, fp)
             logging.info('Clone market info from db finished')
+
+    def _clean_model_execution(self):
+        """清除當前本地端的觀點執行紀錄
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+
+        """
+        if os.path.exists(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl'):
+            os.remove(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl')
+    
+    def _clone_model_execution(self):
+        if not os.path.exists(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl'):
+            logging.info(f'Clone {TableName.MODEL_EXECUTION.value} info from db')
+            os.makedirs(f'{DATA_LOC}', exist_ok=True)
+            engine = self._engine()
+            sql = f"""
+                SELECT
+                    *
+                FROM
+                    {TableName.MODEL_EXECUTION.value}
+            """
+            data = pd.read_sql_query(sql, engine)
+            pickle_dump(data, f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl')
+            logging.info(f'Clone {TableName.MODEL_EXECUTION.value} info from db finished')
 
     def _clean_dsstock_info(self):
         """ 清除當前本地端 TEJ 股票類別資訊
@@ -644,6 +756,7 @@ class MimosaDB:
         self._clean_model_training_infos()
         self._clean_model_markets()
         self._clean_model_patterns()
+        self._clean_model_execution()
 
     def clone_db_cache(self, batch_type:BatchType=BatchType.SERVICE_BATCH):
         """ 從資料庫載入快取
@@ -666,6 +779,7 @@ class MimosaDB:
         self._clone_model_training_infos()
         self._clone_model_markets()
         self._clone_model_patterns()
+        self._clone_model_execution()
 
     def get_markets(self, market_type: str=None, category_code: str=None):
         """get market IDs from DB.
@@ -731,24 +845,12 @@ class MimosaDB:
             date.
 
         """
-        engine = self._engine()
-        sql = f"""
-            SELECT
-                {PredictResultField.MARKET_ID.value},
-                MAX({PredictResultField.DATE.value}) AS DATA_DATE
-            FROM
-                {TableName.PREDICT_RESULT.value}
-            WHERE
-                {PredictResultField.MODEL_ID.value}='{model_id}'
-            GROUP BY
-                {PredictResultField.MARKET_ID.value}
-        """
-        data = pd.read_sql_query(sql, engine)
         result = {}
-        for i in range(len(data)):
-            market_id = data.iloc[i][PredictResultField.MARKET_ID.value]
-            result[market_id] = datetime.datetime.strptime(
-                str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
+        data = self.get_model_results(model_id)
+        for market_id in data:
+            latest_date = np.max(
+                data[market_id][PredictResultField.DATE.value].values).tolist()
+            result[market_id] = latest_date
         return result
 
     def get_earliest_dates(self, model_id:str):
@@ -766,24 +868,12 @@ class MimosaDB:
             date.
 
         """
-        engine = self._engine()
-        sql = f"""
-            SELECT
-                {PredictResultField.MARKET_ID.value},
-                MIN({PredictResultField.DATE.value}) AS DATA_DATE
-            FROM
-                {TableName.PREDICT_RESULT_HISTORY.value}
-            WHERE
-                {PredictResultField.MODEL_ID.value}='{model_id}'
-            GROUP BY
-                {PredictResultField.MARKET_ID.value}
-        """
-        data = pd.read_sql_query(sql, engine)
         result = {}
-        for i in range(len(data)):
-            market_id = data.iloc[i][PredictResultField.MARKET_ID.value]
-            result[market_id] = datetime.datetime.strptime(
-                str(data.iloc[i]['DATA_DATE']), '%Y-%m-%d').date()
+        data = self.get_model_results(model_id)
+        for market_id in data:
+            earliest_date = np.min(
+                data[market_id][PredictResultField.DATE.value].values).tolist()
+            result[market_id] = earliest_date
         return result
 
     def get_models(self):
@@ -1120,6 +1210,19 @@ class MimosaDB:
                     chunksize=10000,
                     method='multi',
                     index=False)
+                # 與本地端資料同步更新
+                history_fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
+                history_data = pd.DataFrame(columns=data.columns)
+                if os.path.exists(history_fp):
+                    history_data = pickle_load(history_fp)
+                history_data = pd.concat([history_data, data], axis=0)
+                history_data = history_data.drop_duplicates(subset=[
+                    PredictResultField.MODEL_ID.value,
+                    PredictResultField.MARKET_ID.value,
+                    PredictResultField.PERIOD.value,
+                    PredictResultField.DATE.value
+                ])
+                pickle_dump(history_data, history_fp)
             except Exception as e:
                 logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
                 logging.debug(traceback.format_exc())
@@ -1248,17 +1351,19 @@ class MimosaDB:
 
         sql = f"""
             SELECT
-                {ModelExecutionField.STATUS_CODE.value}
+                {ModelExecutionField.MODEL_ID.value}
+                {ModelExecutionField.STATUS_CODE.value},
             FROM
                 {TableName.MODEL_EXECUTION.value}
             WHERE
                 {ModelExecutionField.EXEC_ID.value}='{exec_id}';
         """
-        exec_data = pd.read_sql_query(sql, engine)[ModelExecutionField.STATUS_CODE.value]
+        exec_data = pd.read_sql_query(sql, engine).iloc[0]
         if len(exec_data) == 0:
             raise Exception('call set_model_execution_complete before set_model_execution_start')
 
-        status = finished_status[exec_data.values[0]]
+        status = finished_status[exec_data[ModelExecutionField.STATUS_CODE.value]]
+        model_id = exec_data[ModelExecutionField.MODEL_ID.value]
         if not self.READ_ONLY:
             sql = f"""
             UPDATE
@@ -1272,6 +1377,14 @@ class MimosaDB:
                 {ModelExecutionField.EXEC_ID.value}='{exec_id}';
             """
             engine.execute(sql)
+
+            # 同步更新本地端紀錄
+            status_fp = f'{LOCAL_DB}/views/{model_id}/status.pkl'
+            local_status = {}
+            if os.path.exists(status_fp):
+                local_status = pickle_load(status_fp)
+            local_status[status] = now
+            pickle_dump(local_status, status_fp)
 
     def get_recover_model_execution(self):
         """ 取得模型最新執行狀態
@@ -1292,6 +1405,7 @@ class MimosaDB:
             [(model_id, ModelExecution), ...]
 
         """
+        # TODO
         engine = self._engine()
         sql = f"""
             SELECT
