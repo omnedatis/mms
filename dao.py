@@ -1307,6 +1307,7 @@ class MimosaDB:
                 ModelExecutionField.END_DT.value
                 ]
             now = datetime.datetime.now()
+            now = np.datetime64(now).astype('datetime64[s]').tolist()
             create_by = self.CREATE_BY
             create_dt = now
             start_dt = now
@@ -1338,6 +1339,7 @@ class MimosaDB:
 
         """
         now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
         engine = self._engine()
 
         finished_status = {
