@@ -1169,6 +1169,14 @@ class MimosaDB:
             exec_type == ModelExecution.BATCH_PREDICT):
             self.save_model_latest_results(model_id, data.copy(), exec_type)
         logging.info('start saving model results')
+        if (exec_type == ModelExecution.ADD_PREDICT or
+            exec_type == ModelExecution.ADD_BACKTEST):
+            table_name = f'{TableName.PREDICT_RESULT_HISTORY.value}'
+        elif exec_type == ModelExecution.BATCH_PREDICT:
+            table_name = f'{TableName.PREDICT_RESULT_HISTORY.value}_SWAP'
+        else:
+            logging.error(f'Unknown execution type: {exec_type}')
+            return -1
         # 製作儲存結構
         now = datetime.datetime.now()
         engine = self._engine()
@@ -1193,7 +1201,7 @@ class MimosaDB:
         if not self.READ_ONLY:
             try:
                 data.to_sql(
-                    f'{TableName.PREDICT_RESULT_HISTORY.value}_SWAP',
+                    table_name,
                     engine,
                     if_exists='append',
                     chunksize=10000,
