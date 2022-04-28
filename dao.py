@@ -841,7 +841,7 @@ class MimosaDB:
         data = self.get_model_results(model_id)
         for market_id in data:
             datas = (
-                data[PredictResultField.DATE.value].values.astype('datetime64[D]'))
+                data[market_id][PredictResultField.DATE.value].values.astype('datetime64[D]'))
             latest_date = np.max(datas).tolist()
             result[market_id] = latest_date
         return result
@@ -865,7 +865,7 @@ class MimosaDB:
         data = self.get_model_results(model_id)
         for market_id in data:
             datas = (
-                data[PredictResultField.DATE.value].values.astype('datetime64[D]'))
+                data[market_id][PredictResultField.DATE.value].values.astype('datetime64[D]'))
             earliest_date = np.min(datas).tolist()
             result[market_id] = earliest_date
         return result
