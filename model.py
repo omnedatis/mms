@@ -2394,7 +2394,7 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     drops = ~np.isnan(stats).any(axis=1)
     markets = np.array(markets)[drops].tolist()
     stats = stats[drops]
-    return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
+    return {m: (v, r, int(c)) for m, (v, r, c) in zip(markets, stats)}
 
 def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_mkt_dist_info([pattern_id], period, market_type, category_code)
@@ -2485,7 +2485,7 @@ def get_mkt_dist_info(period, market_type=None, category_code=None):
     drops = ~np.isnan(stats).any(axis=1)
     markets = np.array(markets)[drops].tolist()
     stats = stats[drops]
-    return {m: (v, r, int(c)) for m, (v, r, c) in zip(mids, stats)}
+    return {m: (v, r, int(c)) for m, (v, r, c) in zip(markets, stats)}
 
 def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] = None):
     def _extend_dates(bdate, length):
