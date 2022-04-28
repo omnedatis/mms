@@ -1,4 +1,4 @@
-name: py_cal
+name: D:\workspace\mimosa-ai\env
 channels:
   - defaults
 dependencies:
@@ -14,19 +14,26 @@ dependencies:
   - wheel=0.37.1=pyhd3eb1b0_0
   - wincertstore=0.2=py38haa95532_2
   - pip:
+    - attrs==21.4.0
     - click==8.0.4
     - colorama==0.4.4
+    - flasgger==0.9.5
     - flask==2.0.3
     - greenlet==1.1.2
+    - importlib-resources==5.7.1
     - itsdangerous==2.1.1
     - jinja2==3.0.3
     - joblib==1.1.0
+    - jsonschema==4.4.0
     - markupsafe==2.1.1
+    - mistune==2.0.2
     - numpy==1.22.3
     - pandas==1.4.1
     - pymysql==1.0.2
+    - pyrsistent==0.18.1
     - python-dateutil==2.8.2
     - pytz==2021.3
+    - pyyaml==6.0
     - scikit-learn==1.0.2
     - scipy==1.8.0
     - six==1.16.0
@@ -34,3 +41,4 @@ dependencies:
     - threadpoolctl==3.1.0
     - waitress==2.1.0
     - werkzeug==2.0.3
+    - zipp==3.8.0
