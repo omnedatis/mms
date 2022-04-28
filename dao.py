@@ -262,6 +262,8 @@ class MimosaDB:
         self._sync_model_results()
 
         data = pickle_load(fp)
+        data[PredictResultField.DATE.value] = (
+            data[PredictResultField.DATE.value].values.astype('datetime64[D]'))
         result = {
             market_id: group 
             for market_id, group in
