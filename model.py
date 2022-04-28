@@ -2214,9 +2214,9 @@ def model_execution_recover(batch_type:BatchType):
     logging.info('Start model execution recover')
     for model, etype in get_recover_model_execution():
         if etype == ModelExecution.ADD_PREDICT:
-            model_recover(model, ModelStatus.ADDED, batch_type)
+            model_recover(model, ModelStatus.ADDED)
         if etype == ModelExecution.ADD_BACKTEST:
-            model_recover(model, ModelStatus.CREATED, batch_type)
+            model_recover(model, ModelStatus.CREATED)
     logging.info('End model execution recover')
 
 def init_db():
