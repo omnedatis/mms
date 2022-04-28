@@ -2493,9 +2493,13 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
         ext_dates = ext_dates[(ext_dates - 4) % 7 < 5][:length]
         return ext_dates
 
+    if smd.isempty():
+        return []
+
     smd_lock.acquire()
     mids, _, mdates, _, _ = smd.raw_data
     smd_lock.release()
+
     midx = mids[market_id]
     mdates = mdates[midx]
     ext_dates = SMD.ddecode(_extend_dates(mdates[-1], PREDICT_PERIODS[-1]))
