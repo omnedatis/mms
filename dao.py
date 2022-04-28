@@ -1343,8 +1343,8 @@ class MimosaDB:
 
         sql = f"""
             SELECT
-                {ModelExecutionField.MODEL_ID.value}
-                {ModelExecutionField.STATUS_CODE.value},
+                {ModelExecutionField.MODEL_ID.value},
+                {ModelExecutionField.STATUS_CODE.value}
             FROM
                 {TableName.MODEL_EXECUTION.value}
             WHERE
