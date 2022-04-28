@@ -168,7 +168,16 @@ class MimosaDB:
         model_ids = model_info[ModelInfoField.MODEL_ID.value].values.tolist()
 
         # 取得最新執行狀態
-        model_exec_info = pickle_load(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl')
+        logging.info('Query model execution from db')
+        sql = f"""
+            SELECT
+                *
+            FROM
+                {TableName.MODEL_EXECUTION.value}
+        """
+        model_exec_info = pd.read_sql_query(sql, engine)
+        logging.info('Query model execution from db finished')
+        
         model_status_records = self._convert_exec_to_status(model_exec_info)
 
         for model_id_i, model_id in enumerate(model_ids):
