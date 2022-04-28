@@ -92,12 +92,6 @@ class MimosaDB:
             ModelExecution.BATCH_PREDICT_FINISHED.value
             ]
         exec_info = exec_info.copy()
-        exec_info[ModelExecutionField.START_DT.value] = (
-            exec_info[ModelExecutionField.START_DT.value].values.astype('datetime64[ms]')
-            )
-        exec_info[ModelExecutionField.END_DT.value] = (
-            exec_info[ModelExecutionField.END_DT.value].values.astype('datetime64[ms]')
-            )
         status_records = exec_info.groupby(by=[
             ModelExecutionField.MODEL_ID.value,
             ModelExecutionField.STATUS_CODE.value
@@ -108,7 +102,8 @@ class MimosaDB:
                 result[model_id] = {}
             if status_code not in FINISHED_STATUS:
                     continue
-            max_date = np.max(records[ModelExecutionField.END_DT.value].values)
+            max_date = np.max(
+                records[ModelExecutionField.END_DT.value].values.astype('datetime64[ms]'))
             # datetime64[ms] 轉型為 datetime.datetime
             result[model_id][status_code] = max_date.tolist()
         return result
