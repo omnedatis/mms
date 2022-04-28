@@ -262,8 +262,6 @@ class MimosaDB:
         self._sync_model_results()
 
         data = pickle_load(fp)
-        data[PredictResultField.DATE.value] = (
-            data[PredictResultField.DATE.value].values.astype('datetime64[D]'))
         result = {
             market_id: group 
             for market_id, group in
@@ -842,8 +840,9 @@ class MimosaDB:
         result = {}
         data = self.get_model_results(model_id)
         for market_id in data:
-            latest_date = np.max(
-                data[market_id][PredictResultField.DATE.value].values).tolist()
+            datas = (
+                data[PredictResultField.DATE.value].values.astype('datetime64[D]'))
+            latest_date = np.max(datas).tolist()
             result[market_id] = latest_date
         return result
 
@@ -865,8 +864,9 @@ class MimosaDB:
         result = {}
         data = self.get_model_results(model_id)
         for market_id in data:
-            earliest_date = np.min(
-                data[market_id][PredictResultField.DATE.value].values).tolist()
+            datas = (
+                data[PredictResultField.DATE.value].values.astype('datetime64[D]'))
+            earliest_date = np.min(datas).tolist()
             result[market_id] = earliest_date
         return result
 
