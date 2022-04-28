@@ -2057,8 +2057,8 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
     smd_buffer['pvalues'] = []
     smd_buffer['freturns'] = []
     for market in markets:
+        rvalues, freturns, mscores = gen_return_value_v2(market)
         if batch_type == BatchType.SERVICE_BATCH:
-            rvalues, freturns, mscores = gen_return_value_v2(market)
             #market_return_writer.add(rvalues)
             #ret_mstats.append(r2)
             ret_values.append(rvalues)
