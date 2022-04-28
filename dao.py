@@ -138,9 +138,10 @@ class MimosaDB:
             # 判斷是否需要更新歷史預測結果
             if not os.path.exists(status_fp):
                 need_update = True
-            model_status = pickle_load(status_fp)
-            if not dict_equals(model_status, model_status_info[model_id]):
-                need_update = True
+            else:
+                model_status = pickle_load(status_fp)
+                if not dict_equals(model_status, model_status_info[model_id]):
+                    need_update = True
             if need_update:
                 result = model_status_info[model_id]
                 os.makedirs(fp, exist_ok=True)
