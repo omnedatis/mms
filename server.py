@@ -866,8 +866,7 @@ if __name__ == '__main__':
                  ExecMode.UAT.value: logging.INFO,
                  ExecMode.PROD.value: logging.ERROR}[exec_mode]
         file_hdlr.setLevel(level)
-        logging.basicConfig(format=fmt, handlers=[
-                            err_hdlr, info_hdlr, file_hdlr])
+        logging.basicConfig(level=0, format=fmt, handlers=[err_hdlr, info_hdlr, file_hdlr])
         model_queue.start()
         pattern_queue.start()
         set_exec_mode(exec_mode)
