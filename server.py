@@ -27,7 +27,7 @@ from concurrent.futures import thread
 import os
 import traceback
 import threading as mt
-import time
+import sys
 from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
                    get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
@@ -855,16 +855,19 @@ if __name__ == '__main__':
     if not os.path.exists(LOG_LOC):
         os.mkdir(LOG_LOC)
     try:
-        stream_hdlr = logging.StreamHandler()
-        sys_hdlr = handlers.SysLogHandler()
+        err_hdlr = logging.StreamHandler(stream=sys.stderr)
+        err_hdlr.setLevel(logging.ERROR)
+        info_hdlr = logging.StreamHandler(stream=sys.stdout)
+        info_hdlr.setLevel(logging.INFO)
         file_hdlr = handlers.TimedRotatingFileHandler(
             filename=f'{LOG_LOC}/app.log', when='D', backupCount=7)
         fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
         level = {ExecMode.DEV.value: logging.DEBUG,
                  ExecMode.UAT.value: logging.INFO,
                  ExecMode.PROD.value: logging.ERROR}[exec_mode]
-        logging.basicConfig(level=level, format=fmt, handlers=[
-                            stream_hdlr, file_hdlr, sys_hdlr])
+        file_hdlr.setLevel(level)
+        logging.basicConfig(format=fmt, handlers=[
+                            err_hdlr, info_hdlr, file_hdlr])
         model_queue.start()
         pattern_queue.start()
         set_exec_mode(exec_mode)
