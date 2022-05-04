@@ -25,6 +25,8 @@ import logging
 from logging import handlers
 from func._td import MD_CACHE
 
+PATTERN_UPDATE_CPUS = 7
+
 smd_lock = Lock()
 SMD_IDX_FILE = f'{LOCAL_DB}/smd_idx.pkl'
 smd_idx = pickle_load(SMD_IDX_FILE) if os.path.exists(SMD_IDX_FILE) else 1
@@ -702,7 +704,6 @@ def get_market_data(market_id, begin_date=None):
 class MarketDataFromDb:
     def get_ohlc(self, market_id: str) -> pd.DataFrame:
         return get_market_data(market_id)
-
 
 def set_model_execution_start(model_id, exection):
     """Set model execution to start.
@@ -1773,18 +1774,15 @@ model_queue = ExecQueue(MODEL_QUEUE_LIMIT, 'm_queue')
 pattern_queue = ExecQueue(PATTERN_QUEUE_LIMIT, 'p_queue')
 
 class DbWriterBase(metaclass=ABCMeta):
-    def __init__(self, controller: ThreadController, stime=1):
+    def __init__(self, controller, stime=1):
         self._controller = controller
         self._active = False
-        self._pool = []
-        self._lock = Lock()
+        self._pool = mp.Manager().list()
         self._thread = CatchableTread(target=self._run, args=(stime,))
         self._thread.start()
 
     def add(self, data: pd.DataFrame):
-        self._lock.acquire()
         self._pool.append(data)
-        self._lock.release()
 
     def get_thread(self):
         return self._thread
@@ -1803,15 +1801,9 @@ class DbWriterBase(metaclass=ABCMeta):
         tlen = 0
         while self._controller.isactive:
             if self._pool:
-                self._lock.acquire()
-                data = pd.concat(self._pool, axis=0)
-                if self._active and len(data) < MIN_DB_WRITING_LENGTH:
-                    self._pool = [data]
-                    self._lock.release()
-                    time.sleep(stime)
-                    continue
-                self._pool = []
-                self._lock.release()
+                recv = list(self._pool)
+                self._pool[:] = self._pool[len(recv):]
+                data = pd.concat(recv, axis=0)
                 self._save(data)
                 logging.info(f'writing {self._TASK_NAME}: #{tlen} ~ #{tlen + len(data)} records')
                 tlen = tlen + len(data)
@@ -1824,6 +1816,10 @@ class DbWriterBase(metaclass=ABCMeta):
 
     def stop(self):
         self._active = False
+
+    @property
+    def pool(self):
+        return self._pool
 
 class HistoryReturnWriter(DbWriterBase):
 
@@ -2034,64 +2030,88 @@ def gen_return_value_v2(mid: str):
         ret_2[MarketScoreField.MARKET_ID.value] = mid
     return ret, ret_1, ret_2
 
-def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BATCH):
+def do_pattern_task(market, patterns, mode,
+                    ret_mdates, ret_pvalues, ret_freturns,
+                    ret_values, ret_mscores, ret_lptterns):
+    try:
+        from func._td import set_market_data_provider
+        from dao import MimosaDB
+
+        class MDP:
+            def __init__(self, mode):
+                self._db = MimosaDB(mode=mode)
+            def get_ohlc(self, market_id: str) -> pd.DataFrame:
+                return self._db.get_market_data(market_id)
+
+        set_exec_mode(mode)
+        set_db(MimosaDB(mode=mode))
+        set_market_data_provider(MDP(mode))
+
+        rvalues, freturns, mscores = gen_return_value_v2(market)
+        if ret_values is not None:
+            ret_values.append(rvalues)
+        if ret_mscores is not None:
+            ret_mscores.append(mscores)
+        result_buffer = []
+        for pattern in patterns:
+            result_buffer.append(pattern.run(market).rename(pattern.pid))
+        pattern_result = fast_concat(result_buffer)
+        mdates = SMD.dencode(pattern_result.index.values)
+        pvalues = SMD.pencode(pattern_result.values)
+        freturns = SMD.rencode(freturns)
+        ret_mdates[market] = mdates
+        ret_pvalues[market] = pvalues
+        ret_freturns[market] = freturns
+        if ret_lptterns is not None and len(pattern_result) > 0:
+            ret_lptterns.append(get_latest_patterns(market,
+                                                    list(pattern_result.columns),
+                                                    mdates[-1], pvalues[-1]))
+        return f'update patterns: {market}'
+    except Exception as esp:
+        return f'update patterns error: {market} - {esp}'
+
+def pattern_update(controller, batch_type=BatchType.SERVICE_BATCH):
     MD_CACHE.clear()
     smd_buffer = {}
     patterns = get_patterns()
     markets = get_markets()
     if len(patterns) <= 0 or len(markets) <= 0:
+        logging.debug(f'get markets: \n{markets}')
+        logging.debug(f'get patterns: \n{patterns}')
         return
-    logging.debug(f'get patterns: \n{patterns} get markets: \n{markets}')
     if batch_type == BatchType.SERVICE_BATCH:
-        #market_return_writer = HistoryReturnWriter(controller)
         latest_pattern_writer = LatestPatternWriter(controller)
-        #pattern_occur_writer = PatternOccurWriter(controller)
-        #pattern_dist_writer = PatternDistWriter(controller)
-        #ret_mstats = []
-        ret_values = []
-        ret_mscores = []
+        ret_values = mp.Manager().list()
+        ret_mscores = mp.Manager().list()
+        ret_lpatterns = latest_pattern_writer.pool
+    else:
+        ret_values = None
+        ret_mscores = None
+        ret_lpatterns = None
     smd_buffer['mids'] = {mid: idx for idx, mid in enumerate(markets)}
-    pids = [each.pid for each in patterns]
-    smd_buffer['pids'] = {pid: idx for idx, pid in enumerate(pids)}
-    smd_buffer['mdates'] = []
-    smd_buffer['pvalues'] = []
-    smd_buffer['freturns'] = []
+    smd_buffer['pids'] = {each.pid: idx for idx, each in enumerate(patterns)}
+    smd_buffer['mdates'] = mp.Manager().dict()
+    smd_buffer['pvalues'] = mp.Manager().dict()
+    smd_buffer['freturns'] = mp.Manager().dict()
+    patterns = mp.Manager().list(patterns)
+    pool = mp.Pool(PATTERN_UPDATE_CPUS)
+
     for market in markets:
-        rvalues, freturns, mscores = gen_return_value_v2(market)
-        if batch_type == BatchType.SERVICE_BATCH:
-            #market_return_writer.add(rvalues)
-            #ret_mstats.append(r2)
-            ret_values.append(rvalues)
-            ret_mscores.append(mscores)
-        result_buffer = []
-        for pattern in patterns:
-            if not controller.isactive:
-                logging.info('batch terminated')
-                return
-            result_buffer.append(pattern.run(market).rename(pattern.pid))
-        pattern_result = fast_concat(result_buffer)
-        if not controller.isactive:
-            logging.info('batch terminated')
-            return
-        #result_buffer = []
-        #for period in PREDICT_PERIODS:
-        #    if not controller.isactive:
-        #        logging.info('batch terminated')
-        #        return
-        #    result_buffer.append(gen_future_return(market, period))
-        #return_result = fast_concat(result_buffer)
-        mdates = SMD.dencode(pattern_result.index.values)
-        pvalues = SMD.pencode(pattern_result.values)
-        freturns = SMD.rencode(freturns)
-        smd_buffer['mdates'].append(mdates)
-        smd_buffer['pvalues'].append(pvalues)
-        smd_buffer['freturns'].append(freturns)
-        if batch_type == BatchType.SERVICE_BATCH and len(pattern_result) > 0:
-            latest_pattern_writer.add(get_latest_patterns(market, pids, mdates[-1], pvalues[-1]))
-            #market_dist, market_occur = get_pattern_stats_info_v2(pattern_result, return_result, market)
-            #pattern_dist_writer.add(market_dist)
-            #pattern_occur_writer.add(market_occur)
-        logging.debug(f'update patterns: {market}')
+        pool.apply_async(do_pattern_task,
+                         (market, patterns, exec_mode,
+                          # return buffers
+                          smd_buffer['mdates'], smd_buffer['pvalues'], smd_buffer['freturns'],
+                          # optional return buffers
+                          ret_values, ret_mscores, ret_lpatterns),
+                          callback=logging.debug)
+
+
+    pool.close()
+    pool.join()
+
+    smd_buffer['mdates'] = [smd_buffer['mdates'][mid] for mid in markets]
+    smd_buffer['pvalues'] = [smd_buffer['pvalues'][mid] for mid in markets]
+    smd_buffer['freturns'] = [smd_buffer['freturns'][mid] for mid in markets]
     smd_swap.update(**smd_buffer)
     del smd_buffer
     tsmd = CatchableTread(target=smd_swap.dump)
@@ -2102,12 +2122,8 @@ def pattern_update(controller: ThreadController, batch_type=BatchType.SERVICE_BA
         return_score_writer.add(pd.concat(ret_mscores, axis=0))
         market_return_writer = LatestReturnWriter(controller)
         market_return_writer.add(pd.concat(ret_values, axis=0))
-        #market_return_writer.stop()
         latest_pattern_writer.stop()
-        #pattern_dist_writer.stop()
-        #pattern_occur_writer.stop()
         return_score_writer.stop()
-        #return_dist_writer.stop()
         market_return_writer.stop()
         if not controller.isactive:
             logging.info('batch terminated')
