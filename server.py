@@ -63,20 +63,18 @@ def api_batch():
     return {"status": 202, "message": "accepted", "data": None}
 
 
-@app.route("/model", methods=["POST"])
-def api_add_model():
+@app.route("/models/<string:modelId>", methods=["POST"])
+def api_add_model(modelId):
     """
     新增模型
     ---
     tags:
       - 前台
     parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          modelId:
-            type: string
+      - name: modelId
+        in: path
+        type: string
+        required: true
     responses:
       202:
         description: 請求已接收，等待執行
@@ -91,32 +89,23 @@ def api_add_model():
               type: string
               nullable: true
     """
-    try:
-        logging.info(f"api_add_model  receiving: {request.json}")
-        data = request.json
-        model_id = data['modelId']
-    except KeyError as esp:
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    model_queue.push(add_model, size=1, args=(model_id,))
+    logging.info(f"api_add_model  receiving: {modelId}")
+    model_queue.push(add_model, size=1, args=(modelId,))
     return {"status": 202, "message": "accepted", "data": None}
 
 
-@app.route("/model", methods=["DELETE"])
-def api_remove_model():
+@app.route("/models/<string:modelId>", methods=["DELETE"])
+def api_remove_model(modelId):
     """
     移除模型
     ---
     tags:
       - 前台
     parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          modelId:
-            type: string
+      - name: modelId
+        in: path
+        type: string
+        required: true
     responses:
       202:
         description: 請求已接收，等待執行
@@ -131,21 +120,14 @@ def api_remove_model():
               type: string
               nullable: true
     """
-    try:
-        logging.info(f"api_remove_model  receiving: {request.json}")
-        data = request.json
-        model_id = data['modelId']
-    except KeyError as esp:
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    t = mt.Thread(target=remove_model, args=(model_id,))
+    logging.info(f"api_remove_model  receiving: {modelId}")
+    t = mt.Thread(target=remove_model, args=(modelId,))
     t.start()
     return {"status": 202, "message": "accepted", "data": None}
 
 
-@app.route("/pattern/compound/dates", methods=["POST"])
-def api_get_compound_pattern_dates():
+@app.route("/pattern/dates", methods=["POST"])
+def api_get_pattern_dates():
     """
     取得複合現象歷史發生日期
     ---
@@ -182,7 +164,7 @@ def api_get_compound_pattern_dates():
                     format: date
     """
     try:
-        logging.info(f"api_get_compound_pattern_dates receiving: {request.json}")
+        logging.info(f"api_get_pattern_dates receiving: {request.json}")
         data = request.json
         patterns = data['patterns']
         market_id = data['marketId']
@@ -199,63 +181,8 @@ def api_get_compound_pattern_dates():
     return {"status": 200, "message": "OK", "data": {"occurDates": ret}}
 
 
-@app.route("/pattern/dates", methods=["POST"])
-def api_get_pattern_dates():
-    """
-    取得指定現象歷史發生日期
-    ---
-    tags:
-      - Studio
-    parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          patterns:
-            type: array
-            items:
-              type: string
-          marketId:
-            type: string
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: object
-              properties:
-                occurDates:
-                  type: array
-                  items:
-                    type: string
-                    format: date
-    """
-    try:
-        logging.info(f"api_get_pattern_dates receiving: {request.json}")
-        data = request.json
-        pattern_id = data['patternId']
-        market_id = data['marketId']
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        ret = get_pattern_occur(market_id, pattern_id)
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": {"occurDates": ret}}
-
-
-@app.route("/pattern/compound/count", methods=["POST"])
-def api_get_compound_pattern_count():
+@app.route("/pattern/count", methods=["POST"])
+def api_get_pattern_count():
     """
     取得複合現象上漲次數
     ---
@@ -294,7 +221,7 @@ def api_get_compound_pattern_count():
     """
     try:
         logging.info(
-            f"api_get_compound_pattern_count receiving: {request.json}")
+            f"api_get_pattern_count receiving: {request.json}")
         data = request.json
         patterns = data['patterns']
         market_type = data.get('marketType')
@@ -314,67 +241,8 @@ def api_get_compound_pattern_count():
     return {"status": 200, "message": "OK", "data": {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}}
 
 
-@app.route("/pattern/count", methods=["GET"])
-def api_get_pattern_count():
-    """
-    取得指定現象發生次數
-    ---
-    tags:
-      - 前台
-    parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          patterns:
-            type: array
-            items:
-              type: string
-          marketType:
-            type: string
-          categoryCode:
-            type: string
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: object
-              properties:
-                occurCnt:
-                  type: integer
-                nonOccurCnt:
-                  type: integer
-    """
-    try:
-        logging.info(f"api_get_pattern_count receiving: {request.args}")
-        data = request.args
-        pattern_id = data['patternId']
-        market_type = data.get('marketType') or None
-        category_code = data.get('categoryCode') or None
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        occur, non_occur = get_pattern_occur_cnt(
-            pattern_id, market_type, category_code)
-
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}}
-
-
-@app.route("/pattern/compound/upprob", methods=["POST"])
-def api_get_compound_pattern_upprob():
+@app.route("/pattern/upprob", methods=["POST"])
+def api_get_pattern_upprob():
     """
     取得複合現象上漲機率
     ---
@@ -413,7 +281,7 @@ def api_get_compound_pattern_upprob():
     """
     try:
         logging.info(
-            f"api_get_compound_pattern_upprob receiving: {request.json}")
+            f"api_get_pattern_upprob receiving: {request.json}")
         data = request.json
         patterns = data['patterns']
         date_period = data['datePeriod']
@@ -433,67 +301,8 @@ def api_get_compound_pattern_upprob():
     return {"status": 200, "message": "OK", "data": {"positiveWeight": float(ret)}}
 
 
-@app.route("/pattern/upprob", methods=["GET"])
-def api_get_pattern_upprob():
-    """
-    取得指定現象上漲機率
-    ---
-    tags:
-      - 前台
-    parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          patterns:
-            type: array
-            items:
-              type: string
-          datePeriod:
-            type: integer
-          marketType:
-            type: string
-          categoryCode:
-            type: string
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: object
-              properties:
-                positiveWeight:
-                  type: number
-    """
-    try:
-        logging.info(f"api_get_pattern_upprob receiving: {request.args}")
-        data = request.args
-        pattern_id = data['patternId']
-        date_period = data['datePeriod']
-        market_type = data.get('marketType') or None
-        category_code = data.get('categoryCode') or None
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        ret = get_pattern_rise_prob(pattern_id, int(
-            date_period), market_type, category_code)
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": {"positiveWeight": float(ret)}}
-
-
-@app.route("/pattern/compound/distribution", methods=["POST"])
-def api_get_compound_pattern_distribution():
+@app.route("/pattern/distribution", methods=["POST"])
+def api_get_pattern_distribution():
     """
     取得複合現象分布資訊
     ---
@@ -540,7 +349,7 @@ def api_get_compound_pattern_distribution():
     """
     try:
         logging.info(
-            f"api_get_compound_pattern_distribution receiving: {request.json}")
+            f"api_get_pattern_distribution receiving: {request.json}")
         data = request.json
         patterns = data['patterns']
         date_period = data['datePeriod']
@@ -562,76 +371,7 @@ def api_get_compound_pattern_distribution():
     return {"status": 200, "message": "OK", "data": ret}
 
 
-@app.route("/pattern/distribution", methods=["GET"])
-def api_get_pattern_distribution():
-    """
-    取得指定現象分布資訊
-    ---
-    tags:
-      - 前台
-    parameters:
-      - name: patternId
-        in: query
-        type: string
-        required: true
-      - name: datePeriod
-        in: query
-        type: integer
-        required: true
-      - name: marketType
-        in: query
-        type: string
-      - name: categoryCode
-        in: query
-        type: string
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  marketCode:
-                    type: string
-                  returnMean:
-                    type: number
-                  returnStd:
-                    type: number
-                  samples:
-                    type: integer
-    """
-    try:
-        logging.info(f"api_get_pattern_distribution receiving: {request.args}")
-        data = request.args
-        pattern_id = data['patternId']
-        date_period = data['datePeriod']
-        market_type = data.get('marketType') or None
-        category_code = data.get('categoryCode') or None
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        ret = get_pattern_mkt_dist_info(pattern_id, int(
-            date_period), market_type, category_code)
-        ret = [{"marketCode": key, "returnMean": float(mean), "returnStd": float(
-            std), "samples": int(counts)} for key, (mean, std, counts) in ret.items()]
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": ret}
-
-
-@app.route("/patterns/<string:patternId>", methods=["GET"])
+@app.route("/patterns/<string:patternId>", methods=["POST"])
 def api_add_pattern(patternId):
     """
     新增現象
