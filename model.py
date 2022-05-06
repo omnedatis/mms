@@ -2315,7 +2315,7 @@ def _batch(batch_type):
         MT_MANAGER.release(BATCH_EXE_CODE)
 
 
-def get_mix_pattern_occur(market_id: str, patterns: List):
+def get_mix_pattern_occur(market_id: str, patterns: List, start_date:str=None, end_date:str=None):
     if smd.isempty():
         return []
     smd_lock.acquire()
@@ -2328,8 +2328,16 @@ def get_mix_pattern_occur(market_id: str, patterns: List):
     pidxs = [pids[pid] for pid in patterns]
     valeus = pvalues[midx][:,pidxs]
     dates = mdates[midx]
-    ret = SMD.ddecode(dates[(valeus==1).all(axis=1)]).tolist()
-    return ret
+    dates = dates[(valeus==1).all(axis=1)]
+
+    ret = SMD.ddecode(dates)
+    if start_date is not None:
+        start_date = np.datetime64(start_date)
+        ret = ret[(ret>=start_date).sum():]
+    if end_date is not None:
+        end_date = np.datetime64(end_date)
+        ret = ret[:(ret<=end_date).sum()]
+    return ret.tolist()
 
 def get_pattern_occur(market_id: str, pattern_id):
     return get_mix_pattern_occur(market_id, [pattern_id])

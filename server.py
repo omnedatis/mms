@@ -143,6 +143,12 @@ def api_get_pattern_dates():
               type: string
           marketId:
             type: string
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
     responses:
       200:
         description: 成功取得
@@ -167,13 +173,15 @@ def api_get_pattern_dates():
         data = request.json
         patterns = data['patterns']
         market_id = data['marketId']
+        start_date = data.get('startDate')
+        end_date = data.get('endDate')
     except Exception as esp:
         logging.error(traceback.format_exc())
         return {"status": 400,
                 "message": "Invalid request argument",
                 "data": None}
     try:
-        ret = get_mix_pattern_occur(market_id, patterns)
+        ret = get_mix_pattern_occur(market_id, patterns, start_date, end_date)
     except Exception as esp:
         logging.error(traceback.format_exc())
         raise Exception
