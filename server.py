@@ -29,9 +29,8 @@ import traceback
 import threading as mt
 import sys
 from func._td._db import set_market_data_provider
-from model import (set_db, batch, init_db, get_pattern_occur, get_mix_pattern_occur,
-                   get_mix_pattern_mkt_dist_info, get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt,
-                   get_pattern_mkt_dist_info, get_pattern_rise_prob, get_pattern_occur_cnt, get_market_price_dates,
+from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
+                   get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
                    get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
                    remove_model, MarketDataFromDb, model_queue, pattern_queue)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
@@ -178,7 +177,7 @@ def api_get_pattern_dates():
     except Exception as esp:
         logging.error(traceback.format_exc())
         raise Exception
-    return {"status": 200, "message": "OK", "data": {"occurDates": ret}}
+    return {"status": 200, "message": "OK", "data": {"occurDates":[each.strftime('%Y-%m-%d') for each in ret]}}
 
 
 @app.route("/pattern/count", methods=["POST"])
@@ -555,7 +554,8 @@ def api_get_market_price_date(marketId):
         data = request.args
         start_date = data.get("startDate") or None
         if start_date is not None:
-            start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+            start_date = datetime.datetime.strptime(
+                start_date, "%Y-%m-%d").date()
     except:
         logging.error(traceback.format_exc())
         return {"status": 400,
@@ -606,7 +606,8 @@ if __name__ == '__main__':
                  ExecMode.UAT.value: logging.INFO,
                  ExecMode.PROD.value: logging.ERROR}[exec_mode]
         file_hdlr.setLevel(level)
-        logging.basicConfig(level=0, format=fmt, handlers=[err_hdlr, info_hdlr, file_hdlr])
+        logging.basicConfig(level=0, format=fmt, handlers=[
+                            err_hdlr, info_hdlr, file_hdlr])
         model_queue.start()
         pattern_queue.start()
         set_exec_mode(exec_mode)
