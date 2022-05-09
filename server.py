@@ -32,7 +32,7 @@ from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
                    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
                    get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
-                   remove_model, MarketDataFromDb, model_queue, pattern_queue)
+                   remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
 import datetime
 from dao import MimosaDB
@@ -621,6 +621,7 @@ if __name__ == '__main__':
         set_exec_mode(exec_mode)
         set_db(MimosaDB(mode=exec_mode))
         set_market_data_provider(MarketDataFromDb())
+        load_smd()
 
     except Exception as esp:
         logging.error(f"setting up failed")

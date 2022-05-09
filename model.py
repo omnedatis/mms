@@ -148,9 +148,12 @@ class SMD:
 db = None
 
 batch_lock = Lock()
-smd = SMD.load()
+smd = SMD()
 smd_swap = SMD()
 
+def load_smd():
+    global smd
+    smd = SMD.load()
 
 def get_db():
     return db
