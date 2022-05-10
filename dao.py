@@ -142,7 +142,7 @@ class MimosaDB:
                 os.makedirs(fp, exist_ok=True)
                 pickle_dump(result, f"{fp}/status.pkl")
         logging.info("Sync local model execution status finished")
-
+    
     def _sync_model_results(self, controller=None):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
@@ -168,7 +168,6 @@ class MimosaDB:
         model_ids = model_info[ModelInfoField.MODEL_ID.value].values.tolist()
 
         # 取得最新執行狀態
-        logging.info('Query model execution from db')
         sql = f"""
             SELECT
                 *
@@ -176,12 +175,10 @@ class MimosaDB:
                 {TableName.MODEL_EXECUTION.value}
         """
         model_exec_info = pd.read_sql_query(sql, engine)
-        logging.info('Query model execution from db finished')
         
         model_status_records = self._convert_exec_to_status(model_exec_info)
 
         for model_id_i, model_id in enumerate(model_ids):
-            logging.info(f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id}')
             if controller is not None and not controller.isactive:
                 return
             fp = f'{LOCAL_DB}/views/{model_id}'
