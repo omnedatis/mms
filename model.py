@@ -2362,7 +2362,9 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     markets = get_markets(market_type, category_code)
     if not markets:
         return 0, 0
-    midxs = [mids[mid] for mid in markets]
+    midxs = [mids[mid] for mid in markets if mid in mids]
+    if len(midxs) == 0:
+        return 0, 0
     pidxs = [pids[pid] for pid in patterns]
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     return func(values)
@@ -2386,7 +2388,9 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     if not markets:
         return 0
     pidx = PREDICT_PERIODS.index(period)
-    midxs = [mids[mid] for mid in markets]
+    midxs = [mids[mid] for mid in markets if mid in mids]
+    if len(midxs) == 0:
+        return 0
     pidxs = [pids[pid] for pid in patterns]
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     returns = [freturns[idx][:,pidx] for idx in midxs]
@@ -2400,6 +2404,8 @@ def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=No
 def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
     def func(v, r):
         ret = r[(v==1).all(axis=1) & (r==r)]
+        if len(ret) == 0:
+            return 0, 0, 0
         return ret.mean() * 100, ret.std() * 100, len(ret)
 
     if smd.isempty():
@@ -2413,7 +2419,9 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     if not markets:
         return {}
     pidx = PREDICT_PERIODS.index(period)
-    midxs = [mids[mid] for mid in markets]
+    midxs = [mids[mid] for mid in markets if mid in mids]
+    if len(midxs) == 0:
+        return {}
     pidxs = [pids[pid] for pid in patterns]
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     returns = [freturns[idx][:,pidx] for idx in midxs]
@@ -2484,7 +2492,9 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
     if not markets:
         return 0
     pidx = PREDICT_PERIODS.index(period)
-    midxs = [mids[mid] for mid in markets]
+    midxs = [mids[mid] for mid in markets if mid in mids]
+    if len(midxs) == 0:
+        return 0
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(r) for r in returns])
     cnts, ups = stats.sum(axis=0)
@@ -2493,6 +2503,8 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
 def get_mkt_dist_info(period, market_type=None, category_code=None):
     def func(r):
         ret = r[(r==r)]
+        if len(ret) == 0:
+            return 0, 0, 0
         return ret.mean() * 100, ret.std() * 100, len(ret)
 
     if smd.isempty():
@@ -2506,7 +2518,9 @@ def get_mkt_dist_info(period, market_type=None, category_code=None):
     if not markets:
         return {}
     pidx = PREDICT_PERIODS.index(period)
-    midxs = [mids[mid] for mid in markets]
+    midxs = [mids[mid] for mid in markets if mid in mids]
+    if len(midxs) == 0:
+        return {}
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(r) for r in returns])
     drops = ~np.isnan(stats).any(axis=1)
@@ -2527,6 +2541,8 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
     mids, _, mdates, _, _ = smd.raw_data
     smd_lock.release()
 
+    if market_id not in mids:
+        return []
     midx = mids[market_id]
     mdates = mdates[midx]
     ext_dates = SMD.ddecode(_extend_dates(mdates[-1], PREDICT_PERIODS[-1]))
