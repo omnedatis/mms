@@ -9,7 +9,7 @@ from .._context import (TimeUnit, _CandleStick, BooleanTimeSeries,
 def _is_close(tar: NumericTimeSeries, ref: NumericTimeSeries,
               close_zero_threshold: float) -> BooleanTimeSeries:
     #return abs(tar / ref - 1) < close_zero_threshold
-    return abs(tar - ref) < ref * close_zero_threshold
+    return abs(tar - ref) < ref * (close_zero_threshold / 100)
 
 class DoutzeCandleStick(_CandleStick):
     """Doutze's CandleStick."""
