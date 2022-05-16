@@ -32,7 +32,7 @@ from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
                    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
                    get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
-                   remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd)
+                   remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd, verify_pattern)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
 import datetime
 from dao import MimosaDB
@@ -575,6 +575,64 @@ def api_get_market_price_date(marketId):
             "datePeriod":each[MarketPeriodField.DATE_PERIOD.value],} for each in ret]
     return {"status": 200, "message": "OK", "data": ret}
 
+@app.route('/pattern/paramcheck', methods=["POST"])
+def api_pattern_paramscheck():
+    """
+    檢查 Pattern 參數合法性
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          funcCode:
+            type: string
+          paramCodes:
+            type: array
+            items: 
+              type: object
+              properties:
+                paramCode:
+                  type: string
+                paramValue:
+                  type: object
+
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  errorParam:
+                    type: string
+                  errorMessage:
+                    type: string
+  
+    """
+    logging.info(f"api_get_pattern_count receiving: {request.json}")
+    data = request.json
+    func_code = data['funcCode']
+    params_codes = data['paramCodes']
+    param = {each["paramCode"]:each["paramValue"] for each in params_codes}
+    try:
+      ret = [{"errorParam":key, "errorMessage":value} for key, value in verify_pattern(func_code, param).items()]
+      return {"status": 200, "message": "OK", "data": ret}
+    except:
+        logging.error(traceback.format_exc())
+        return {"status": 400,
+                "message": "Invalid request argument",
+                "data": None}
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
