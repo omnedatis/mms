@@ -2567,3 +2567,9 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
                  } for a, b in zip(mdates[:eidx],
                                    mdates[period:eidx+period])]
     return ret
+
+def verify_pattern(func, kwargs):
+    try:
+        return eval(f"{func}.check(kwargs)")
+    except AttributeError:
+        return {}

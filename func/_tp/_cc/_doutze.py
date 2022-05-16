@@ -1,10 +1,56 @@
 # -*- coding: utf-8 -*-
 
-from typing import Union
+from typing import Any, Callable, Dict, NamedTuple, Union
 
 from .._context import TechnicalIndicator as TI
 from .._context import (TimeUnit, _CandleStick, BooleanTimeSeries,
-                        NumericTimeSeries, MarketData, ts_min, ts_max, MD_CACHE)                  
+                        NumericTimeSeries, MarketData, ts_min, ts_max, MD_CACHE)
+
+class ArgPrototype(NamedTuple):
+    symbol: str
+    name: str
+    rule: str
+    checker: Callable[[Any], bool]
+
+def is_non_negative_number(value) -> str:
+    return isinstance(value, (int, float)) and value >= 0
+
+def doutze_ccp_check(f):
+    def check(kwargs):
+        ret = {}
+        for key, value in kwargs.items():
+            if not DOUTZE_CC_CHCEKERS[key].checker(value):
+                ret[key] = DOUTZE_CC_CHCEKERS[key].rule
+        return ret
+    f.check = check
+    return f
+
+DOUTZE_CC_CHCEKERS = {}
+DOUTZE_CC_CHCEKERS['shadow_ignore_threshold'
+                   ] = ArgPrototype(symbol='shadow_ignore_threshold',
+                                    name='忽略影線臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+DOUTZE_CC_CHCEKERS['violent_threshold'
+                   ] = ArgPrototype(symbol='violent_threshold',
+                                    name='劇烈漲跌臨界值(%)',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+DOUTZE_CC_CHCEKERS['close_zero_threshold'
+                   ] = ArgPrototype(symbol='close_zero_threshold',
+                                    name='持平臨界值(%)',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+DOUTZE_CC_CHCEKERS['long_shadow_threshold'
+                   ] = ArgPrototype(symbol='long_shadow_threshold',
+                                    name='長影線臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+DOUTZE_CC_CHCEKERS['body_close_threshold'
+                   ] = ArgPrototype(symbol='body_close_threshold',
+                                    name='兩實體線長度相近臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
 
 def _is_close(tar: NumericTimeSeries, ref: NumericTimeSeries,
               close_zero_threshold: float) -> BooleanTimeSeries:
@@ -264,9 +310,9 @@ def get_candle(market_id: str, period_type: Union[int, TimeUnit]) -> _CandleStic
         name = f'{market_id}.MonthlyDoutzeCandleStick'
     else:
         name = f'{market_id}.DoutzeCandleStick({period_type})'
-    if name not in MD_CACHE:      
+    if name not in MD_CACHE:
         MD_CACHE[name] = DoutzeCandleStick.make(TI.Candle(market_id, period_type), name)
-    return MD_CACHE[name] 
+    return MD_CACHE[name]
 
 def _is_long_white(cct: DoutzeCandleStick,
                    shadow_ignore_threshold: float,
@@ -278,6 +324,7 @@ def _is_long_white(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_long_white(market_id: str, **kwargs):
     """long_white.
 
@@ -330,6 +377,7 @@ def _is_white_closing_marubozu(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_white_closing_marubozu(market_id: str, **kwargs):
     """white_closing_marubozu.
 
@@ -384,6 +432,7 @@ def _is_white_hammer(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_white_hammer(market_id: str, **kwargs):
     """white_hammer.
 
@@ -440,7 +489,7 @@ def _is_white_opening_marubozu(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
-
+@doutze_ccp_check
 def doutze_white_opening_marubozu(market_id: str, **kwargs):
     """white_opening_marubozu.
 
@@ -495,6 +544,7 @@ def _is_white_inverse_hammer(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_white_inverse_hammer(market_id: str, **kwargs):
     """white_inverse_hammer.
 
@@ -563,6 +613,7 @@ def _is_short_white(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_5
     return ret
 
+@doutze_ccp_check
 def doutze_short_white(market_id: str, **kwargs):
     """short_white.
 
@@ -629,6 +680,7 @@ def _is_long_upper_shadow_short_white(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_long_upper_shadow_short_white(market_id: str, **kwargs):
     """long_upper_shadow_short_white.
 
@@ -694,6 +746,7 @@ def _is_long_lower_shadow_short_white(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_long_lower_shadow_short_white(market_id: str, **kwargs):
     """long_lower_shadow_short_white.
 
@@ -755,6 +808,7 @@ def _is_long_black(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_long_black(market_id: str, **kwargs):
     """long_black.
 
@@ -807,6 +861,7 @@ def _is_black_opening_marubozu(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_black_opening_marubozu(market_id: str, **kwargs):
     """black_opening_marubozu.
 
@@ -861,6 +916,7 @@ def _is_black_hammer(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_black_hammer(market_id: str, **kwargs):
     """black_hammer.
 
@@ -917,7 +973,7 @@ def _is_black_closing_marubozu(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
-
+@doutze_ccp_check
 def doutze_black_closing_marubozu(market_id: str, **kwargs):
     """black_closing_marubozu.
 
@@ -972,6 +1028,7 @@ def _is_black_inverse_hammer(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_black_inverse_hammer(market_id: str, **kwargs):
     """black_inverse_hammer.
 
@@ -1041,6 +1098,7 @@ def _is_short_black(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_5
     return ret
 
+@doutze_ccp_check
 def doutze_short_black(market_id: str, **kwargs):
     """short_black.
 
@@ -1107,6 +1165,7 @@ def _is_long_upper_shadow_short_black(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_long_upper_shadow_short_black(market_id: str, **kwargs):
     """long_upper_shadow_short_black.
 
@@ -1172,6 +1231,7 @@ def _is_long_lower_shadow_short_black(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3 & cond_4
     return ret
 
+@doutze_ccp_check
 def doutze_long_lower_shadow_short_black(market_id: str, **kwargs):
     """long_lower_shadow_short_black.
 
@@ -1228,6 +1288,7 @@ def _is_four_price_doji(cct: DoutzeCandleStick,
     ret = cct.ignored_amplitude(close_zero_threshold=close_zero_threshold)
     return ret
 
+@doutze_ccp_check
 def doutze_four_price_doji(market_id: str, **kwargs):
     """four_price_doji.
 
@@ -1271,6 +1332,7 @@ def _is_umbrella(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3
     return ret
 
+@doutze_ccp_check
 def doutze_umbrella(market_id: str, **kwargs):
     """umbrella.
 
@@ -1320,6 +1382,7 @@ def _is_inverse_umbrella(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3
     return ret
 
+@doutze_ccp_check
 def doutze_inverse_umbrella(market_id: str, **kwargs):
     """inverse_umbrella.
 
@@ -1377,6 +1440,7 @@ def _is_doji(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2
     return ret
 
+@doutze_ccp_check
 def doutze_doji(market_id: str, **kwargs):
     """doji.
 
@@ -1434,6 +1498,7 @@ def _is_long_lower_shadow_doji(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3
     return ret
 
+@doutze_ccp_check
 def doutze_long_lower_shadow_doji(market_id: str, **kwargs):
     """long_lower_shadow_doji.
 
@@ -1490,6 +1555,7 @@ def _is_long_upper_shadow_doji(cct: DoutzeCandleStick,
     ret = cond_1 & cond_2 & cond_3
     return ret
 
+@doutze_ccp_check
 def doutze_long_upper_shadow_doji(market_id: str, **kwargs):
     """long_upper_shadow_doji.
 
@@ -1535,6 +1601,7 @@ def doutze_long_upper_shadow_doji(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_long_upper_shadow_doji({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_rainy(market_id: str, **kwargs):
     """bearish_rainy.
 
@@ -1591,6 +1658,7 @@ def doutze_bearish_rainy(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_rainy({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_sunny(market_id: str, **kwargs):
     """bullish_sunny.
 
@@ -1647,6 +1715,7 @@ def doutze_bullish_sunny(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_sunny({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_dark_cloud_cover(market_id: str, **kwargs):
     """bearish_dark_cloud_cover.
 
@@ -1703,6 +1772,7 @@ def doutze_bearish_dark_cloud_cover(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_dark_cloud_cover({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_piercing(market_id: str, **kwargs):
     """bullish_piercing.
 
@@ -1759,6 +1829,7 @@ def doutze_bullish_piercing(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_piercing({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_harami(market_id: str, **kwargs):
     """bearish_harami.
 
@@ -1820,6 +1891,7 @@ def doutze_bearish_harami(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_harami({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_harami(market_id: str, **kwargs):
     """bullish_harami.
 
@@ -1881,6 +1953,7 @@ def doutze_bullish_harami(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_harami({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_engulfing(market_id: str, **kwargs):
     """bearish_engulfing.
 
@@ -1927,6 +2000,7 @@ def doutze_bearish_engulfing(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_engulfing({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_engulfing(market_id: str, **kwargs):
     """bullish_engulfing.
 
@@ -1973,6 +2047,7 @@ def doutze_bullish_engulfing(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_engulfing({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_separating_lines(market_id: str, **kwargs):
     """bullish_separating_lines.
 
@@ -2024,6 +2099,7 @@ def doutze_bullish_separating_lines(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_separating_lines({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_separating_lines(market_id: str, **kwargs):
     """bearish_separating_lines.
 
@@ -2075,6 +2151,7 @@ def doutze_bearish_separating_lines(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_separating_lines({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_harami_cross(market_id: str, **kwargs):
     """bearish_harami_cross.
 
@@ -2134,6 +2211,7 @@ def doutze_bearish_harami_cross(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_harami_cross({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_harami_cross(market_id: str, **kwargs):
     """bullish_harami_cross.
 
@@ -2194,7 +2272,7 @@ def doutze_bullish_harami_cross(market_id: str, **kwargs):
     return ret
 
 ####################### ↑↑↑ code review 2021-11-03 ↑↑↑ #######################
-
+@doutze_ccp_check
 def doutze_bullish_covered_lines(market_id: str, **kwargs):
     """bullish_covered_lines.
 
@@ -2249,6 +2327,7 @@ def doutze_bullish_covered_lines(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_covered_lines({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_covered_lines(market_id: str, **kwargs):
     """bearish_covered_lines.
 
@@ -2303,6 +2382,7 @@ def doutze_bearish_covered_lines(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_covered_lines({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_meeting_lines(market_id: str, **kwargs):
     """bullish_meeting_lines.
 
@@ -2358,6 +2438,7 @@ def doutze_bullish_meeting_lines(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_meeting_lines({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_meeting_lines(market_id: str, **kwargs):
     """bearish_meeting_lines.
 
@@ -2413,6 +2494,7 @@ def doutze_bearish_meeting_lines(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_meeting_lines({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_tweezer_bottoms(market_id: str, **kwargs):
     """bearish_tweezer_bottoms.
 
@@ -2477,6 +2559,7 @@ def doutze_bullish_tweezer_bottoms(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_tweezer_bottoms({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_tweezer_bottoms(market_id: str, **kwargs):
     """bullish_tweezer_bottoms.
 
@@ -2542,6 +2625,7 @@ def doutze_bearish_tweezer_bottoms(market_id: str, **kwargs):
     return ret
 
 ################# ↑↑↑ doutze code review 2021-11-06 ↑↑↑ ####################
+@doutze_ccp_check
 def doutze_bearish_three_outside_down(market_id: str, **kwargs):
     """bearish_three_outside_down.
 
@@ -2590,6 +2674,7 @@ def doutze_bearish_three_outside_down(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_three_outside_down({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_three_inside_down(market_id: str, **kwargs):
     """bearish_three_inside_down.
 
@@ -2641,6 +2726,7 @@ def doutze_bearish_three_inside_down(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_three_inside_down({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_evening_star(market_id: str, **kwargs):
     """bearish_evening_star.
 
@@ -2699,6 +2785,7 @@ def doutze_bearish_evening_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_evening_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_evening_doji_star(market_id: str, **kwargs):
     """bearish_evening_doji_star.
 
@@ -2756,6 +2843,7 @@ def doutze_bearish_evening_doji_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_evening_doji_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_abandoned_baby(market_id: str, **kwargs):
     """bearish_abandoned_baby.
 
@@ -2813,7 +2901,7 @@ def doutze_bearish_abandoned_baby(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_abandoned_baby({kwargs})')
     return ret
 
-
+@doutze_ccp_check
 def doutze_bearish_tri_star(market_id: str, **kwargs):
     """bearish_tri_star.
 
@@ -2867,7 +2955,7 @@ def doutze_bearish_tri_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_tri_star({kwargs})')
     return ret
 
-
+@doutze_ccp_check
 def doutze_bearish_identical_three_crows(market_id: str, **kwargs):
     """bearish_identical_three_crows.
 
@@ -2918,6 +3006,7 @@ def doutze_bearish_identical_three_crows(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_identical_three_crows({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_upside_gap_two_crows(market_id: str, **kwargs):
     """bearish_upside_gap_two_crows.
 
@@ -2970,6 +3059,7 @@ def doutze_bearish_upside_gap_two_crows(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_upside_gap_two_crows({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_two_crows(market_id: str, **kwargs):
     """bearish_two_crows.
 
@@ -3024,6 +3114,7 @@ def doutze_bearish_two_crows(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_two_crows({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_three_black_crows(market_id: str, **kwargs):
     """bearish_three_black_crows.
 
@@ -3087,12 +3178,13 @@ def doutze_bearish_three_black_crows(market_id: str, **kwargs):
     #cond_10 = abs(cct.real_body / cct_2.real_body - 1) <= body_close_threshold
     cond_8 = abs(cct_2.real_body - cct_1.real_body) <= cct_1.real_body * body_close_threshold
     cond_9 = abs(cct_1.real_body - cct.real_body) <= cct.real_body * body_close_threshold
-    cond_10 = abs(cct.real_body - cct_2.real_body) <= cct_2.real_body * body_close_threshold    
+    cond_10 = abs(cct.real_body - cct_2.real_body) <= cct_2.real_body * body_close_threshold
     ret = (cond_1 & cond_2 & cond_3 & cond_4 & cond_5 & cond_6 & cond_7 &
            cond_8 & cond_9 & cond_10)
     ret.rename(f'{market_id}.doutze_bearish_three_black_crows({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_advance_block(market_id: str, **kwargs):
     """bearish_advance_block.
 
@@ -3150,6 +3242,7 @@ def doutze_bearish_advance_block(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_advance_block({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_deliberation_block(market_id: str, **kwargs):
     """bearish_deliberation_block.
 
@@ -3207,6 +3300,7 @@ def doutze_bearish_deliberation_block(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_deliberation_block({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_shooting_star(market_id: str, **kwargs):
     """bearish_shooting_star.
 
@@ -3251,6 +3345,7 @@ def doutze_bearish_shooting_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_shooting_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_doji_star(market_id: str, **kwargs):
     """bearish_doji_star.
 
@@ -3298,6 +3393,7 @@ def doutze_bearish_doji_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_doji_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_kicking(market_id: str, **kwargs):
     """bearish_kicking.
 
@@ -3338,6 +3434,7 @@ def doutze_bearish_kicking(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_kicking({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_three_outside_up(market_id: str, **kwargs):
     """bullish_three_outside_up.
 
@@ -3386,6 +3483,7 @@ def doutze_bullish_three_outside_up(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_three_outside_up({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_three_inside_up(market_id: str, **kwargs):
     """bullish_three_inside_up.
 
@@ -3437,6 +3535,7 @@ def doutze_bullish_three_inside_up(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_three_inside_up({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_morning_star(market_id: str, **kwargs):
     """bullish_morning_star.
 
@@ -3497,6 +3596,7 @@ def doutze_bullish_morning_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_morning_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_morning_doji_star(market_id: str, **kwargs):
     """bullish_morning_doji_star.
 
@@ -3554,6 +3654,7 @@ def doutze_bullish_morning_doji_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_morning_doji_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_abandoned_baby_bottom(market_id: str, **kwargs):
     """bullish_abandoned_baby_bottom.
 
@@ -3611,6 +3712,7 @@ def doutze_bullish_abandoned_baby_bottom(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_abandoned_baby_bottom({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_tri_star(market_id: str, **kwargs):
     """bullish_tri_star.
 
@@ -3664,6 +3766,7 @@ def doutze_bullish_tri_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_tri_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_three_white_samurai(market_id: str, **kwargs):
     """bullish_three_white_samurai.
 
@@ -3720,6 +3823,7 @@ def doutze_bullish_three_white_samurai(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_three_white_samurai({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_three_white_soldiers(market_id: str, **kwargs):
     """bullish_three_white_soldiers.
 
@@ -3770,6 +3874,7 @@ def doutze_bullish_three_white_soldiers(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_three_white_soldiers({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_homing_pigeon(market_id: str, **kwargs):
     """bullish_homing_pigeon.
 
@@ -3815,6 +3920,7 @@ def doutze_bullish_homing_pigeon(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_homing_pigeon({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_inversed_hammer(market_id: str, **kwargs):
     """bullish_inversed_hammer.
 
@@ -3880,6 +3986,7 @@ def doutze_bullish_inversed_hammer(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_inversed_hammer({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_doji_star(market_id: str, **kwargs):
     """bullish_doji_star.
 
@@ -3930,6 +4037,7 @@ def doutze_bullish_doji_star(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_doji_star({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_stick_sandwich(market_id: str, **kwargs):
     """bullish_stick_sandwich.
 
@@ -3988,6 +4096,7 @@ def doutze_bullish_stick_sandwich(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_stick_sandwich({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_unique_three_river_bottom(market_id: str, **kwargs):
     """bullish_unique_three_river_bottom.
 
@@ -4052,6 +4161,7 @@ def doutze_bullish_unique_three_river_bottom(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_unique_three_river_bottom({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_three_stars_in_the_south(market_id: str, **kwargs):
     """bullish_three_stars_in_the_south.
 
@@ -4120,6 +4230,7 @@ def doutze_bullish_three_stars_in_the_south(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_three_stars_in_the_south({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_concealing_baby_swallow(market_id: str, **kwargs):
     """bullish_concealing_baby_swallow.
 
@@ -4182,6 +4293,7 @@ def doutze_bullish_concealing_baby_swallow(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_concealing_baby_swallow({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_kicking(market_id: str, **kwargs):
     """bullish_kicking.
 
@@ -4222,6 +4334,7 @@ def doutze_bullish_kicking(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_kicking({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_ladder_bottom(market_id: str, **kwargs):
     """bullish_ladder_bottom.
 
@@ -4304,6 +4417,7 @@ def doutze_bullish_ladder_bottom(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_ladder_bottom({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_matching_low(market_id: str, **kwargs):
     """bullish_matching_low.
 
@@ -4355,6 +4469,7 @@ def doutze_bullish_matching_low(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_matching_low({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_downside_gap_two_crows(market_id: str, **kwargs):
     """bullish_downside_gap_two_crows.
 
@@ -4407,6 +4522,7 @@ def doutze_bullish_downside_gap_two_crows(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_downside_gap_two_crows({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_two_crows(market_id: str, **kwargs):
     """bullish_two_crows.
 
@@ -4461,6 +4577,7 @@ def doutze_bullish_two_crows(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_two_crows({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_advance_block(market_id: str, **kwargs):
     """bullish_advance_block.
 
@@ -4518,6 +4635,7 @@ def doutze_bullish_advance_block(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_advance_block({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bullish_deliberation_block(market_id: str, **kwargs):
     """bullish_deliberation_block.
 
@@ -4575,6 +4693,7 @@ def doutze_bullish_deliberation_block(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bullish_deliberation_block({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_unique_three_river_bottom(market_id: str, **kwargs):
     """bearish_unique_three_river_bottom.
 
@@ -4586,7 +4705,7 @@ def doutze_bearish_unique_three_river_bottom(market_id: str, **kwargs):
         4. 昨日為倒陽線槌子線
         5. 昨日開盤價小於第一日開盤價
         6. 昨日最高價大於第一日最高價
-        7. 昨日無下影線(See 4.) 
+        7. 昨日無下影線(See 4.)
         8. 今日開盤價高於昨日收盤價(See 3., 10.)
         9. 今日開盤價低於昨日最高價
         10.今日收盤價高於第二日收盤價
@@ -4639,6 +4758,7 @@ def doutze_bearish_unique_three_river_bottom(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_unique_three_river_bottom({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_stick_sandwich(market_id: str, **kwargs):
     """bearish_stick_sandwich.
 
@@ -4697,6 +4817,7 @@ def doutze_bearish_stick_sandwich(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_stick_sandwich({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_three_stars_in_the_south(market_id: str, **kwargs):
     """bearish_three_stars_in_the_south.
 
@@ -4765,6 +4886,7 @@ def doutze_bearish_three_stars_in_the_south(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_three_stars_in_the_south({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_concealing_baby_swallow(market_id: str, **kwargs):
     """bearish_concealing_baby_swallow.
 
@@ -4827,6 +4949,7 @@ def doutze_bearish_concealing_baby_swallow(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_concealing_baby_swallow({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_homing_pigeon(market_id: str, **kwargs):
     """bearish_homing_pigeon.
 
@@ -4872,6 +4995,7 @@ def doutze_bearish_homing_pigeon(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_homing_pigeon({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_ladder_bottom(market_id: str, **kwargs):
     """bearish_ladder_bottom.
 
@@ -4954,6 +5078,7 @@ def doutze_bearish_ladder_bottom(market_id: str, **kwargs):
     ret.rename(f'{market_id}.doutze_bearish_ladder_bottom({kwargs})')
     return ret
 
+@doutze_ccp_check
 def doutze_bearish_matching_low(market_id: str, **kwargs):
     """bearish_matching_low.
 
