@@ -1423,7 +1423,8 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
         if controller.isactive:
             set_model_execution_complete(exection_id)
         if controller.isactive:
-            ret = [get_hit_sum(data, mid, BatchType.SERVICE_BATCH) for mid, data in get_model_results(model_id).items()]
+            model_results = get_model_results(model_id)
+            ret = [get_hit_sum(model_results[mid], mid, BatchType.SERVICE_BATCH) for mid in markets]
             if ret:
                 ret = pd.concat(ret, axis=0)
                 ret.index = np.arange(len(ret))
@@ -1459,7 +1460,9 @@ def add_model(model_id: str):
         model = get_model_info(model_id)
         model_create(model, controller)
         model_backtest(model, controller)
-        ret = [get_hit_sum(data, mid, BatchType.INIT_BATCH) for mid, data in get_model_results(model_id).items()]
+        markets = model.markets if model.markets else get_markets()
+        model_results = get_model_results(model_id)
+        ret = [get_hit_sum(model_results[mid], mid, BatchType.INIT_BATCH) for mid in markets]
         if ret:
             ret = pd.concat(ret, axis=0)
             ret.index = np.arange(len(ret))
@@ -1505,7 +1508,9 @@ def model_recover(model_id: str, status: ModelStatus):
         if status < ModelStatus.CREATED:
             model_create(model, controller)
         model_backtest(model, controller)
-        ret = [get_hit_sum(data, mid, BatchType.INIT_BATCH) for mid, data in get_model_results(model_id).items()]
+        markets = model.markets if model.markets else get_markets()
+        model_results = get_model_results(model_id)
+        ret = [get_hit_sum(model_results[mid], mid, BatchType.INIT_BATCH) for mid in markets]
         if ret:
             ret = pd.concat(ret, axis=0)
             ret.index = np.arange(len(ret))
