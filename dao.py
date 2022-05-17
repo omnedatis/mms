@@ -1338,6 +1338,10 @@ class MimosaDB:
             status code set to this model
         model_id: str
             ID of model
+        
+        Returns
+        -------
+        None.
 
         """
         now = datetime.datetime.now()
@@ -1365,20 +1369,8 @@ class MimosaDB:
 
         status = finished_status[exec_data[ModelExecutionField.STATUS_CODE.value]]
         model_id = exec_data[ModelExecutionField.MODEL_ID.value]
-        if not self.READ_ONLY:
-            sql = f"""
-            UPDATE
-                {TableName.MODEL_EXECUTION.value}
-            SET
-                {ModelExecutionField.END_DT.value}='{now}',
-                MODIFY_DT='{now}',
-                MODIFY_BY='{self.MODIFY_BY}',
-                {ModelExecutionField.STATUS_CODE.value}='{status}'
-            WHERE
-                {ModelExecutionField.EXEC_ID.value}='{exec_id}';
-            """
-            engine.execute(sql)
 
+        if not self.READ_ONLY:
             # 同步更新本地端紀錄
             status_fp = f'{LOCAL_DB}/views/{model_id}/status.pkl'
             local_status = {}
@@ -1386,6 +1378,65 @@ class MimosaDB:
                 local_status = pickle_load(status_fp)
             local_status[status] = now
             pickle_dump(local_status, status_fp)
+
+    def stamp_model_execution(self, exec_ids: List[str]):
+        """將所有模型執行狀態儲存至資料庫
+        
+        Parameters
+        ----------
+        exec_ids: List[str]
+            模型執行狀態 ID 清單
+
+        Returns
+        -------
+        None.
+        """
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        finished_status = {
+            ModelExecution.ADD_BACKTEST.value: ModelExecution.ADD_BACKTEST_FINISHED.value,
+            ModelExecution.ADD_PREDICT.value: ModelExecution.ADD_PREDICT_FINISHED.value,
+            ModelExecution.BATCH_PREDICT.value: ModelExecution.BATCH_PREDICT_FINISHED.value
+        }
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                {ModelExecutionField.EXEC_ID.value},
+                {ModelExecutionField.MODEL_ID.value},
+                {ModelExecutionField.STATUS_CODE.value}
+            FROM
+                {TableName.MODEL_EXECUTION.value};
+        """
+        exec_data = pd.read_sql_query(sql, engine)
+
+        logging.info("Stamp model execution")
+        for exec_id in exec_ids:
+            # 取得資料庫模型ID 與執行狀態
+            eid_cond = exec_data[ModelExecutionField.EXEC_ID.value].values == exec_id
+            if len(exec_data[eid_cond]) == 0:
+                raise Exception('call stamp_model_execution before set_model_execution_start')
+            e_data = exec_data[eid_cond].iloc[0]
+            model_id = e_data[ModelExecutionField.MODEL_ID.value]
+            status = finished_status[e_data[ModelExecutionField.STATUS_CODE.value]]
+
+            # 取得本地端結束時間紀錄
+            status_fp = f'{LOCAL_DB}/views/{model_id}/status.pkl'
+            local_status = pickle_load(status_fp)
+            end_dt = local_status[status]
+            if not self.READ_ONLY:
+                sql = f"""
+                UPDATE
+                    {TableName.MODEL_EXECUTION.value}
+                SET
+                    {ModelExecutionField.END_DT.value}='{end_dt}',
+                    MODIFY_DT='{now}',
+                    MODIFY_BY='{self.MODIFY_BY}',
+                    {ModelExecutionField.STATUS_CODE.value}='{status}'
+                WHERE
+                    {ModelExecutionField.EXEC_ID.value}='{exec_id}';
+                """
+                engine.execute(sql)
+        logging.info("Stamp model execution finished")
 
     def get_recover_model_execution(self):
         """ 取得模型最新執行狀態
