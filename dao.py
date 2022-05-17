@@ -1205,30 +1205,26 @@ class MimosaDB:
 
         # 新增歷史預測結果
         if not self.READ_ONLY:
-            try:
-                data.to_sql(
-                    table_name,
-                    engine,
-                    if_exists='append',
-                    chunksize=10000,
-                    method='multi',
-                    index=False)
-                # 與本地端資料同步更新
-                history_fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
-                history_data = pd.DataFrame(columns=data.columns)
-                if os.path.exists(history_fp):
-                    history_data = pickle_load(history_fp)
-                history_data = pd.concat([history_data, data], axis=0)
-                history_data = history_data.drop_duplicates(subset=[
-                    PredictResultField.MODEL_ID.value,
-                    PredictResultField.MARKET_ID.value,
-                    PredictResultField.PERIOD.value,
-                    PredictResultField.DATE.value
-                ])
-                pickle_dump(history_data, history_fp)
-            except Exception as e:
-                logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
-                logging.debug(traceback.format_exc())
+            data.to_sql(
+                table_name,
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+            # 與本地端資料同步更新
+            history_fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
+            history_data = pd.DataFrame(columns=data.columns)
+            if os.path.exists(history_fp):
+                history_data = pickle_load(history_fp)
+            history_data = pd.concat([history_data, data], axis=0)
+            history_data = history_data.drop_duplicates(subset=[
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.PERIOD.value,
+                PredictResultField.DATE.value
+            ])
+            pickle_dump(history_data, history_fp)
         if self.WRITE_LOCAL:
             pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MODEL_MKT_VALUE_HISTORY_SWAP.pkl')
         logging.info('Saving model results finished')
