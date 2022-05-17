@@ -2404,8 +2404,8 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(v, r) for v, r in zip(values, returns)])
-    cnts, ups = stats.sum(axis=0)
-    return ups / cnts * 100
+    cnts, ups = stats.sum(axis=0).tolist()
+    return (ups / cnts) * 100 if cnts > 0 else 0
 
 def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
@@ -2506,8 +2506,8 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
         return 0
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(r) for r in returns])
-    cnts, ups = stats.sum(axis=0)
-    return (ups / cnts) * 100
+    cnts, ups = stats.sum(axis=0).tolist()
+    return (ups / cnts) * 100 if cnts > 0 else 0
 
 def get_mkt_dist_info(period, market_type=None, category_code=None):
     def func(r):
