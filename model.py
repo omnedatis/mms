@@ -555,6 +555,10 @@ def update_model_accuracy():
     db = get_db()
     db.update_model_accuracy()
 
+def stamp_model_execution(sids):
+    db = get_db()
+    db.stamp_model_execution(sids)
+
 class ModelInfo():
     """Model Info.
 
@@ -1433,7 +1437,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
         MT_MANAGER.release(model_id)
     t = CatchableTread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
     t.start()
-    return t
+    return t, exection_id
 
 def add_model(model_id: str):
     """新增模型
@@ -2296,9 +2300,11 @@ def _batch(batch_type):
                 model_execution_recover(batch_type)
                 logging.info('End model execution recover')
             if batch_type == BatchType.SERVICE_BATCH:
+                eids = []
                 logging.info("Start model update")
                 for model in get_models():
-                    t = model_update(model, controller, batch_type)
+                    t, eid = model_update(model, controller, batch_type)
+                    eids.append(eid)
                     if t is not None:
                         ts.append(t)
                 for t in ts:
@@ -2308,6 +2314,7 @@ def _batch(batch_type):
                 logging.info("End model update")
                 if controller.isactive:
                     checkout_fcst_data()
+                    stamp_model_execution(eids)
                     swap_smd_index()
                     swap_smd()
 
