@@ -1397,7 +1397,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
     logging.info(f'start model update on {model_id}')
     latest_dates = model.get_latest_dates()
     old_results = get_model_results(model_id)
-    markets = model.markets if model.markets else get_markets()
+    markets = get_markets()
     ret_buffer = []
     for mid in markets:
         if not controller.isactive:
@@ -1460,9 +1460,8 @@ def add_model(model_id: str):
         model = get_model_info(model_id)
         model_create(model, controller)
         model_backtest(model, controller)
-        markets = model.markets if model.markets else get_markets()
         model_results = get_model_results(model_id)
-        ret = [get_hit_sum(model_results.get(mid), mid, BatchType.INIT_BATCH) for mid in markets]
+        ret = [get_hit_sum(model_results.get(mid), mid, BatchType.INIT_BATCH) for mid in get_markets()]
         if ret:
             ret = pd.concat(ret, axis=0)
             ret.index = np.arange(len(ret))
@@ -1508,9 +1507,8 @@ def model_recover(model_id: str, status: ModelStatus):
         if status < ModelStatus.CREATED:
             model_create(model, controller)
         model_backtest(model, controller)
-        markets = model.markets if model.markets else get_markets()
         model_results = get_model_results(model_id)
-        ret = [get_hit_sum(model_results.get(mid), mid, BatchType.INIT_BATCH) for mid in markets]
+        ret = [get_hit_sum(model_results.get(mid), mid, BatchType.INIT_BATCH) for mid in get_markets()]
         if ret:
             ret = pd.concat(ret, axis=0)
             ret.index = np.arange(len(ret))
@@ -1581,9 +1579,8 @@ def model_create(model: ModelInfo, controller: ThreadController):
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_PREDICT)
-    markets = model.markets if model.markets else get_markets()
     ret_buffer = []
-    for mid in markets:
+    for mid in get_markets():
         if not controller.isactive:
             logging.info('model create terminated')
             return
@@ -1631,7 +1628,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_BACKTEST)
-    markets = model.markets if model.markets else get_markets()
+    markets = get_markets()
     if len(markets) > 0:
         earliest_dates = model.get_earliest_dates()
         # 取得所有市場的目標回測資料
