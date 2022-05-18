@@ -3,6 +3,61 @@
 from .._context import TechnicalIndicator as TI
 from .._context import TimeUnit, get_cp, ts_any
 
+def checker_wrapper(func):
+    PARAM_CHECKER = {
+        'jack_ma_order_up':three_increasing,
+        'jack_ma_order_down':three_increasing,
+        'jack_ma_order_thick':three_increasing,
+        'jack_ma_through_price_down':night_increasing,
+        'jack_ma_through_price_up':night_increasing,
+        'jack_ma_through_ma_down_thrend':night_increasing,
+        'jack_ma_through_ma_up_thrend':night_increasing,
+    }
+    def wrapper(kwargs):
+        return PARAM_CHECKER[func.__name__](kwargs)
+    func.check = wrapper
+    return func
+
+def three_increasing(kwargs):
+    ret = {}
+    for key, value in kwargs.items():
+        if is_positive_int(value):
+            ret[key] = is_positive_int(value)
+    if kwargs['ma_short_period'] > kwargs['ma_mid_period']:
+        ret['ma_short_period'] = ret.get('ma_short_period', '') +', 必須小於 中期均線天數'
+    if kwargs['ma_mid_period'] > kwargs['ma_mid_period']:
+        ret['ma_mid_period'] = ret.get('ma_short_period', '') + ', 必須小於 長期均線天數'
+    return ret
+
+def night_increasing(kwargs):
+    ret = {}
+    for key, value in kwargs.items():
+        if is_positive_int(value):
+            ret[key] = is_positive_int(value)
+    if kwargs['period_1'] <= kwargs['period_2']:
+        ret['period_1'] = ret.get('period_1', '') + ', 需大於MA均線天數(第二小)'
+    if kwargs['period_2'] <= kwargs['period_3']:
+        ret['period_2'] = ret.get('period_2', '') + ', 需大於MA均線天數(第三小)'
+    if kwargs['period_3'] <= kwargs['period_4']:
+        ret['period_3'] = ret.get('period_3', '') + ', 需大於MA均線天數(第四小)'
+    if kwargs['period_4'] <= kwargs['period_5']:
+        ret['period_4'] = ret.get('period_4', '') + ', 需大於MA均線天數(第五小)'
+    if kwargs['period_5'] <= kwargs['period_6']:
+        ret['period_5'] = ret.get('period_5', '') + ', 需大於MA均線天數(第六小)'
+    if kwargs['period_6'] <= kwargs['period_7']:
+        ret['period_6'] = ret.get('period_6', '') + ',需大於MA均線天數(第七小)'
+    if kwargs['period_7'] <= kwargs['period_8']:
+        ret['period_7'] = ret.get('period_7', '') + ', 需大於MA均線天數(第八小)'
+    if kwargs['period_8'] <= kwargs['period_9']:
+        ret['period_8'] = ret.get('period_8', '') + ', 需大於MA均線天數(第九小)'
+    return ret
+
+def is_positive_int(value):
+    if isinstance(value, int) and value > 0:
+        return ''
+    return '輸入值必須為正整數'
+
+@checker_wrapper
 def jack_ma_order_up(market_id: str, **kwargs):
     """短期MA大於中期MA大於長期MA (3條).
     
@@ -44,6 +99,7 @@ def jack_ma_order_up(market_id: str, **kwargs):
     ret.rename(f'{market_id}.jack_ma_order_up({kwargs})')
     return ret
 
+@checker_wrapper
 def jack_ma_order_thick(market_id: str, **kwargs):
     """中期MA大於或小於短期、長期MA (3條).
     
@@ -85,7 +141,8 @@ def jack_ma_order_thick(market_id: str, **kwargs):
            ((ma_mid < ma_short) & (ma_short < ma_long)))
     ret.rename(f'{market_id}.jack_ma_order_thick({kwargs})')
     return ret    
-        
+
+@checker_wrapper     
 def jack_ma_order_down(market_id: str, **kwargs):
     """短期MA小於中期MA小於長期MA (3條).
     
@@ -127,6 +184,7 @@ def jack_ma_order_down(market_id: str, **kwargs):
     ret.rename(f'{market_id}.jack_ma_order_down({kwargs})')
     return ret   
 
+@checker_wrapper
 def jack_ma_through_price_down(market_id: str, **kwargs):
     """收盤價向下穿越任一MA (9條).
     
@@ -179,6 +237,7 @@ def jack_ma_through_price_down(market_id: str, **kwargs):
     ret.rename(f'{market_id}.jack_ma_through_price_down({kwargs})')
     return ret  
 
+@checker_wrapper
 def jack_ma_through_price_up(market_id: str, **kwargs):
     """收盤價向上穿越任一MA (9條).
     
@@ -231,6 +290,7 @@ def jack_ma_through_price_up(market_id: str, **kwargs):
     ret.rename(f'{market_id}.jack_ma_through_price_up({kwargs})')
     return ret  
 
+@checker_wrapper
 def jack_ma_through_ma_down_thrend(market_id: str, **kwargs):
     """任一短天期MA向下穿越長天期MA (9條).
     
@@ -282,6 +342,7 @@ def jack_ma_through_ma_down_thrend(market_id: str, **kwargs):
     ret.rename(f'{market_id}.jack_ma_through_ma_down_thrend({kwargs})')
     return ret  
 
+@checker_wrapper
 def jack_ma_through_ma_up_thrend(market_id: str, **kwargs):
     """任一短天期MA向上穿越長天期MA (9條).
     

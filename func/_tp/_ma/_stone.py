@@ -1,6 +1,75 @@
 # -*- coding: utf-8 -*-
-
 from .._context import TechnicalIndicator, TimeUnit, get_cp, ts_all, ts_any, ts_average, ts_max
+
+
+def is_positive_int(value):
+    if isinstance(value, int) and value > 0:
+        return ''
+    return '輸入值必須為正整數'
+
+def all_positive_int_check(kwargs):
+    ret = {}
+    for key, value in kwargs.items():
+        if is_positive_int(value):
+            ret[key] = is_positive_int(value)
+    if 'min_occurence' in ret:
+        if kwargs['min_occurence'] == 0:
+            del ret['min_occurence']
+    if 'occurence_threshold' in ret:
+        if kwargs['min_occurence'] == 0:
+            del ret['min_occurence']
+    return ret
+
+def valid_index_check(kwargs):
+    ret = {}
+    ret.update(all_positive_int_check(kwargs))
+    if kwargs.get('ridge_index'):
+        if kwargs['ridge_index'] > 8:
+            ret['ridge_index'] = ret.get('ridge_index', '') + ' 輸入值不可超出變數數量'
+    if kwargs.get('trough_index'):
+        if kwargs['trough_index'] > 8:
+            ret['trough_index'] = ret.get('trough_index', '') +' 輸入值不可超出變數數量'
+    return ret
+
+def occur_time_check(kwargs):
+    ret = {}
+    occur = kwargs.get('occurence_threshold') or kwargs.get('min_occurence')
+    if occur > kwargs['statistical_duration']:
+        ret['statistical_duration'] = ret.get('statistical_duration', '') + " 輸入值應大於發生天數"
+    return ret
+
+def index_and_occur_time_check(kwargs):
+    ret = {}
+    ret.update(valid_index_check(kwargs))
+    ret.update(occur_time_check(kwargs))
+
+    return ret
+
+def stone_pp005_check(kwargs):
+    ret = {}
+    if is_positive_int(kwargs['base_period']):
+        ret['base_period'] = is_positive_int(kwargs['base_period'])
+    if is_positive_int(kwargs['short_term_period']):
+        ret['short_term_period'] = is_positive_int(kwargs['short_term_period'])
+    if is_positive_int(kwargs['long_term_period_1']):
+        ret['long_term_period_1'] = is_positive_int(kwargs['long_term_period_1'])
+    if is_positive_int(kwargs['long_term_period_2']):
+        ret['long_term_period_2'] = is_positive_int(kwargs['long_term_period_2'])
+    if is_positive_int(kwargs['long_term_period_3']):
+        ret['long_term_period_3'] = is_positive_int(kwargs['long_term_period_3'])
+    if is_positive_int(kwargs['long_term_period_4']):
+        ret['long_term_period_4'] = is_positive_int(kwargs['long_term_period_4'])
+    if is_positive_int(kwargs['long_term_period_5']):
+        ret['long_term_period_5'] = is_positive_int(kwargs['long_term_period_5'])
+    if is_positive_int(kwargs['long_statistical_duration']):
+        ret['long_statistical_duration'] = is_positive_int(kwargs['long_statistical_duration'])
+    if is_positive_int(kwargs['short_statistical_duration']):
+        ret['short_statistical_duration'] = is_positive_int(kwargs['short_statistical_duration'])
+    if kwargs['min_occurence'] > kwargs['short_statistical_duration']:
+        ret['long_statistical_duration'] = ret.get('long_statistical_duration', '') + "輸入值應大於發生天數"
+    if not isinstance(kwargs['threshold_of_difference_rate'], float) or kwargs['threshold_of_difference_rate'] < 0:
+        ret['threshold_of_difference_rate'] = ret.get('threshold_of_difference_rate', '') + "輸入值英文正浮點數"
+    return ret
 
 def stone_pp000(market_id: str, **kwargs):
     """pp000.
@@ -29,6 +98,7 @@ def stone_pp000(market_id: str, **kwargs):
     ret = mat > mab
     ret.rename(f'{market_id}.stone_pp000({kwargs})')
     return ret
+stone_pp000.check = all_positive_int_check
 
 def stone_pp001(market_id: str, **kwargs):
     """pp001.
@@ -63,6 +133,7 @@ def stone_pp001(market_id: str, **kwargs):
     ret = (mat > mab).sampling(statistical_duration).sum() >= min_occurence
     ret.rename(f'{market_id}.stone_pp001({kwargs})')
     return ret
+stone_pp001.check = occur_time_check
 
 def stone_pp002(market_id: str, **kwargs):
     """pp002.
@@ -106,6 +177,7 @@ def stone_pp002(market_id: str, **kwargs):
     ret = (mat > ts_max(*mabs)).sampling(statistical_duration).all()
     ret.rename(f'{market_id}.stone_pp002({kwargs})')
     return ret
+stone_pp002.check = all_positive_int_check
 
 def stone_pp003(market_id: str, **kwargs):
     """pp003.
@@ -152,6 +224,7 @@ def stone_pp003(market_id: str, **kwargs):
     ret = ts_all(*conds)
     ret.rename(f'{market_id}.stone_pp003({kwargs})')
     return ret
+stone_pp003.check = valid_index_check
 
 def stone_pp004(market_id: str, **kwargs):
     """pp004.
@@ -198,9 +271,10 @@ def stone_pp004(market_id: str, **kwargs):
     ret = ts_all(*conds)
     ret.rename(f'{market_id}.stone_pp004({kwargs})')
     return ret
+stone_pp004.check = valid_index_check
 
 def stone_pp005(market_id: str, **kwargs):
-    """pp004.
+    """pp005.
 
     規則：
         -
@@ -257,6 +331,7 @@ def stone_pp005(market_id: str, **kwargs):
     ret = cond1 & cond2
     ret.rename(f'{market_id}.stone_pp005({kwargs})')
     return ret
+stone_pp005.check = stone_pp005_check
 
 def stone_pp006(market_id: str, **kwargs):
     """pp006.
@@ -311,6 +386,7 @@ def stone_pp006(market_id: str, **kwargs):
     ret = ts_all(*conds).sampling(statistical_duration).sum() >= min_occurence
     ret.rename(f'{market_id}.stone_pp006({kwargs})')
     return ret
+stone_pp006.check = index_and_occur_time_check
 
 def stone_pp007(market_id: str, **kwargs):
     """pp007.
@@ -365,6 +441,7 @@ def stone_pp007(market_id: str, **kwargs):
     ret = ts_all(*conds).sampling(statistical_duration).sum() > occurence_threshold
     ret.rename(f'{market_id}.stone_pp007({kwargs})')
     return ret
+stone_pp007.check = index_and_occur_time_check
 
 def stone_pp008(market_id: str, **kwargs):
     """pp008.
@@ -419,6 +496,7 @@ def stone_pp008(market_id: str, **kwargs):
     ret = ts_all(*conds).sampling(statistical_duration).sum() >= min_occurence
     ret.rename(f'{market_id}.stone_pp008({kwargs})')
     return ret
+stone_pp008.check = index_and_occur_time_check
 
 def stone_pp009(market_id: str, **kwargs):
     """pp009.
@@ -473,3 +551,4 @@ def stone_pp009(market_id: str, **kwargs):
     ret = ts_all(*conds).sampling(statistical_duration).sum() > occurence_threshold
     ret.rename(f'{market_id}.stone_pp009({kwargs})')
     return ret
+stone_pp009.check = index_and_occur_time_check
