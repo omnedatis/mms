@@ -260,7 +260,6 @@ class MimosaDB:
              - PredictResultField.LOWER_BOUND.value
         """
         fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
-        self._sync_model_results()
 
         data = pickle_load(fp)
         result = {
