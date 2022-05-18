@@ -1,10 +1,142 @@
 # -*- coding: utf-8 -*-
 
-from typing import Union
+from typing import Any, Callable, Dict, NamedTuple, Union
 
 from .._context import TechnicalIndicator as TI
 from .._context import (_CandleStick, BooleanTimeSeries,
                         NumericTimeSeries, MarketData, ts_min, ts_max)
+
+class ArgPrototype(NamedTuple):
+    symbol: str
+    name: str
+    rule: str
+    checker: Callable[[Any], bool]
+
+def is_positive_integer(value) -> str:
+    return isinstance(value, int) and value > 0
+
+def is_non_negative_number(value) -> str:
+    return isinstance(value, (int, float)) and value >= 0
+
+STONE_CC_CHCEKERS = {}
+STONE_CC_CHCEKERS['candle_period'
+                   ] = ArgPrototype(symbol='candle_period',
+                                    name='K線週期',
+                                    rule='必須為正整數',
+                                    checker=is_positive_integer)
+
+STONE_CC_CHCEKERS['n_days'
+                   ] = ArgPrototype(symbol='n_days',
+                                    name='近期參考天數(n)',
+                                    rule='必須為正整數',
+                                    checker=is_positive_integer)
+
+STONE_CC_CHCEKERS['o_times'
+                   ] = ArgPrototype(symbol='o_times',
+                                    name='近期事件發生次數(o)',
+                                    rule='必須為正整數',
+                                    checker=is_positive_integer)
+
+STONE_CC_CHCEKERS['shadow_ignore_ratio'
+                   ] = ArgPrototype(symbol='shadow_ignore_ratio',
+                                    name='忽略影線臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['strong_positive_body_ratio'
+                   ] = ArgPrototype(symbol='strong_positive_body_ratio',
+                                    name='劇烈漲幅臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['middle_positive_body_ratio'
+                   ] = ArgPrototype(symbol='middle_positive_body_ratio',
+                                    name='正向實體臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['strong_negative_body_ratio'
+                   ] = ArgPrototype(symbol='strong_negative_body_ratio',
+                                    name='劇烈跌幅臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['middle_negative_body_ratio'
+                   ] = ArgPrototype(symbol='middle_negative_body_ratio',
+                                    name='負向實體臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['long_body_ratio'
+                   ] = ArgPrototype(symbol='long_body_ratio',
+                                    name='長實體臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['middle_body_ratio'
+                   ] = ArgPrototype(symbol='middle_body_ratio',
+                                    name='中等長度實體臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['long_shadow_ratio'
+                   ] = ArgPrototype(symbol='long_shadow_ratio',
+                                    name='長下影線臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['body_ignore_ratio'
+                   ] = ArgPrototype(symbol='body_ignore_ratio',
+                                    name='忽略實體臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['amplitude_ignore_ratio'
+                   ] = ArgPrototype(symbol='body_ignore_ratio',
+                                    name='忽略振幅臨界值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+STONE_CC_CHCEKERS['ratio_threshold'
+                   ] = ArgPrototype(symbol='ratio_threshold',
+                                    name='振幅判斷值',
+                                    rule='必須為非負實數',
+                                    checker=is_non_negative_number)
+
+def stone_ccp_check(f):
+    MID = 'middle_'
+    LONG = 'long_'
+    STRONG = 'strong_'
+    def check(kwargs):
+        ret = {}
+        for key, value in kwargs.items():
+            if not STONE_CC_CHCEKERS[key].checker(value):
+                ret[key] = STONE_CC_CHCEKERS[key].rule
+            # 特殊規則
+            if key[:len(MID)] == 'middle_':
+                lkey = f'{LONG}{key[len(MID):]}'
+                if lkey in kwargs and kwargs[lkey] < kwargs[key]:
+                    msg = f';{STONE_CC_CHCEKERS[key].name}不得大於{STONE_CC_CHCEKERS[lkey].name}'
+                    if key in ret:
+                        ret[key] += msg
+                    else:
+                        ret[key] = msg
+                lkey = f'{STRONG}{key[len(MID):]}'
+                if lkey in kwargs and kwargs[lkey] < kwargs[key]:
+                    msg = f';{STONE_CC_CHCEKERS[key].name}不得大於{STONE_CC_CHCEKERS[lkey].name}'
+                    if key in ret:
+                        ret[key] += msg
+                    else:
+                        ret[key] = msg
+            if key == 'o_times' and 'n_days' in kwargs and kwargs['n_days'] < value:
+                msg = f';{STONE_CC_CHCEKERS[key].name}不得大於{STONE_CC_CHCEKERS["n_days"].name}'
+                if key in ret:
+                    ret[key] += msg
+                else:
+                    ret[key] = msg
+        return ret
+    f.check = check
+    return f
 
 class StoneCandleStick(_CandleStick):
     """Stone's CandleStick."""
@@ -130,6 +262,7 @@ def get_candle(market_id: str, candle_period: int) -> StoneCandleStick:
     ret = StoneCandleStick.make(TI.Candle(market_id, candle_period))
     return ret
 
+@stone_ccp_check
 def stone_kp001(market_id: str, **kwargs):
     """KP001 : 十字線 且 長下影.
 
@@ -170,6 +303,7 @@ def stone_kp001(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp001({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp002(market_id: str, **kwargs):
     """KP002 : 十字線 且 長上影.
 
@@ -210,6 +344,7 @@ def stone_kp002(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp002({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp003(market_id: str, **kwargs):
     """KP003 : 水平線.
 
@@ -245,6 +380,7 @@ def stone_kp003(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp003({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp004(market_id: str, **kwargs):
     """KP004 : 大陽線.
 
@@ -280,6 +416,7 @@ def stone_kp004(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp004({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp005(market_id: str, **kwargs):
     """KP005 : 大陰線.
 
@@ -315,6 +452,7 @@ def stone_kp005(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp005({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp006(market_id: str, **kwargs):
     """KP006 : 小陽線.
 
@@ -357,6 +495,7 @@ def stone_kp006(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp006({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp007(market_id: str, **kwargs):
     """KP007 : 小陰線.
 
@@ -399,6 +538,7 @@ def stone_kp007(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp007({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp011(market_id: str, **kwargs):
     """KP011.
 
@@ -445,6 +585,7 @@ def stone_kp011(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp011({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp012(market_id: str, **kwargs):
     """KP012.
 
@@ -491,6 +632,7 @@ def stone_kp012(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp012({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp013(market_id: str, **kwargs):
     """KP013.
 
@@ -533,6 +675,7 @@ def stone_kp013(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp013({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp014(market_id: str, **kwargs):
     """KP014.
 
@@ -588,6 +731,7 @@ def stone_kp014(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp014({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp015(market_id: str, **kwargs):
     """KP015.
 
@@ -643,6 +787,7 @@ def stone_kp015(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp015({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp016(market_id: str, **kwargs):
     """KP016.
 
@@ -697,6 +842,7 @@ def stone_kp016(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp016({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp017(market_id: str, **kwargs):
     """KP017.
 
@@ -751,6 +897,7 @@ def stone_kp017(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp017({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp018(market_id: str, **kwargs):
     """KP018.
 
@@ -800,6 +947,7 @@ def stone_kp018(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp018({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp019(market_id: str, **kwargs):
     """KP019.
 
@@ -842,6 +990,7 @@ def stone_kp019(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp019({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp020(market_id: str, **kwargs):
     """KP020.
 
@@ -884,6 +1033,7 @@ def stone_kp020(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp020({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp030a(market_id: str, **kwargs):
     """KP030a.
 
@@ -921,6 +1071,7 @@ def stone_kp030a(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp030a({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp030b(market_id: str, **kwargs):
     """KP030b.
 
@@ -958,6 +1109,7 @@ def stone_kp030b(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp030b({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp040a(market_id: str, **kwargs):
     """KP040a.
 
@@ -995,6 +1147,7 @@ def stone_kp040a(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp040a({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp040b(market_id: str, **kwargs):
     """KP040b.
 
@@ -1032,6 +1185,7 @@ def stone_kp040b(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp040b({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp050a(market_id: str, **kwargs):
     """KP050a.
 
@@ -1069,6 +1223,7 @@ def stone_kp050a(market_id: str, **kwargs):
     ret.rename(f'{market_id}.stone_kp050a({kwargs})')
     return ret
 
+@stone_ccp_check
 def stone_kp050b(market_id: str, **kwargs):
     """KP050b.
 
