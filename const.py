@@ -102,6 +102,7 @@ class TableName(Enum):
     PREDICT_RESULT_HISTORY = "FCST_MODEL_MKT_VALUE_HISTORY"
     SCORE_META = "FCST_SCORE"
     MODEL_MKT_HIT_SUM = "FCST_MODEL_MKT_HIT_SUM"
+    PATTERN_EXECUTION = 'FCST_PAT_EXECUTION'
 
 class StoredProcedule(Enum):
     """SP名稱
@@ -172,6 +173,36 @@ class ModelExecution(str, Enum):
     ADD_PREDICT_FINISHED = 'APF'
     ADD_BACKTEST_FINISHED = 'ABF'
     BATCH_PREDICT_FINISHED = 'BPF'
+
+class PatternExecution(str, Enum):
+    """Execution types of Model.
+
+    跑批時計算 BATCH_SERVICE = 'AP'
+    新增現象時計算 ADD_PATTERN = 'AB'
+    跑批時計算完成 BATCH_SERVICE_FINISHED = 'APF'
+    新增現象時計算完成 ADD_PATTERN_FINISHED = 'BPF'
+    """
+    BATCH_SERVICE = 'BS'
+    ADD_PATTERN = 'AP'
+    BATCH_SERVICE_FINISHED = 'BSF'
+    ADD_PATTERN_FINISHED = 'APF'
+
+class PatternExecutionField(Enum):
+    """觀點執行狀態資訊
+
+    Members
+    -------
+    EXEC_ID: 執行ID
+    PATTERN_ID: 觀點ID
+    STATUS_CODE: 執行狀態代碼
+    START_DT: 執行起始時間
+    END_DT: 執行結束時間
+    """
+    EXEC_ID = "EXEC_ID"
+    PATTERN_ID = "PAT_ID"
+    STATUS_CODE = "STATUS_CODE"
+    START_DT = "START_DT"
+    END_DT = "END_DT"
 
 class ModelStatus(int, Enum):
     """Status of Model on DB."""

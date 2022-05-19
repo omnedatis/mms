@@ -745,6 +745,39 @@ def set_model_execution_complete(exection_id):
     db = get_db()
     db.set_model_execution_complete(exection_id)
 
+def set_pattern_execution_start(pid, exection):
+    """Set pattern execution to start.
+
+    Parameters
+    ----------
+    pid: str
+        Id of pattern.
+    exection: str
+        Code of model execution type.
+
+    Returns
+    -------
+    str
+        ID of this model execution.
+
+    """
+    db = get_db()
+    result = db.set_pattern_execution_start(pid, exection)
+    return result
+
+
+def set_pattern_execution_complete(exection_id):
+    """Set pattern execution to complete.
+
+    Parameters
+    ----------
+    exection_id: str
+        ID of this pattern execution.
+
+    """
+    db = get_db()
+    db.set_pattern_execution_complete(exection_id)
+
 
 def get_recover_model_execution():
     """ 取得模型最新執行狀態
@@ -2093,6 +2126,8 @@ def pattern_update(controller, batch_type=BatchType.SERVICE_BATCH):
         ret_values = mp.Manager().list()
         ret_mscores = mp.Manager().list()
         ret_lpatterns = latest_pattern_writer.pool
+        pexids = [set_pattern_execution_start(each.pid, PatternExecution.BATCH_SERVICE)
+                  for each in patterns]
     else:
         ret_values = None
         ret_mscores = None
@@ -2139,6 +2174,8 @@ def pattern_update(controller, batch_type=BatchType.SERVICE_BATCH):
             return
         ret += [market_return_writer.get_thread(), latest_pattern_writer.get_thread(),
                 return_score_writer.get_thread()]
+        for each in pexids:
+            set_pattern_execution_complete(each)
     return ret
 
 
@@ -2461,6 +2498,7 @@ def add_pattern(pid):
         pids[pid] = len(pids)
         pidx = -1
 
+    sid = set_pattern_execution_start(pid, PatternExecution.ADD_PATTERN)
     for mid, idx in mids.items():
         pattern_result = pattern.run(mid).rename(pattern.pid)
         if pidx > 0:
@@ -2478,6 +2516,7 @@ def add_pattern(pid):
     update_latest_pattern_results(get_latest_patterns(list(mids.keys()), pid, np.array(latest_dates), np.array(latest_values)))
     update_latest_pattern_occur(pd.concat(pattern_occurs, axis=0))
     update_latest_pattern_distribution(pd.concat(pattern_dists, axis=0))
+    set_pattern_execution_complete(sid)
     smd_lock.acquire()
     if pidx > 0:
         smd.update(pvalues=pvalues)
