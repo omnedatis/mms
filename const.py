@@ -199,7 +199,7 @@ class PatternExecutionField(Enum):
     END_DT: 執行結束時間
     """
     EXEC_ID = "EXEC_ID"
-    PATTERN_ID = "PAT_ID"
+    PATTERN_ID = "PATTERN_ID"
     STATUS_CODE = "STATUS_CODE"
     START_DT = "START_DT"
     END_DT = "END_DT"
