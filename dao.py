@@ -13,16 +13,16 @@ from typing import Any, Dict, List, NamedTuple, Optional, Union
 from model import (ModelInfo, PatternInfo, CatchableTread,
                 pickle_dump, pickle_load,
                 get_filed_name_of_future_return)
-from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, MarketOccurField,  
-                   ModelMarketHitSumField, PatternResultField, 
-                   PatternExecution, PatternExecutionField,
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, 
+                   MarketOccurField, ModelMarketHitSumField, PatternResultField,
                    TableName, MarketDistField, ModelExecution, PredictResultField,
                    MarketPeriodField, MarketScoreField, MarketHistoryPriceField,
                    MarketInfoField, DSStockInfoField, PatternInfoField,
                    MarketStatField, ModelExecution, ScoreMetaField,
                    PatternParamField, MacroInfoField, MacroParamField,
                    ModelInfoField, ModelMarketMapField, ModelPatternMapField,
-                   ModelExecutionField, StoredProcedule)
+                   ModelExecutionField, StoredProcedule, DBModelStatus,
+                   PatternExecution, PatternExecutionField)
 from utils import dict_equals
 
 class MimosaDB:
@@ -592,6 +592,9 @@ class MimosaDB:
                             {ModelExecutionField.END_DT.value} IS NOT NULL
                     ) AS me
                 ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
+                WHERE 
+                    model.{ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PRIVATE_AND_VALID.value} OR
+                    model.{ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PUBLIC_AND_VALID.value}
             """
             data = pd.read_sql_query(sql, engine)[ModelInfoField.MODEL_ID.value].values.tolist()
             with open(f'{DATA_LOC}/models.pkl', 'wb') as fp:
@@ -625,6 +628,9 @@ class MimosaDB:
                     *
                 FROM
                     {TableName.MODEL_INFO.value}
+                WHERE 
+                    {ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PRIVATE_AND_VALID.value} OR
+                    {ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PUBLIC_AND_VALID.value}
             """
             model_info = pd.read_sql_query(sql, engine)
             with open(f'{DATA_LOC}/model_training_infos.pkl', 'wb') as fp:

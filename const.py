@@ -211,6 +211,42 @@ class ModelStatus(int, Enum):
     CREATED = 2
     COMPLETE = 3
 
+class DBModelStatus(int, Enum):
+    """ 觀點在資料庫中的狀態
+
+    Members
+    -------
+    PRIVATE_AND_VALID: 未發布且有效
+    PUBLIC_AND_VALID: 發布且有效
+    DRAFT: 草稿
+    PRIVATE_AND_INVALID: 未發布且無效
+    PUBLIC_AND_INVALID: 發布且無效
+
+    """
+    PRIVATE_AND_VALID = 0
+    PUBLIC_AND_VALID = 1
+    DRAFT = 2
+    PRIVATE_AND_INVALID = 3
+    PUBLIC_AND_INVALID = 4
+
+class DBPatternStatus(int, Enum):
+    """ 現象在資料庫中的狀態
+
+    Members
+    -------
+    PRIVATE_AND_VALID: 未發布且有效
+    PUBLIC_AND_VALID: 發布且有效
+    DRAFT: 草稿
+    PRIVATE_AND_INVALID: 未發布且無效
+    PUBLIC_AND_INVALID: 發布且無效
+
+    """
+    PRIVATE_AND_VALID = 0
+    PUBLIC_AND_VALID = 1
+    DRAFT = 2
+    PRIVATE_AND_INVALID = 3
+    PUBLIC_AND_INVALID = 4
+
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
 
@@ -460,7 +496,7 @@ class ModelInfoField(Enum):
     MODEL_ID: 觀點ID
     MODEL_NAME: 觀點名稱
     MODEL_DESC: 觀點描述
-    SHARE_YN: 觀點是否分享
+    MODEL_STATUS: 觀點狀態
     TRAIN_START_DT: 觀點訓練起始日
     TRAIN_END_DT: 觀點訓練終止日
     RETRAIN_CYCLE: 觀點重訓練區間(日)
@@ -468,7 +504,7 @@ class ModelInfoField(Enum):
     MODEL_ID = "MODEL_ID"
     MODEL_NAME = "MODEL_NAME"
     MODEL_DESC = "MODEL_DESC"
-    SHARE_YN = "SHARE_YN"
+    MODEL_STATUS = "MODEL_STATUS"
     TRAIN_START_DT = "TRAIN_START_DT"
     TRAIN_END_DT = "TRAIN_END_DT"
     RETRAIN_CYCLE = "RETRAIN_CYCLE"
