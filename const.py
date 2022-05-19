@@ -433,11 +433,13 @@ class PatternInfoField(Enum):
     PATTERN_NAME: 現象名稱
     PATTERN_DESC: 現象描述
     MACRO_ID: 現象使用的 Macro ID
+    PATTERN_STATUS: 現象狀態
     """
     PATTERN_ID = "PATTERN_ID"
     PATTERN_NAME = "PATTERN_NAME"
     PATTERN_DESC = "PATTERN_DESC"
     MACRO_ID = "MACRO_ID"
+    PATTERN_STATUS = "PATTERN_STATUS"
 
 class PatternParamField(Enum):
     """現象參數基本資訊

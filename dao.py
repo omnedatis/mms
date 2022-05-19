@@ -22,7 +22,7 @@ from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType,
                    PatternParamField, MacroInfoField, MacroParamField,
                    ModelInfoField, ModelMarketMapField, ModelPatternMapField,
                    ModelExecutionField, StoredProcedule, DBModelStatus,
-                   PatternExecution, PatternExecutionField)
+                   PatternExecution, PatternExecutionField, DBPatternStatus)
 from utils import dict_equals
 
 class MimosaDB:
@@ -521,6 +521,9 @@ class MimosaDB:
                     ) AS mp
                 ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND
                 para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
+                WHERE 
+                    ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PRIVATE_AND_VALID.value} OR 
+                    ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PUBLIC_AND_VALID.value} 
                 ORDER BY
                     ptn.{PatternInfoField.PATTERN_ID.value},
                     mcr.{MacroInfoField.FUNC_CODE.value} ASC;
