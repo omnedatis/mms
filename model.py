@@ -1631,6 +1631,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
             save_model_results(model.model_id, ret, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
+        stamp_model_execution([exection_id])
     if ret_buffer:
         return ret
 
@@ -1721,6 +1722,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
+        stamp_model_execution([exection_id])
     if all_results:
         return pd.concat(all_results, axis=0)
 
