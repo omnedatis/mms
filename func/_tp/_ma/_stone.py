@@ -68,7 +68,7 @@ def stone_pp005_check(kwargs):
     if kwargs['min_occurence'] > kwargs['short_statistical_duration']:
         ret['long_statistical_duration'] = ret.get('long_statistical_duration', '') + "輸入值應大於發生天數"
     if not isinstance(kwargs['threshold_of_difference_rate'], float) or kwargs['threshold_of_difference_rate'] < 0:
-        ret['threshold_of_difference_rate'] = ret.get('threshold_of_difference_rate', '') + "輸入值英文正浮點數"
+        ret['threshold_of_difference_rate'] = ret.get('threshold_of_difference_rate', '') + "輸入值應為正浮點數"
     return ret
 
 def stone_pp000(market_id: str, **kwargs):
