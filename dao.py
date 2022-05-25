@@ -774,6 +774,50 @@ class MimosaDB:
         self._clone_model_patterns()
         self._clone_model_execution()
 
+    def get_macro_param_type(self, function_code: str) -> Dict[str, str]:
+        """ 取得 Macro 中的 function 參數型態資訊
+
+        Parameters
+        ----------
+        function_code: str
+            function 代碼
+        
+        Returns
+        -------
+        result: Dict[str, str]
+            function 參數對應的型態字典
+
+        """
+        engine = self._engine()
+        sql = f"""
+                SELECT
+                    mcr.{MacroInfoField.MACRO_ID.value},
+                    mcr.{MacroInfoField.FUNC_CODE.value},
+                    mp.{MacroParamField.PARAM_CODE.value},
+                    mp.{MacroParamField.PARAM_TYPE.value}
+                FROM
+                    {TableName.MACRO_INFO.value} AS mcr
+                LEFT JOIN
+                    (
+                        SELECT
+                            {MacroParamField.MACRO_ID.value},
+                            {MacroParamField.PARAM_CODE.value},
+                            {MacroParamField.PARAM_TYPE.value}
+                        FROM
+                            {TableName.MACRO_PARAM.value}
+                    ) AS mp
+                ON mcr.{MacroInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value}
+                WHERE
+                    mcr.{MacroInfoField.FUNC_CODE.value} = '{function_code}';
+            """
+        data = pd.read_sql_query(sql, engine)
+        result = {}
+        for i in range(len(data)):
+            param = data.iloc[i][MacroParamField.PARAM_CODE.value]
+            val = data.iloc[i][MacroParamField.PARAM_TYPE.value]
+            result[param] = val
+        return result
+
     def get_markets(self, market_type: str=None, category_code: str=None):
         """get market IDs from DB.
         Parameters
