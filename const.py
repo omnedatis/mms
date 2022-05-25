@@ -23,7 +23,11 @@ PORT = 8080
 FUNC_CACHE_SIZE = 2000
 MULTI_PATTERN_CACHE_SIZE = 2000 * 100
 MIN_DB_WRITING_LENGTH = 0
-
+TYPE_MAP = {
+        "string":str,
+        "int":int,
+        "float":float
+    }
 class BatchType(str, Enum):
     """Batch 的執行型態
 

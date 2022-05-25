@@ -597,7 +597,7 @@ def api_pattern_paramscheck():
                 paramCode:
                   type: string
                 paramValue:
-                  type: object
+                  type: string
 
     responses:
       200:

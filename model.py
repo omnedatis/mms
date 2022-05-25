@@ -2568,7 +2568,13 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
                                    mdates[period:eidx+period])]
     return ret
 
+def get_macro_params(func_code):
+    db = get_db()
+    return db.get_macro_param_type(func_code)
+
 def verify_pattern(func, kwargs):
+    macro_info = get_macro_params(func)
+    kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
     try:
         return eval(f"{func}.check(kwargs)")
     except AttributeError:
