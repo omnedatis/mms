@@ -625,6 +625,8 @@ def api_pattern_paramscheck():
     func_code = data['funcCode']
     params_codes = data['paramCodes']
     param = {each["paramCode"]:each["paramValue"] for each in params_codes}
+    if "period_type" in param:
+      del param["period_type"]
     try:
       ret = [{"errorParam":key, "errorMessage":value} for key, value in verify_pattern(func_code, param).items()]
       return {"status": 200, "message": "OK", "data": ret}
