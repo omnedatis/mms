@@ -2342,7 +2342,9 @@ def get_mix_pattern_occur(market_id: str, patterns: List, start_date:str=None, e
     ret = SMD.ddecode(dates)
     if start_date is not None:
         start_date = np.datetime64(start_date)
-        ret = ret[(ret>=start_date).sum():]
+        ret = ret[-(ret>=start_date).sum():]
+        if (ret>=start_date).sum() == 0:
+            ret = ret[:0]
     if end_date is not None:
         end_date = np.datetime64(end_date)
         ret = ret[:(ret<=end_date).sum()]

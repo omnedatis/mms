@@ -141,7 +141,7 @@ def api_get_pattern_dates():
             type: array
             items:
               type: string
-          marketId:
+          marketCode:
             type: string
           startDate:
             type: string
@@ -172,7 +172,7 @@ def api_get_pattern_dates():
         logging.info(f"api_get_pattern_dates receiving: {request.json}")
         data = request.json
         patterns = data['patterns']
-        market_id = data['marketId']
+        market_id = data['marketCode']
         start_date = data.get('startDate')
         end_date = data.get('endDate')
     except Exception as esp:
