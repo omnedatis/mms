@@ -2518,9 +2518,7 @@ def add_pattern(pid):
         market_dist, market_occur = get_pattern_stats_info_v2(pd.DataFrame(pattern_result), return_result, mid)
         pattern_occurs.append(market_occur)
         pattern_dists.append(market_dist)
-    update_latest_pattern_results(get_latest_patterns(list(mids.keys()), pid, np.array(latest_dates), np.array(latest_values)))
-    update_latest_pattern_occur(pd.concat(pattern_occurs, axis=0))
-    update_latest_pattern_distribution(pd.concat(pattern_dists, axis=0))
+    update_latest_pattern_results(pid, get_latest_patterns(list(mids.keys()), pid, np.array(latest_dates), np.array(latest_values)))
     set_pattern_execution_complete(sid)
     smd_lock.acquire()
     if pidx > 0:
