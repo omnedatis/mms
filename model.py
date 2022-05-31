@@ -555,6 +555,10 @@ def update_model_accuracy():
     db = get_db()
     db.update_model_accuracy()
 
+def stamp_model_execution(sids):
+    db = get_db()
+    db.stamp_model_execution(sids)
+
 class ModelInfo():
     """Model Info.
 
@@ -740,6 +744,39 @@ def set_model_execution_complete(exection_id):
     """
     db = get_db()
     db.set_model_execution_complete(exection_id)
+
+def set_pattern_execution_start(pid, exection):
+    """Set pattern execution to start.
+
+    Parameters
+    ----------
+    pid: str
+        Id of pattern.
+    exection: str
+        Code of model execution type.
+
+    Returns
+    -------
+    str
+        ID of this model execution.
+
+    """
+    db = get_db()
+    result = db.set_pattern_execution_start(pid, exection)
+    return result
+
+
+def set_pattern_execution_complete(exection_id):
+    """Set pattern execution to complete.
+
+    Parameters
+    ----------
+    exection_id: str
+        ID of this pattern execution.
+
+    """
+    db = get_db()
+    db.set_pattern_execution_complete(exection_id)
 
 
 def get_recover_model_execution():
@@ -1397,7 +1434,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
     logging.info(f'start model update on {model_id}')
     latest_dates = model.get_latest_dates()
     old_results = get_model_results(model_id)
-    markets = model.markets if model.markets else get_markets()
+    markets = get_markets()
     ret_buffer = []
     for mid in markets:
         if not controller.isactive:
@@ -1425,7 +1462,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
             set_model_execution_complete(exection_id)
         if controller.isactive:
             model_results = get_model_results(model_id)
-            ret = [get_hit_sum(model_results[mid], mid, BatchType.SERVICE_BATCH) for mid in markets]
+            ret = [get_hit_sum(model_results.get(mid), mid, BatchType.SERVICE_BATCH) for mid in markets]
             if ret:
                 ret = pd.concat(ret, axis=0)
                 ret.index = np.arange(len(ret))
@@ -1434,7 +1471,7 @@ def model_update(model_id: str, batch_controller: ThreadController, batch_type:B
         MT_MANAGER.release(model_id)
     t = CatchableTread(target=save_result, args=(ret_buffer, model_id, exection_id, controller))
     t.start()
-    return t
+    return t, exection_id
 
 def add_model(model_id: str):
     """新增模型
@@ -1461,9 +1498,8 @@ def add_model(model_id: str):
         model = get_model_info(model_id)
         model_create(model, controller)
         model_backtest(model, controller)
-        markets = model.markets if model.markets else get_markets()
         model_results = get_model_results(model_id)
-        ret = [get_hit_sum(model_results[mid], mid, BatchType.INIT_BATCH) for mid in markets]
+        ret = [get_hit_sum(model_results.get(mid), mid, BatchType.INIT_BATCH) for mid in get_markets()]
         if ret:
             ret = pd.concat(ret, axis=0)
             ret.index = np.arange(len(ret))
@@ -1509,9 +1545,8 @@ def model_recover(model_id: str, status: ModelStatus):
         if status < ModelStatus.CREATED:
             model_create(model, controller)
         model_backtest(model, controller)
-        markets = model.markets if model.markets else get_markets()
         model_results = get_model_results(model_id)
-        ret = [get_hit_sum(model_results[mid], mid, BatchType.INIT_BATCH) for mid in markets]
+        ret = [get_hit_sum(model_results.get(mid), mid, BatchType.INIT_BATCH) for mid in get_markets()]
         if ret:
             ret = pd.concat(ret, axis=0)
             ret.index = np.arange(len(ret))
@@ -1582,9 +1617,8 @@ def model_create(model: ModelInfo, controller: ThreadController):
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_PREDICT)
-    markets = model.markets if model.markets else get_markets()
     ret_buffer = []
-    for mid in markets:
+    for mid in get_markets():
         if not controller.isactive:
             logging.info('model create terminated')
             return
@@ -1598,6 +1632,7 @@ def model_create(model: ModelInfo, controller: ThreadController):
             save_model_results(model.model_id, ret, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         set_model_execution_complete(exection_id)
+        stamp_model_execution([exection_id])
     if ret_buffer:
         return ret
 
@@ -1632,7 +1667,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
         return
     exection_id = set_model_execution_start(
         model.model_id, ModelExecution.ADD_BACKTEST)
-    markets = model.markets if model.markets else get_markets()
+    markets = get_markets()
     if len(markets) > 0:
         earliest_dates = model.get_earliest_dates()
         # 取得所有市場的目標回測資料
@@ -1688,6 +1723,7 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
+        stamp_model_execution([exection_id])
     if all_results:
         return pd.concat(all_results, axis=0)
 
@@ -2093,6 +2129,8 @@ def pattern_update(controller, batch_type=BatchType.SERVICE_BATCH):
         ret_values = mp.Manager().list()
         ret_mscores = mp.Manager().list()
         ret_lpatterns = latest_pattern_writer.pool
+        pexids = [set_pattern_execution_start(each.pid, PatternExecution.BATCH_SERVICE)
+                  for each in patterns]
     else:
         ret_values = None
         ret_mscores = None
@@ -2139,6 +2177,8 @@ def pattern_update(controller, batch_type=BatchType.SERVICE_BATCH):
             return
         ret += [market_return_writer.get_thread(), latest_pattern_writer.get_thread(),
                 return_score_writer.get_thread()]
+        for each in pexids:
+            set_pattern_execution_complete(each)
     return ret
 
 
@@ -2300,9 +2340,11 @@ def _batch(batch_type):
                 model_execution_recover(batch_type)
                 logging.info('End model execution recover')
             if batch_type == BatchType.SERVICE_BATCH:
+                eids = []
                 logging.info("Start model update")
                 for model in get_models():
-                    t = model_update(model, controller, batch_type)
+                    t, eid = model_update(model, controller, batch_type)
+                    eids.append(eid)
                     if t is not None:
                         ts.append(t)
                 for t in ts:
@@ -2312,6 +2354,7 @@ def _batch(batch_type):
                 logging.info("End model update")
                 if controller.isactive:
                     checkout_fcst_data()
+                    stamp_model_execution(eids)
                     swap_smd_index()
                     swap_smd()
 
@@ -2403,8 +2446,8 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
     values = [pvalues[idx][:,pidxs] for idx in midxs]
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(v, r) for v, r in zip(values, returns)])
-    cnts, ups = stats.sum(axis=0)
-    return ups / cnts * 100
+    cnts, ups = stats.sum(axis=0).tolist()
+    return (ups / cnts) * 100 if cnts > 0 else 0
 
 def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
@@ -2460,6 +2503,7 @@ def add_pattern(pid):
         pids[pid] = len(pids)
         pidx = -1
 
+    sid = set_pattern_execution_start(pid, PatternExecution.ADD_PATTERN)
     for mid, idx in mids.items():
         pattern_result = pattern.run(mid).rename(pattern.pid)
         if pidx > 0:
@@ -2477,6 +2521,7 @@ def add_pattern(pid):
     update_latest_pattern_results(get_latest_patterns(list(mids.keys()), pid, np.array(latest_dates), np.array(latest_values)))
     update_latest_pattern_occur(pd.concat(pattern_occurs, axis=0))
     update_latest_pattern_distribution(pd.concat(pattern_dists, axis=0))
+    set_pattern_execution_complete(sid)
     smd_lock.acquire()
     if pidx > 0:
         smd.update(pvalues=pvalues)
@@ -2505,8 +2550,8 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
         return 0
     returns = [freturns[idx][:,pidx] for idx in midxs]
     stats = np.array([func(r) for r in returns])
-    cnts, ups = stats.sum(axis=0)
-    return (ups / cnts) * 100
+    cnts, ups = stats.sum(axis=0).tolist()
+    return (ups / cnts) * 100 if cnts > 0 else 0
 
 def get_mkt_dist_info(period, market_type=None, category_code=None):
     def func(r):

@@ -13,14 +13,16 @@ from typing import Any, Dict, List, NamedTuple, Optional, Union
 from model import (ModelInfo, PatternInfo, CatchableTread,
                 pickle_dump, pickle_load,
                 get_filed_name_of_future_return)
-from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, MarketOccurField, ModelMarketHitSumField, PatternResultField,
+from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, 
+                   MarketOccurField, ModelMarketHitSumField, PatternResultField,
                    TableName, MarketDistField, ModelExecution, PredictResultField,
                    MarketPeriodField, MarketScoreField, MarketHistoryPriceField,
                    MarketInfoField, DSStockInfoField, PatternInfoField,
                    MarketStatField, ModelExecution, ScoreMetaField,
                    PatternParamField, MacroInfoField, MacroParamField,
                    ModelInfoField, ModelMarketMapField, ModelPatternMapField,
-                   ModelExecutionField, StoredProcedule)
+                   ModelExecutionField, StoredProcedule, DBModelStatus,
+                   PatternExecution, PatternExecutionField, DBPatternStatus)
 from utils import dict_equals
 
 class MimosaDB:
@@ -73,22 +75,22 @@ class MimosaDB:
       return engine
 
     def _convert_exec_to_status(self, exec_info: pd.DataFrame) -> Dict[str, Dict[str, datetime.date]]:
-        """將 EXECUTION RECORD 轉換為以完成狀態字典表示, 若 exec_info 長度為 0, 
+        """將 EXECUTION RECORD 轉換為以完成狀態字典表示, 若 exec_info 長度為 0,
         則會回傳空字典 {}
 
         Parameters
         ----------
         exec_info: pd.DataFrame
             執行狀態直表
-        
+
         Returns
         -------
         result: Dict[str, Dict[str, datetime.datetime]]
             完成狀態字典, 格式為 [model_id] - [status_code] - end_dt
         """
         FINISHED_STATUS = [
-            ModelExecution.ADD_BACKTEST_FINISHED.value, 
-            ModelExecution.ADD_PREDICT_FINISHED.value, 
+            ModelExecution.ADD_BACKTEST_FINISHED.value,
+            ModelExecution.ADD_PREDICT_FINISHED.value,
             ModelExecution.BATCH_PREDICT_FINISHED.value
             ]
         exec_info = exec_info.copy()
@@ -109,8 +111,8 @@ class MimosaDB:
         return result
 
     def _sync_model_status(self):
-        """與資料庫同步本地端模型預測結果執行狀態, 
-        沒有紀錄 -> 不會寫檔, 
+        """與資料庫同步本地端模型預測結果執行狀態,
+        沒有紀錄 -> 不會寫檔,
         有部分記錄 -> 沒有完成狀態的不會寫 key
 
         Parameters
@@ -142,7 +144,7 @@ class MimosaDB:
                 os.makedirs(fp, exist_ok=True)
                 pickle_dump(result, f"{fp}/status.pkl")
         logging.info("Sync local model execution status finished")
-    
+
     def _sync_model_results(self, controller=None):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
@@ -175,7 +177,7 @@ class MimosaDB:
                 {TableName.MODEL_EXECUTION.value}
         """
         model_exec_info = pd.read_sql_query(sql, engine)
-        
+
         model_status_records = self._convert_exec_to_status(model_exec_info)
 
         for model_id_i, model_id in enumerate(model_ids):
@@ -260,11 +262,10 @@ class MimosaDB:
              - PredictResultField.LOWER_BOUND.value
         """
         fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
-        self._sync_model_results()
 
         data = pickle_load(fp)
         result = {
-            market_id: group 
+            market_id: group
             for market_id, group in
             data.groupby(PredictResultField.MARKET_ID.value)
         }
@@ -397,7 +398,7 @@ class MimosaDB:
         """
         if os.path.exists(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl'):
             os.remove(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl')
-    
+
     def _clone_model_execution(self):
         if not os.path.exists(f'{DATA_LOC}/{TableName.MODEL_EXECUTION.value}.pkl'):
             logging.info(f'Clone {TableName.MODEL_EXECUTION.value} info from db')
@@ -520,6 +521,9 @@ class MimosaDB:
                     ) AS mp
                 ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND
                 para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
+                WHERE 
+                    ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PRIVATE_AND_VALID.value} OR 
+                    ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PUBLIC_AND_VALID.value} 
                 ORDER BY
                     ptn.{PatternInfoField.PATTERN_ID.value},
                     mcr.{MacroInfoField.FUNC_CODE.value} ASC;
@@ -591,6 +595,9 @@ class MimosaDB:
                             {ModelExecutionField.END_DT.value} IS NOT NULL
                     ) AS me
                 ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
+                WHERE 
+                    model.{ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PRIVATE_AND_VALID.value} OR
+                    model.{ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PUBLIC_AND_VALID.value}
             """
             data = pd.read_sql_query(sql, engine)[ModelInfoField.MODEL_ID.value].values.tolist()
             with open(f'{DATA_LOC}/models.pkl', 'wb') as fp:
@@ -624,6 +631,9 @@ class MimosaDB:
                     *
                 FROM
                     {TableName.MODEL_INFO.value}
+                WHERE 
+                    {ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PRIVATE_AND_VALID.value} OR
+                    {ModelInfoField.MODEL_STATUS.value}={DBModelStatus.PUBLIC_AND_VALID.value}
             """
             model_info = pd.read_sql_query(sql, engine)
             with open(f'{DATA_LOC}/model_training_infos.pkl', 'wb') as fp:
@@ -1249,30 +1259,26 @@ class MimosaDB:
 
         # 新增歷史預測結果
         if not self.READ_ONLY:
-            try:
-                data.to_sql(
-                    table_name,
-                    engine,
-                    if_exists='append',
-                    chunksize=10000,
-                    method='multi',
-                    index=False)
-                # 與本地端資料同步更新
-                history_fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
-                history_data = pd.DataFrame(columns=data.columns)
-                if os.path.exists(history_fp):
-                    history_data = pickle_load(history_fp)
-                history_data = pd.concat([history_data, data], axis=0)
-                history_data = history_data.drop_duplicates(subset=[
-                    PredictResultField.MODEL_ID.value,
-                    PredictResultField.MARKET_ID.value,
-                    PredictResultField.PERIOD.value,
-                    PredictResultField.DATE.value
-                ])
-                pickle_dump(history_data, history_fp)
-            except Exception as e:
-                logging.info('save_model_results: Saving model history results failed, maybe PK duplicated, skipped it.')
-                logging.debug(traceback.format_exc())
+            data.to_sql(
+                table_name,
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+            # 與本地端資料同步更新
+            history_fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
+            history_data = pd.DataFrame(columns=data.columns)
+            if os.path.exists(history_fp):
+                history_data = pickle_load(history_fp)
+            history_data = pd.concat([history_data, data], axis=0)
+            history_data = history_data.drop_duplicates(subset=[
+                PredictResultField.MODEL_ID.value,
+                PredictResultField.MARKET_ID.value,
+                PredictResultField.PERIOD.value,
+                PredictResultField.DATE.value
+            ])
+            pickle_dump(history_data, history_fp)
         if self.WRITE_LOCAL:
             pickle_dump(data, f'{DATA_LOC}/local_out/FCST_MODEL_MKT_VALUE_HISTORY_SWAP.pkl')
         logging.info('Saving model results finished')
@@ -1387,6 +1393,10 @@ class MimosaDB:
         model_id: str
             ID of model
 
+        Returns
+        -------
+        None.
+
         """
         now = datetime.datetime.now()
         now = np.datetime64(now).astype('datetime64[s]').tolist()
@@ -1413,20 +1423,8 @@ class MimosaDB:
 
         status = finished_status[exec_data[ModelExecutionField.STATUS_CODE.value]]
         model_id = exec_data[ModelExecutionField.MODEL_ID.value]
-        if not self.READ_ONLY:
-            sql = f"""
-            UPDATE
-                {TableName.MODEL_EXECUTION.value}
-            SET
-                {ModelExecutionField.END_DT.value}='{now}',
-                MODIFY_DT='{now}',
-                MODIFY_BY='{self.MODIFY_BY}',
-                {ModelExecutionField.STATUS_CODE.value}='{status}'
-            WHERE
-                {ModelExecutionField.EXEC_ID.value}='{exec_id}';
-            """
-            engine.execute(sql)
 
+        if not self.READ_ONLY:
             # 同步更新本地端紀錄
             status_fp = f'{LOCAL_DB}/views/{model_id}/status.pkl'
             local_status = {}
@@ -1434,6 +1432,187 @@ class MimosaDB:
                 local_status = pickle_load(status_fp)
             local_status[status] = now
             pickle_dump(local_status, status_fp)
+
+    def set_pattern_execution_start(self, pid:str, exection:str) -> str:
+        """ create pattern exec
+
+        Parameters
+        ----------
+        pid: str
+            ID of pattern
+        exection: str
+            status code set to this pattern
+
+        Returns
+        -------
+        exec_id: str
+            ID of pattern execution status
+
+        """
+        if not self.READ_ONLY:
+            # 檢查是否為合法的 exection
+            if exection not in PatternExecution:
+                raise Exception(f"Unknown excetion code {exection}")
+
+            engine = self._engine()
+            # 資料庫中對於一個現象僅會存在一筆 ADD_PATTERN
+            # 若是要儲存 ADD_PATTERN, 那麼資料庫中就不應該已存在 ADD_PATTERN
+            # 因此要先清除原先的執行紀錄
+            if exection in [
+                PatternExecution.ADD_PATTERN.value]:
+                sql = f"""
+                    DELETE FROM {TableName.PATTERN_EXECUTION.value}
+                    WHERE {PatternExecutionField.PATTERN_ID.value}='{pid}' AND
+                    {PatternExecutionField.STATUS_CODE.value}='{exection}'
+                """
+                engine.execute(sql)
+
+            # 取得 EXEC_ID
+            logging.info(f'Call {StoredProcedule.GET_SERIAL_NO.value}')
+            sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('EXEC_ID', null)"
+            with engine.begin() as db_conn:
+                results = db_conn.execute(sql).fetchone()
+                exec_id = results[0]
+            logging.info(f"Get SERIAL_NO: {exec_id}")
+
+            # 建立 status
+            COLUMNS = [
+                'CREATE_BY', 'CREATE_DT',
+                PatternExecutionField.EXEC_ID.value,
+                PatternExecutionField.PATTERN_ID.value,
+                PatternExecutionField.STATUS_CODE.value,
+                PatternExecutionField.START_DT.value,
+                PatternExecutionField.END_DT.value
+                ]
+            now = datetime.datetime.now()
+            now = np.datetime64(now).astype('datetime64[s]').tolist()
+            create_by = self.CREATE_BY
+            create_dt = now
+            start_dt = now
+            end_dt = None
+            data = [[
+                create_by, create_dt, exec_id,
+                pid, exection, start_dt, end_dt]]
+            data = pd.DataFrame(data, columns=COLUMNS)
+            data.to_sql(
+                TableName.PATTERN_EXECUTION.value,
+                engine,
+                if_exists='append',
+                chunksize=10000,
+                method='multi',
+                index=False)
+        return exec_id
+
+    def set_pattern_execution_complete(self, exec_id:str):
+        """Set pattern execution complete on DB.
+
+        Parameters
+        ----------
+        exec_id: str
+            ID of pattern_exec
+
+        Returns
+        -------
+        None.
+
+        """
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        engine = self._engine()
+
+        finished_status = {
+            PatternExecution.BATCH_SERVICE.value: PatternExecution.BATCH_SERVICE_FINISHED.value,
+            PatternExecution.ADD_PATTERN.value: PatternExecution.ADD_PATTERN_FINISHED.value,
+        }
+
+        sql = f"""
+            SELECT
+                {PatternExecutionField.PATTERN_ID.value},
+                {PatternExecutionField.STATUS_CODE.value}
+            FROM
+                {TableName.PATTERN_EXECUTION.value}
+            WHERE
+                {PatternExecutionField.EXEC_ID.value}='{exec_id}';
+        """
+        exec_data = pd.read_sql_query(sql, engine).iloc[0]
+        if len(exec_data) == 0:
+            raise Exception('call set_pattern_execution_complete before set_pattern_execution_start')
+
+        status = finished_status[exec_data[PatternExecutionField.STATUS_CODE.value]]
+        pid = exec_data[PatternExecutionField.PATTERN_ID.value]
+
+        if not self.READ_ONLY:
+            sql = f"""
+            UPDATE
+                {TableName.PATTERN_EXECUTION.value}
+            SET
+                {PatternExecutionField.END_DT.value}='{now}',
+                MODIFY_DT='{now}',
+                MODIFY_BY='{self.MODIFY_BY}',
+                {PatternExecutionField.STATUS_CODE.value}='{status}'
+            WHERE
+                {PatternExecutionField.EXEC_ID.value}='{exec_id}';
+            """
+            engine.execute(sql)
+
+    def stamp_model_execution(self, exec_ids: List[str]):
+        """將所有模型執行狀態儲存至資料庫
+
+        Parameters
+        ----------
+        exec_ids: List[str]
+            模型執行狀態 ID 清單
+
+        Returns
+        -------
+        None.
+        """
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        finished_status = {
+            ModelExecution.ADD_BACKTEST.value: ModelExecution.ADD_BACKTEST_FINISHED.value,
+            ModelExecution.ADD_PREDICT.value: ModelExecution.ADD_PREDICT_FINISHED.value,
+            ModelExecution.BATCH_PREDICT.value: ModelExecution.BATCH_PREDICT_FINISHED.value
+        }
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                {ModelExecutionField.EXEC_ID.value},
+                {ModelExecutionField.MODEL_ID.value},
+                {ModelExecutionField.STATUS_CODE.value}
+            FROM
+                {TableName.MODEL_EXECUTION.value};
+        """
+        exec_data = pd.read_sql_query(sql, engine)
+
+        logging.info("Stamp model execution")
+        for exec_id in exec_ids:
+            # 取得資料庫模型ID 與執行狀態
+            eid_cond = exec_data[ModelExecutionField.EXEC_ID.value].values == exec_id
+            if len(exec_data[eid_cond]) == 0:
+                raise Exception('call stamp_model_execution before set_model_execution_start')
+            e_data = exec_data[eid_cond].iloc[0]
+            model_id = e_data[ModelExecutionField.MODEL_ID.value]
+            status = finished_status[e_data[ModelExecutionField.STATUS_CODE.value]]
+
+            # 取得本地端結束時間紀錄
+            status_fp = f'{LOCAL_DB}/views/{model_id}/status.pkl'
+            local_status = pickle_load(status_fp)
+            end_dt = local_status[status]
+            if not self.READ_ONLY:
+                sql = f"""
+                UPDATE
+                    {TableName.MODEL_EXECUTION.value}
+                SET
+                    {ModelExecutionField.END_DT.value}='{end_dt}',
+                    MODIFY_DT='{now}',
+                    MODIFY_BY='{self.MODIFY_BY}',
+                    {ModelExecutionField.STATUS_CODE.value}='{status}'
+                WHERE
+                    {ModelExecutionField.EXEC_ID.value}='{exec_id}';
+                """
+                engine.execute(sql)
+        logging.info("Stamp model execution finished")
 
     def get_recover_model_execution(self):
         """ 取得模型最新執行狀態

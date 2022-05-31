@@ -106,6 +106,7 @@ class TableName(Enum):
     PREDICT_RESULT_HISTORY = "FCST_MODEL_MKT_VALUE_HISTORY"
     SCORE_META = "FCST_SCORE"
     MODEL_MKT_HIT_SUM = "FCST_MODEL_MKT_HIT_SUM"
+    PATTERN_EXECUTION = 'FCST_PAT_EXECUTION'
 
 class StoredProcedule(Enum):
     """SP名稱
@@ -177,12 +178,78 @@ class ModelExecution(str, Enum):
     ADD_BACKTEST_FINISHED = 'ABF'
     BATCH_PREDICT_FINISHED = 'BPF'
 
+class PatternExecution(str, Enum):
+    """Execution types of Model.
+
+    跑批時計算 BATCH_SERVICE = 'AP'
+    新增現象時計算 ADD_PATTERN = 'AB'
+    跑批時計算完成 BATCH_SERVICE_FINISHED = 'APF'
+    新增現象時計算完成 ADD_PATTERN_FINISHED = 'BPF'
+    """
+    BATCH_SERVICE = 'BS'
+    ADD_PATTERN = 'AP'
+    BATCH_SERVICE_FINISHED = 'BSF'
+    ADD_PATTERN_FINISHED = 'APF'
+
+class PatternExecutionField(Enum):
+    """觀點執行狀態資訊
+
+    Members
+    -------
+    EXEC_ID: 執行ID
+    PATTERN_ID: 觀點ID
+    STATUS_CODE: 執行狀態代碼
+    START_DT: 執行起始時間
+    END_DT: 執行結束時間
+    """
+    EXEC_ID = "EXEC_ID"
+    PATTERN_ID = "PATTERN_ID"
+    STATUS_CODE = "STATUS_CODE"
+    START_DT = "START_DT"
+    END_DT = "END_DT"
+
 class ModelStatus(int, Enum):
     """Status of Model on DB."""
     FAILED = -1
     ADDED = 1
     CREATED = 2
     COMPLETE = 3
+
+class DBModelStatus(int, Enum):
+    """ 觀點在資料庫中的狀態
+
+    Members
+    -------
+    PRIVATE_AND_VALID: 未發布且有效
+    PUBLIC_AND_VALID: 發布且有效
+    DRAFT: 草稿
+    PRIVATE_AND_INVALID: 未發布且無效
+    PUBLIC_AND_INVALID: 發布且無效
+
+    """
+    PRIVATE_AND_VALID = 0
+    PUBLIC_AND_VALID = 1
+    DRAFT = 2
+    PRIVATE_AND_INVALID = 3
+    PUBLIC_AND_INVALID = 4
+
+class DBPatternStatus(int, Enum):
+    """ 現象在資料庫中的狀態
+
+    Members
+    -------
+    PRIVATE_AND_VALID: 未發布且有效
+    PUBLIC_AND_VALID: 發布且有效
+    DRAFT: 草稿
+    PRIVATE_AND_INVALID: 未發布且無效
+    PUBLIC_AND_INVALID: 發布且無效
+
+    """
+    PRIVATE_AND_VALID = 0
+    PUBLIC_AND_VALID = 1
+    DRAFT = 2
+    PRIVATE_AND_INVALID = 3
+    PUBLIC_AND_INVALID = 4
 
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
@@ -370,11 +437,13 @@ class PatternInfoField(Enum):
     PATTERN_NAME: 現象名稱
     PATTERN_DESC: 現象描述
     MACRO_ID: 現象使用的 Macro ID
+    PATTERN_STATUS: 現象狀態
     """
     PATTERN_ID = "PATTERN_ID"
     PATTERN_NAME = "PATTERN_NAME"
     PATTERN_DESC = "PATTERN_DESC"
     MACRO_ID = "MACRO_ID"
+    PATTERN_STATUS = "PATTERN_STATUS"
 
 class PatternParamField(Enum):
     """現象參數基本資訊
@@ -433,7 +502,7 @@ class ModelInfoField(Enum):
     MODEL_ID: 觀點ID
     MODEL_NAME: 觀點名稱
     MODEL_DESC: 觀點描述
-    SHARE_YN: 觀點是否分享
+    MODEL_STATUS: 觀點狀態
     TRAIN_START_DT: 觀點訓練起始日
     TRAIN_END_DT: 觀點訓練終止日
     RETRAIN_CYCLE: 觀點重訓練區間(日)
@@ -441,7 +510,7 @@ class ModelInfoField(Enum):
     MODEL_ID = "MODEL_ID"
     MODEL_NAME = "MODEL_NAME"
     MODEL_DESC = "MODEL_DESC"
-    SHARE_YN = "SHARE_YN"
+    MODEL_STATUS = "MODEL_STATUS"
     TRAIN_START_DT = "TRAIN_START_DT"
     TRAIN_END_DT = "TRAIN_END_DT"
     RETRAIN_CYCLE = "RETRAIN_CYCLE"

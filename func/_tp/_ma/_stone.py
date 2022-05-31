@@ -279,7 +279,7 @@ def stone_pp005(market_id: str, **kwargs):
     規則：
         -
         1. 在過去n1天內，
-           Average(abs(MA(l1)-MA(b)),...abs(MA(l5)-MA(b))) / MA(b) > dr
+           Average(abs(MA(l1)-MA(b)),...abs(MA(l5)-MA(b))) / MA(b) < dr
            至少發生o次；
         2. 在過去n2天內從未發生過 abs(MA(s)-MA(b)) / MA(b) > dr
 
@@ -325,7 +325,7 @@ def stone_pp005(market_id: str, **kwargs):
     base_ma = TechnicalIndicator.MA(market_id, base_period)
     short_ma = TechnicalIndicator.MA(market_id, short_period)
     long_mas = [TechnicalIndicator.MA(market_id, each) for each in long_periods]
-    cond1 = (ts_average(*[abs(each / base_ma - 1) for each in long_mas]) > threshold
+    cond1 = (ts_average(*[abs(each / base_ma - 1) for each in long_mas]) < threshold
              ).sampling(long_duration).sum() >= min_occurence
     cond2 = (abs(short_ma / base_ma - 1) <= threshold).sampling(short_duration).all()
     ret = cond1 & cond2
