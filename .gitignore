@@ -19,3 +19,6 @@ __pycache__
 
 # conda env
 env
+
+# temp stuff
+_stash

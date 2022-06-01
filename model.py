@@ -1223,11 +1223,14 @@ def model_train(model: ModelInfo, tdate: datetime.date, batch_type:BatchType = N
                     temp.values[:, -1], outlier=Y_OUTLIER))
             ycoder.save(_get_ycoder_file(model.model_id, mid, tdate, period))
         # Step3: 使用所有市場的x_data與y_data建立(訓練)決策樹模型
-        tree = Dtc(max_depth=20, criterion='entropy', random_state=0,
-                   max_leaf_nodes=200, min_samples_leaf=30)
-        tree.fit(np.concatenate(cur_x, axis=0),
-                 np.concatenate(cur_y, axis=0))
-        pickle_dump(tree, _get_model_file(model.model_id, tdate, period))
+        if len(cur_x) == 0:
+            pickle_dump(None, _get_model_file(model.model_id, tdate, period))
+        else:
+            tree = Dtc(max_depth=20, criterion='entropy', random_state=0,
+                    max_leaf_nodes=200, min_samples_leaf=30)
+            tree.fit(np.concatenate(cur_x, axis=0),
+                    np.concatenate(cur_y, axis=0))
+            pickle_dump(tree, _get_model_file(model.model_id, tdate, period))
 
 
 def _model_predict(model: ModelInfo, market: str, tdate: datetime.date,
@@ -1506,6 +1509,7 @@ def add_model(model_id: str):
             ret['MODEL_ID'] = model_id
             update_model_hit_sum(ret)
         MT_MANAGER.release(model_id)
+        logging.info('add model finished')
 
     except Exception as esp:
         MT_MANAGER.release(model_id)
@@ -1622,8 +1626,10 @@ def model_create(model: ModelInfo, controller: ThreadController):
         if not controller.isactive:
             logging.info('model create terminated')
             return
-        ret_buffer.append(model_predict(
+        recv = (model_predict(
             model, mid, max_len=1, controller=controller, batch_type=batch_type))
+        if recv is not None:
+            ret_buffer.append(recv)    
     if ret_buffer:
         ret = pd.concat(ret_buffer, axis=0)
         ret.index = np.arange(len(ret))
