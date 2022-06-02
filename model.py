@@ -196,7 +196,7 @@ class PatternInfo(NamedTuple):
         pd.Series
 
         """
-        return eval(f"{self.func}('{market_id}', **{self.kwargs})").to_pandas()
+        return eval(f"{self.func}.run('{market_id}', **{self.kwargs})")
 
 def save_mkt_score(data: pd.DataFrame):
     """save mkt score to DB."""
@@ -2626,7 +2626,14 @@ def get_macro_params(func_code):
 def verify_pattern(func, kwargs):
     macro_info = get_macro_params(func)
     kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
-    try:
-        return eval(f"{func}.check(kwargs)")
-    except AttributeError:
-        return {}
+    return eval(f"{func}.check(**kwargs)")
+
+def get_plot(func, kwargs):
+    macro_info = get_macro_params(func)
+    kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
+    return eval(f"{func}.plot(**kwargs)")
+
+def get_frame(func, kwargs):
+    macro_info = get_macro_params(func)
+    kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
+    return eval(f"{func}.frame(**kwargs)")
