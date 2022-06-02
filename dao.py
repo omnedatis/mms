@@ -262,7 +262,8 @@ class MimosaDB:
              - PredictResultField.LOWER_BOUND.value
         """
         fp = f'{LOCAL_DB}/views/{model_id}/history_values.pkl'
-
+        if not os.path.exists(fp):
+            return {}
         data = pickle_load(fp)
         result = {
             market_id: group
@@ -968,7 +969,8 @@ class MimosaDB:
             raise Exception(f"get_model_info: model not found: {model_id}")
         train_begin = model_info[m_cond].iloc[0][ModelInfoField.TRAIN_START_DT.value]
         train_gap = model_info[m_cond].iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
-
+        if train_gap:
+            train_gap = int(train_gap)
         # 取得觀點的所有標的市場
         with open(f'{DATA_LOC}/model_markets.pkl', 'rb') as fp:
             markets = pickle.load(fp)
