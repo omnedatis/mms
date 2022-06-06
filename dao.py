@@ -968,9 +968,15 @@ class MimosaDB:
             # 若發生取不到資料的情況
             raise Exception(f"get_model_info: model not found: {model_id}")
         train_begin = model_info[m_cond].iloc[0][ModelInfoField.TRAIN_START_DT.value]
+        if train_begin == train_begin:
+            train_begin = train_begin.date()
+        else:
+            train_begin = None
         train_gap = model_info[m_cond].iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
-        if train_gap:
+        if train_gap == train_gap:
             train_gap = int(train_gap)
+        else:
+            train_gap = None
         # 取得觀點的所有標的市場
         with open(f'{DATA_LOC}/model_markets.pkl', 'rb') as fp:
             markets = pickle.load(fp)
