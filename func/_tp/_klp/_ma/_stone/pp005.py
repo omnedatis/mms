@@ -62,7 +62,7 @@ def arg_checker(base_period, short_term_period, long_term_period_1,
     limit = 0
     if min_occurence <= limit:
         ret['min_occurence'] = f"值必須大於{limit}"
-    limit = max([limit, min_occurence])
+    limit = max([limit, min_occurence-1])
     if long_statistical_duration <= limit:
         ret['long_statistical_duration'] = f"值必須大於{limit}"     
     if short_statistical_duration < 1 or short_statistical_duration > long_statistical_duration :
