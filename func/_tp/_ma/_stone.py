@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
+import pandas as pd
 from .._context import TechnicalIndicator, TimeUnit, get_cp, ts_all, ts_any, ts_average, ts_max
-
 
 def is_positive_int(value):
     if isinstance(value, int) and value > 0:
@@ -71,7 +71,7 @@ def stone_pp005_check(kwargs):
         ret['threshold_of_difference_rate'] = ret.get('threshold_of_difference_rate', '') + "輸入值應為正浮點數"
     return ret
 
-def stone_pp000(market_id: str, **kwargs):
+def stone_pp000(market_id: str, **kwargs) -> pd.Series:
     """pp000.
 
     規則：
@@ -97,10 +97,10 @@ def stone_pp000(market_id: str, **kwargs):
     mab = TechnicalIndicator.MA(market_id, base_period)
     ret = mat > mab
     ret.rename(f'{market_id}.stone_pp000({kwargs})')
-    return ret
+    return ret.to_pandas()
 stone_pp000.check = all_positive_int_check
 
-def stone_pp001(market_id: str, **kwargs):
+def stone_pp001(market_id: str, **kwargs) -> pd.Series:
     """pp001.
 
     規則：
@@ -132,7 +132,7 @@ def stone_pp001(market_id: str, **kwargs):
     mab = TechnicalIndicator.MA(market_id, base_period)
     ret = (mat > mab).sampling(statistical_duration).sum() >= min_occurence
     ret.rename(f'{market_id}.stone_pp001({kwargs})')
-    return ret
+    return ret.to_pandas()
 stone_pp001.check = occur_time_check
 
 def stone_pp002(market_id: str, **kwargs):
@@ -176,7 +176,7 @@ def stone_pp002(market_id: str, **kwargs):
     mabs = [TechnicalIndicator.MA(market_id, each) for each in base_periods]
     ret = (mat > ts_max(*mabs)).sampling(statistical_duration).all()
     ret.rename(f'{market_id}.stone_pp002({kwargs})')
-    return ret
+    return ret.to_pandas()
 stone_pp002.check = all_positive_int_check
 
 def stone_pp003(market_id: str, **kwargs):
