@@ -70,11 +70,11 @@ def arg_checker(period_1, period_2, period_3, period_4, period_5,
         if min_occurence < limit:
             ret['min_occurence'] = f"值必須大於等於{limit}"
     else:
-        ulimit = periods[ridge_index+1] - periods[ridge_index] - 1
+        ulimit = periods[ridge_index+1] - periods[ridge_index]
         if min_occurence < limit or min_occurence > ulimit:
             ret['min_occurence'] = f"值必須界於{limit}與{ulimit}之間" 
     limit = max([limit, min_occurence])
-    if statistical_duration <= limit:
+    if statistical_duration < limit:
         ret['statistical_duration'] = f"值必須大於等於{limit}"
     return ret
 
