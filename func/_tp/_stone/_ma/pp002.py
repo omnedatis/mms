@@ -77,12 +77,16 @@ def check(**kwargs) -> Dict[str, str]:
         results['statistical_duration'] = "判斷天數必須要為正整數; "
     if len(set(base_periods)) != len(base_periods):
         for base_period in set(base_periods):
-            idxs = np.argwhere(base_periods == base_period)
+            idxs = np.argwhere(np.array(base_periods) == base_period)
             if len(idxs) > 0:
                 for idx in idxs:
-                    results[f'base_period_{idx+1}'] = "基礎均線天期發生重複, 請重新設定; "
+                    results[f'base_period_{idx[0]+1}'] = "基礎均線天期發生重複, 請重新設定; "
     if len(set([target_period]+base_periods)) != (len(base_periods) + 1):
         results['target_period'] = "目標均線天期與基礎均線天期重複, 請重新設定; "
+        idxs = np.argwhere(np.array(base_periods) == target_period)
+        if len(idxs) > 0:
+            for idx in idxs:
+                results[f'base_period_{idx[0]+1}'] = "基礎均線天期發生重複, 請重新設定; "
     return results
 
 
