@@ -8,7 +8,7 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ....common import Macro, MacroParam, ParamType
+from ....common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 from ..._context import TimeUnit
 from ..._context import TechnicalIndicator as TI
 import const
@@ -98,15 +98,15 @@ def _plotter(**kwargs) -> dict:
 
     fluc = (np.random.normal(scale=0.1, size=base.shape)+1)
     line = base*fluc*100
-    ret = {}
+    ret = []
     for prd in periods:
-        ret[f'MA {prd}'] = _get_ma(
-            line, prd)[-(MA_GRAPH_SAMPLE_NUM+max(periods)-min(periods)):].tolist()
+        ret.append(PlotInfo(Ptype.MA, f'MA {prd}',_get_ma(
+            line, prd)[-(MA_GRAPH_SAMPLE_NUM+max(periods)-min(periods)):]))
     return ret
 
 
 def _framer(**kwargs) -> int:
-    return kwargs['ma_long_period']
+    return MA_GRAPH_SAMPLE_NUM
 
 
 def _jack_ma_order_up(market_id: str, **kwargs) -> pd.Series:

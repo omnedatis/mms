@@ -8,7 +8,7 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ....common import Macro, MacroParam, ParamType
+from ....common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 from ..._context import TimeUnit, get_cp, ts_any
 from ..._context import TechnicalIndicator as TI
 import const
@@ -161,17 +161,17 @@ def _plotter(**kwargs) -> dict:
         base[-(value+MA_GRAPH_SAMPLE_NUM):] = base[-(value+MA_GRAPH_SAMPLE_NUM):] * slope
     fluc = (np.random.normal(scale=0.01, size=base.shape)+1)
     line = base*fluc*100
-    ret = {}
+    ret = []
     for prd in periods:
-        ret[f'MA {prd}'] = _get_ma(
-            line, prd)[-(MA_GRAPH_SAMPLE_NUM+max(periods)-min(periods)):]
-    ret['CP'] = line[-(MA_GRAPH_SAMPLE_NUM+max(periods)-min(periods)):]
+        ret.append(PlotInfo(Ptype.MA, f'MA {prd}', _get_ma(
+            line, prd)[-(MA_GRAPH_SAMPLE_NUM+max(periods)-min(periods)):]))
+    ret.append(PlotInfo(Ptype.CP, '收盤價', line[-(MA_GRAPH_SAMPLE_NUM+max(periods) -
+                       min(periods)):]))
     return ret
 
 
 def _framer(**kwargs) -> int:
-    return kwargs['period_9']
-
+    return MA_GRAPH_SAMPLE_NUM
 
 def _jack_ma_through_price_up(market_id: str, **kwargs) -> pd.Series:
     """收盤價向上穿越任一MA (9條).
