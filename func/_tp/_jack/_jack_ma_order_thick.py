@@ -8,9 +8,9 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ....common import Macro, MacroParam, ParamType, PlotInfo, Ptype
-from ..._context import TimeUnit
-from ..._context import TechnicalIndicator as TI
+from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from .._context import TimeUnit
+from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
@@ -40,10 +40,10 @@ params = [
 ]
 
 __doc__ = """
-短期MA小於中期MA小於長期MA (3條).
+中期MA大於或小於短期、長期MA (3條).
 
 規則：
-    MA(短期) < MA(中期) < MA(長期).
+    MA(中期) > MA(短期) > MA(長期) 或 MA(中期) < MA(短期) < MA(長期).
 
 Arguments
 ---------
@@ -81,11 +81,14 @@ def _checker(**kwargs) -> dict:
 def _plotter(**kwargs) -> dict:
     if 'period_type' in kwargs:
         del kwargs['period_type']
-    periods = [each for each in kwargs.values()]
+    ma_short_period = kwargs['ma_short_period']
+    ma_mid_period = kwargs['ma_mid_period']
+    ma_long_period = kwargs['ma_long_period']
+    periods = [ma_short_period, ma_mid_period, ma_long_period]
     base = np.ones(shape=(MA_GRAPH_SAMPLE_NUM+2*max(periods)-min(periods),))
     curve_map = {
-        'ma_long_period': {'start': 1, 'stop': 1},
-        'ma_mid_period': {'start': 1, 'stop': 0.5},
+        'ma_long_period': {'start': 1, 'stop': 1.1},
+        'ma_mid_period': {'start': 1, 'stop': 1.85},
         'ma_short_period': {'start': 1, 'stop': 0.5}
     }
     for key, value in kwargs.items():
@@ -93,8 +96,7 @@ def _plotter(**kwargs) -> dict:
         stop = curve_map[key]['stop']
         slope = np.linspace(start=start, stop=stop,
                             num=value+MA_GRAPH_SAMPLE_NUM)
-        base[-(value+MA_GRAPH_SAMPLE_NUM)
-               :] = base[-(value+MA_GRAPH_SAMPLE_NUM):] * slope
+        base[-(value+MA_GRAPH_SAMPLE_NUM):] = base[-(value+MA_GRAPH_SAMPLE_NUM):] * slope
 
     fluc = (np.random.normal(scale=0.01, size=base.shape)+1)
     line = base*fluc*100
@@ -109,11 +111,11 @@ def _framer(**kwargs) -> int:
     return MA_GRAPH_SAMPLE_NUM
 
 
-def _jack_ma_order_down(market_id: str, **kwargs) -> pd.Series:
-    """短期MA小於中期MA小於長期MA (3條).
+def _jack_ma_order_thick(market_id: str, **kwargs) -> pd.Series:
+    """中期MA大於或小於短期、長期MA (3條).
 
     規則：
-        MA(短期) < MA(中期) < MA(長期).
+        MA(中期) > MA(短期) > MA(長期) 或 MA(中期) < MA(短期) < MA(長期).
 
     Arguments
     ---------
@@ -130,6 +132,7 @@ def _jack_ma_order_down(market_id: str, **kwargs) -> pd.Series:
         中期均線天數.
     ma_long_period : int
         長期均線天數
+
     """
     try:
         period_type = TimeUnit.get(kwargs['period_type'])
@@ -138,18 +141,19 @@ def _jack_ma_order_down(market_id: str, **kwargs) -> pd.Series:
         ma_long_period = kwargs['ma_long_period']
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'jack_ma_order_down'")
+                           "'jack_ma_order_thick'")
     except ValueError as esp:
         raise RuntimeError("invalid argument error when calling"
-                           f"'jack_ma_order_down': {esp}")
+                           f"'jack_ma_order_thick': {esp}")
     ma_short = TI.MA(market_id, ma_short_period, period_type)
     ma_mid = TI.MA(market_id, ma_mid_period, period_type)
     ma_long = TI.MA(market_id, ma_long_period, period_type)
-    ret = (ma_short < ma_mid) & (ma_mid < ma_long)
-    ret.rename(f'{market_id}.jack_ma_order_down({kwargs})')
+    ret = (((ma_mid > ma_short) & (ma_short > ma_long)) |
+           ((ma_mid < ma_short) & (ma_short < ma_long)))
+    ret.rename(f'{market_id}.jack_ma_order_thick({kwargs})')
     return ret.to_pandas()
 
 
-jack_ma_order_down = Macro(code='jack_ma_order_down', name='MA由小至大短中長排列', desc=__doc__,
-                           params=params, run=_jack_ma_order_down, check=_checker, plot=_plotter,
-                           frame=_framer)
+jack_ma_order_thick = Macro(code='jack_ma_order_thick', name='MA中長期包夾短期排列', desc=__doc__,
+                            params=params, run=_jack_ma_order_thick, check=_checker, plot=_plotter,
+                            frame=_framer)

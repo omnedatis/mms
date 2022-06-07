@@ -8,9 +8,9 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ....common import Macro, MacroParam, ParamType, PlotInfo, Ptype
-from ..._context import TimeUnit, get_cp, ts_any
-from ..._context import TechnicalIndicator as TI
+from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from .._context import TimeUnit, get_cp, ts_any
+from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
@@ -30,7 +30,7 @@ def _is_positive_int(value) -> str:
 
 params = [
     MacroParam(code='period_1', name='MA均線天數(最小)', desc='MA均線天數(最小)',
-               dtype=ParamType.get('int'), default=3),
+               dtype=ParamType.get('int'), default=5),
     MacroParam(code='period_2', name='MA均線天數(第二小)', desc='MA均線天數(第二小)',
                dtype=ParamType.get('int'), default=10),
     MacroParam(code='period_3', name='MA均線天數(第三小)', desc='MA均線天數(第三小)',
@@ -52,10 +52,10 @@ params = [
 ]
 
 __doc__ = """
-任一短天期MA向上穿越長天期MA (9條).
+收盤價向下穿越任一MA (9條).
 
 規則：
-    任一短天期 MA 向上穿越任一長天期 MA.
+    收盤價向下穿越任一 MA.
 
 Arguments
 ---------
@@ -84,7 +84,7 @@ period_8 : int
     MA均線天數(第八小).
 period_9 : int
     MA均線天數(第九小).
-
+    
 """
 
 
@@ -143,15 +143,15 @@ def _plotter(**kwargs) -> dict:
     periods = [each for each in kwargs.values()]
     base = np.ones(shape=(MA_GRAPH_SAMPLE_NUM+2*max(periods)-min(periods),))
     curve_map = {
-        'period_1': {'start': 1, 'stop': 2.5},
-        'period_2': {'start': 1, 'stop': 2.1},
-        'period_3': {'start': 1, 'stop': 1.7},
-        'period_4': {'start': 1, 'stop': 1.3},
-        'period_5': {'start': 1, 'stop': 0.8},
-        'period_6': {'start': 1, 'stop': 0.5},
-        'period_7': {'start': 1, 'stop': 0.5},
-        'period_8': {'start': 1, 'stop': 0.5},
-        'period_9': {'start': 1, 'stop': 0.5},
+        'period_1': {'start': 1, 'stop': 0.3},
+        'period_2': {'start': 1, 'stop': 0.7},
+        'period_3': {'start': 1, 'stop': 0.8},
+        'period_4': {'start': 1, 'stop': 0.8},
+        'period_5': {'start': 1, 'stop': 1},
+        'period_6': {'start': 1, 'stop': 1.2},
+        'period_7': {'start': 1, 'stop': 1.2},
+        'period_8': {'start': 1, 'stop': 1.2},
+        'period_9': {'start': 1, 'stop': 1.4},
     }
     for key, value in kwargs.items():
         start = curve_map[key]['start']
@@ -159,12 +159,14 @@ def _plotter(**kwargs) -> dict:
         slope = np.linspace(start=start, stop=stop,
                             num=value+MA_GRAPH_SAMPLE_NUM)
         base[-(value+MA_GRAPH_SAMPLE_NUM):] = base[-(value+MA_GRAPH_SAMPLE_NUM):] * slope
-    fluc = (np.random.normal(scale=0.1, size=base.shape)+1)
+    fluc = (np.random.normal(scale=0.01, size=base.shape)+1)
     line = base*fluc*100
     ret = []
     for prd in periods:
         ret.append(PlotInfo(Ptype.MA, f'MA {prd}', _get_ma(
             line, prd)[-(MA_GRAPH_SAMPLE_NUM+max(periods)-min(periods)):]))
+    ret.append(PlotInfo(Ptype.CP, '收盤價', line[-(MA_GRAPH_SAMPLE_NUM+max(periods) -
+                       min(periods)):]))
     return ret
 
 
@@ -172,11 +174,11 @@ def _framer(**kwargs) -> int:
     return MA_GRAPH_SAMPLE_NUM
 
 
-def _jack_ma_through_ma_up_thrend(market_id: str, **kwargs) -> pd.Series:
-    """任一短天期MA向上穿越長天期MA (9條).
+def _jack_ma_through_price_down(market_id: str, **kwargs) -> pd.Series:
+    """收盤價向下穿越任一MA (9條).
 
     規則：
-        任一短天期 MA 向上穿越任一長天期 MA.
+        收盤價向下穿越任一 MA.
 
     Arguments
     ---------
@@ -212,18 +214,19 @@ def _jack_ma_through_ma_up_thrend(market_id: str, **kwargs) -> pd.Series:
         periods = [kwargs[f'period_{idx}'] for idx in range(1, 10)]
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'jack_ma_through_ma_up_thrend'")
+                           "'jack_ma_through_price_down'")
     except ValueError as esp:
         raise RuntimeError("invalid argument error when calling"
-                           f"'jack_ma_through_ma_up_thrend': {esp}")
-    mas = [TI.MA(market_id, each, period_type) for each in periods]
-    conds = [mas[i] > each for i in range(len(mas)) for each in mas[i+1:]]
+                           f"'jack_ma_through_price_down': {esp}")
+    cp = get_cp(market_id)
+    conds = [cp < TI.MA(market_id, each, period_type)
+             for each in periods]
     conds = [each & ~each.shift(1, period_type) for each in conds]
     ret = ts_any(*conds)
-    ret.rename(f'{market_id}.jack_ma_through_ma_up_thrend({kwargs})')
+    ret.rename(f'{market_id}.jack_ma_through_price_down({kwargs})')
     return ret.to_pandas()
 
 
-jack_ma_through_ma_up_thrend = Macro(code='jack_ma_through_ma_up_thrend', name='短期MA向上穿越長期MA', desc=__doc__,
-                                     params=params, run=_jack_ma_through_ma_up_thrend, check=_checker, plot=_plotter,
-                                     frame=_framer)
+jack_ma_through_price_down = Macro(code='jack_ma_through_price_down', name='收盤價向下穿越MA', desc=__doc__,
+                                   params=params, run=_jack_ma_through_price_down, check=_checker, plot=_plotter,
+                                   frame=_framer)

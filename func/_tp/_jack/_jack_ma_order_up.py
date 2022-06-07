@@ -8,9 +8,9 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ....common import Macro, MacroParam, ParamType, PlotInfo, Ptype
-from ..._context import TimeUnit
-from ..._context import TechnicalIndicator as TI
+from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from .._context import TimeUnit
+from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
