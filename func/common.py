@@ -10,6 +10,7 @@ Created on Wed Jun  1 16:12:29 2022
 from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple
 
+import numpy as np
 import pandas as pd
 
 class Dtype(NamedTuple):
@@ -63,6 +64,19 @@ class MacroParam(NamedTuple):
     dtype: ParamType
     default: Any
 
+class Ptype(Enum):
+    CANDLE = 'Candle'
+    OP = 'OP'
+    HP = 'HP'
+    LP = 'LP'
+    CP = 'CP'
+    MA = 'MA'
+
+class PlotInfo(NamedTuple):
+    ptype: Ptype
+    title: str
+    data: np.ndarray
+
 class Macro(NamedTuple):
     """Macro.
 
@@ -78,7 +92,7 @@ class Macro(NamedTuple):
     params: List[MacroParam]
     run: Callable[..., pd.Series]
     check: Callable[..., Dict[str, str]]
-    plot: Callable[..., Dict[str, List[Any]]]
+    plot: List[PlotInfo]
     frame: Callable[..., int]
 
 if __name__ == '__main__':
