@@ -1,7 +1,7 @@
 import numpy as np
 
 from func._tp._ma import _stone as tp
-from .common import get_ma, RawMacro, MacroParam, ParamType
+from .common import get_ma, RawMacro, MacroParam, ParamType, PlotInfo, Ptype
 from .common import (gen_cps4arranged_mas, gen_cps4arranged_mas_by_random, 
                      check_cps4arranged_mas)
 
@@ -82,7 +82,9 @@ def sample_generator(period_1, period_2, period_3, period_4, period_5,
                            min_occurence, sign=-1)
     heads = np.cumprod(1 + np.random.normal(0, 0.01, size=dlen))[::-1] * tails[0]
     cps = np.concatenate([heads, tails])
-    ret = {f'MA {p}': get_ma(cps, p)[-dlen:].tolist() for p in periods}
+    ret = [PlotInfo(title=f'MA {p}', 
+                    ptype=Ptype.MA, 
+                    data=get_ma(cps, p)[-dlen:]) for p in periods]
     return ret
     
 def interval_evaluator(**kwargs):

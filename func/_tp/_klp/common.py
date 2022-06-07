@@ -6,7 +6,7 @@ Created on Wed Jun  1 16:49:39 2022
 """
 
 from typing import Any, Callable, Dict, List, NamedTuple
-from func.common import Macro, MacroParam, ParamType
+from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 class RawMacro(NamedTuple):
     code: str

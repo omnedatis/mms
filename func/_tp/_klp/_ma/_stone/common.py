@@ -7,7 +7,7 @@ Created on Wed Jun  1 17:04:59 2022
 
 import numpy as np
 
-from ..common import get_ma, RawMacro, MacroParam, ParamType
+from ..common import get_ma, RawMacro, MacroParam, ParamType, PlotInfo, Ptype
 
 def fix_values(values, sp, lp, n, sign, n_cover=0):
     for i in range(n):

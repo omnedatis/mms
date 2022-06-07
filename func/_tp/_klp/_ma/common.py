@@ -9,7 +9,7 @@ from enum import IntEnum
 
 import numpy as np
 
-from ..common import gen_macro, RawMacro, MacroParam, ParamType
+from ..common import gen_macro, RawMacro, MacroParam, ParamType, PlotInfo, Ptype
    
 def get_ma(data: np.ndarray, period: int):
     if not isinstance(period, int):

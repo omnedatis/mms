@@ -1,7 +1,7 @@
 import numpy as np
 
 from func._tp._ma import _stone as tp
-from .common import get_ma, RawMacro, MacroParam, ParamType
+from .common import get_ma, RawMacro, MacroParam, ParamType, PlotInfo, Ptype
 
 code = 'stone_pp005'
 name = '商智MA指標-PP005(盤整指標)'
@@ -158,7 +158,9 @@ def sample_generator(base_period, short_term_period, long_term_period_1,
     heads = np.cumprod(1 + np.random.normal(0, 0.01, size=dlen))[::-1] * tails[0]
     cps = np.concatenate([heads, tails])
     periods = [base_period, short_period] + long_periods
-    ret = {f'MA {p}': get_ma(cps, p)[-dlen:].tolist() for p in periods}
+    ret = [PlotInfo(title=f'MA {p}', 
+                    ptype=Ptype.MA, 
+                    data=get_ma(cps, p)[-dlen:]) for p in periods]
     return ret  
 
 def interval_evaluator(long_statistical_duration, **kwargs):
