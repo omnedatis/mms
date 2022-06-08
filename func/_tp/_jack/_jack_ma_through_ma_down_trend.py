@@ -170,7 +170,7 @@ def _plotter(**kwargs) -> dict:
 def _framer(**kwargs) -> int:
     return MA_GRAPH_SAMPLE_NUM
 
-def _jack_ma_through_ma_down_thrend(market_id: str, **kwargs) -> pd.Series:
+def _jack_ma_through_ma_down_trend(market_id: str, **kwargs) -> pd.Series:
     """任一短天期MA向下穿越長天期MA (9條).
 
     規則：
@@ -210,18 +210,18 @@ def _jack_ma_through_ma_down_thrend(market_id: str, **kwargs) -> pd.Series:
         periods = [kwargs[f'period_{idx}'] for idx in range(1, 10)]
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'jack_ma_through_ma_down_thrend'")
+                           "'jack_ma_through_ma_down_trend'")
     except ValueError as esp:
         raise RuntimeError("invalid argument error when calling"
-                           f"'jack_ma_through_ma_down_thrend': {esp}")
+                           f"'jack_ma_through_ma_down_trend': {esp}")
     mas = [TI.MA(market_id, each, period_type) for each in periods]
     conds = [mas[i] < each for i in range(len(mas)) for each in mas[i+1:]]
     conds = [each & ~each.shift(1, period_type) for each in conds]
     ret = ts_any(*conds)
-    ret.rename(f'{market_id}.jack_ma_through_ma_down_thrend({kwargs})')
+    ret.rename(f'{market_id}.jack_ma_through_ma_down_trend({kwargs})')
     return ret.to_pandas()
 
 
-jack_ma_through_ma_down_thrend = Macro(code='jack_ma_through_ma_down_thrend', name='短期MA向下穿越長期MA', desc=__doc__,
-                                       params=params, run=_jack_ma_through_ma_down_thrend, check=_checker, plot=_plotter,
+jack_ma_through_ma_down_trend = Macro(code='jack_ma_through_ma_down_trend', name='短期MA向下穿越長期MA', desc=__doc__,
+                                       params=params, run=_jack_ma_through_ma_down_trend, check=_checker, plot=_plotter,
                                        frame=_framer)
