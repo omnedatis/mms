@@ -32,8 +32,10 @@ from func._td._db import set_market_data_provider
 from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
                    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
                    get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
-                   remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd, verify_pattern)
+                   remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd, verify_pattern,
+                   get_frame, get_plot)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
+from func.common import Ptype
 import datetime
 from dao import MimosaDB
 from flask import Flask, request
@@ -618,23 +620,182 @@ def api_pattern_paramscheck():
                     type: string
                   errorMessage:
                     type: string
-  
     """
-    logging.info(f"api_get_pattern_count receiving: {request.json}")
+    logging.info(f"api_pattern_paramscheck receiving: {request.json}")
     data = request.json
     func_code = data['funcCode']
     params_codes = data['paramCodes']
-    param = {each["paramCode"]:each["paramValue"] for each in params_codes}
+    param = {each["paramCode"]: each["paramValue"] for each in params_codes}
     if "period_type" in param:
-      del param["period_type"]
+        del param["period_type"]
     try:
-      ret = [{"errorParam":key, "errorMessage":value} for key, value in verify_pattern(func_code, param).items()]
-      return {"status": 200, "message": "OK", "data": ret}
+        ret = [{"errorParam": key, "errorMessage": value}
+               for key, value in verify_pattern(func_code, param).items()]
+        return {"status": 200, "message": "OK", "data": ret}
     except:
         logging.error(traceback.format_exc())
         return {"status": 400,
                 "message": "Invalid request argument",
                 "data": None}
+
+
+@app.route('/pattern/frame', methods=["POST"])
+def api_pattern_get_frame():
+    """
+    取得 pattern 示意圖規則區間長度
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          funcCode:
+            type: string
+          paramCodes:
+            type: array
+            items: 
+              type: object
+              properties:
+                paramCode:
+                  type: string
+                paramValue:
+                  type: string
+
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: object
+              properties:
+                patternInterval:
+                  type: integer
+    """
+    logging.info(f"api_pattern_get_frame receiving: {request.json}")
+    data = request.json
+    func_code = data['funcCode']
+    params_codes = data['paramCodes']
+    param = {each["paramCode"]: each["paramValue"] for each in params_codes}
+    if "period_type" in param:
+        del param["period_type"]
+    try:
+        ret = get_frame(func_code, param)
+        return {"status": 200, "message": "OK", "data": {"patternInterval": ret}}
+    except:
+        logging.error(traceback.format_exc())
+        return {"status": 400,
+                "message": "Invalid request argument",
+                "data": None}
+
+
+@app.route('/pattern/plot', methods=["POST"])
+def api_pattern_get_plot():
+    """
+    取得 pattern 示意圖
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          funcCode:
+            type: string
+          paramCodes:
+            type: array
+            items: 
+              type: object
+              properties:
+                paramCode:
+                  type: string
+                paramValue:
+                  type: string
+
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  figType:
+                    type: string
+                  figName:
+                    type: string
+                  figData:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        group:
+                          type: string
+                        value:
+                          type: number
+                          format: float
+                        index:
+                          type: integer
+    """
+    logging.info(f"api_pattern_get_plot receiving: {request.json}")
+    data = request.json
+    func_code = data['funcCode']
+    params_codes = data['paramCodes']
+    param = {each["paramCode"]: each["paramValue"] for each in params_codes}
+    if "period_type" in param:
+        del param["period_type"]
+    try:
+        ret =  []
+        plot_infos = get_plot(func_code, param)
+    except:
+        logging.error(traceback.format_exc())
+        return {"status": 400,
+                "message": "Invalid request argument",
+                "data": None}
+    for pinfo in plot_infos:
+        if pinfo.ptype == Ptype.CANDLE:
+            for index, each in pinfo.data:
+                group = {
+                    0:Ptype.OP.value,
+                    1:Ptype.HP.value,
+                    2:Ptype.LP.value,
+                    3:Ptype.CP.value
+                }[index]
+                ret.append({
+                    "figType":pinfo.ptype.value,
+                    "figName":pinfo.title,
+                    "figData":[{
+                      "group":group,
+                      "index":idx,
+                      "value":value
+                    } for idx, value in enumerate(each.tolist())]
+                })
+        else:
+            ret.append({
+              "figType":pinfo.ptype.value,
+                "figName":pinfo.title,
+                "figData":[{
+                  "group":pinfo.ptype.value,
+                  "index":idx,
+                  "value":value
+                } for idx, value in enumerate(pinfo.data.tolist())]
+            })
+    return {"status": 200, "message": "OK", "data": ret}
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
@@ -671,7 +832,7 @@ if __name__ == '__main__':
             filename=f'{LOG_LOC}/app.log', when='D', backupCount=7)
         fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
         level = {ExecMode.DEV.value: logging.DEBUG,
-                 ExecMode.UAT.value: logging.INFO,
+                 ExecMode.UAT.value: logging.DEBUG,
                  ExecMode.PROD.value: logging.ERROR}[exec_mode]
         file_hdlr.setLevel(level)
         logging.basicConfig(level=0, format=fmt, handlers=[
@@ -679,7 +840,7 @@ if __name__ == '__main__':
         model_queue.start()
         pattern_queue.start()
         set_exec_mode(exec_mode)
-        set_db(MimosaDB(mode=exec_mode))
+        set_db(MimosaDB(mode=exec_mode, read_only=True, write_local=True))
         set_market_data_provider(MarketDataFromDb())
         load_smd()
 
