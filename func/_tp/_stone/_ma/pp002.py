@@ -2,7 +2,7 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 from func._tp._ma import _stone as tp
 from func._tp._klp._ma._stone.common import get_ma, MacroParam, ParamType, gen_cps4arranged_mas
-from func.common import Macro, MacroParam, ParamType
+from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 code = 'stone_pp002'
 name = '商智MA指標-PP002'
@@ -90,7 +90,7 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 
-def plot(**kwargs) -> Dict[str, List[float]]:
+def plot(**kwargs) -> List[PlotInfo]:
     """pp002 的畫圖規則
 
     規則：
@@ -169,6 +169,9 @@ def plot(**kwargs) -> Dict[str, List[float]]:
     cps = np.concatenate([cps_heads, cps_tails], axis=0)
     result = {f"MA {period}": get_ma_series(
             cps, period)[-plot_size:] for period in periods}
+    result = [
+        PlotInfo(ptype=Ptype.MA, title=key, data=value) 
+        for key, value in result.items()]
     return result
 
 

@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType
+from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 code = 'stone_pp000'
 name = '商智MA指標-PP000'
@@ -57,7 +57,7 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 
-def plot(**kwargs) -> Dict[str, List[float]]:
+def plot(**kwargs) -> List[PlotInfo]:
     """pp000 的範例圖製作函式
 
     pp000 規則：
@@ -184,6 +184,9 @@ def plot(**kwargs) -> Dict[str, List[float]]:
 
     result = get_ma_lines(
         plot_size, periods=[target_period, base_period], fix_func=fix_func, **kwargs)
+    result = [
+        PlotInfo(ptype=Ptype.MA, title=key, data=value) 
+        for key, value in result.items()]
     return result
 
 
