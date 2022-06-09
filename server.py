@@ -33,7 +33,7 @@ from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_patter
                    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
                    get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
                    remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd, verify_pattern,
-                   get_frame, get_plot)
+                   get_frame, get_plot, cast_macro_kwargs)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
 from func.common import Ptype
 import datetime
@@ -622,22 +622,23 @@ def api_pattern_paramscheck():
                     type: string
     """
     logging.info(f"api_pattern_paramscheck receiving: {request.json}")
-    data = request.json
-    func_code = data['funcCode']
-    params_codes = data['paramCodes']
-    param = {each["paramCode"]: each["paramValue"] for each in params_codes}
-    if "period_type" in param:
-        del param["period_type"]
     try:
-        ret = [{"errorParam": key, "errorMessage": value}
-               for key, value in verify_pattern(func_code, param).items()]
-        return {"status": 200, "message": "OK", "data": ret}
-    except:
+        data = request.json
+        func_code = data['funcCode']
+        params_codes = data['paramCodes']
+        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
+        kwargs = cast_macro_kwargs(func_code, kwargs)
+    except KeyError:
         logging.error(traceback.format_exc())
         return {"status": 400,
                 "message": "Invalid request argument",
                 "data": None}
-
+    except ValueError:
+      logging.error(traceback.format_exc())
+      raise InternalServerError
+    ret = [{"errorParam": key, "errorMessage": value}
+            for key, value in verify_pattern(func_code, kwargs).items()]
+    return {"status": 200, "message": "OK", "data": ret}
 
 @app.route('/pattern/frame', methods=["POST"])
 def api_pattern_get_frame():
@@ -680,20 +681,22 @@ def api_pattern_get_frame():
                   type: integer
     """
     logging.info(f"api_pattern_get_frame receiving: {request.json}")
-    data = request.json
-    func_code = data['funcCode']
-    params_codes = data['paramCodes']
-    param = {each["paramCode"]: each["paramValue"] for each in params_codes}
-    if "period_type" in param:
-        del param["period_type"]
     try:
-        ret = get_frame(func_code, param)
-        return {"status": 200, "message": "OK", "data": {"patternInterval": ret}}
-    except:
+        data = request.json
+        func_code = data['funcCode']
+        params_codes = data['paramCodes']
+        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
+        kwargs = cast_macro_kwargs(func_code, kwargs)
+    except KeyError:
         logging.error(traceback.format_exc())
         return {"status": 400,
                 "message": "Invalid request argument",
                 "data": None}
+    except ValueError:
+      logging.error(traceback.format_exc())
+      raise InternalServerError
+    ret = get_frame(func_code, kwargs)
+    return {"status": 200, "message": "OK", "data": {"patternInterval": ret}}
 
 
 @app.route('/pattern/plot', methods=["POST"])
@@ -753,20 +756,22 @@ def api_pattern_get_plot():
                           type: integer
     """
     logging.info(f"api_pattern_get_plot receiving: {request.json}")
-    data = request.json
-    func_code = data['funcCode']
-    params_codes = data['paramCodes']
-    param = {each["paramCode"]: each["paramValue"] for each in params_codes}
-    if "period_type" in param:
-        del param["period_type"]
     try:
-        ret =  []
-        plot_infos = get_plot(func_code, param)
-    except:
+        data = request.json
+        func_code = data['funcCode']
+        params_codes = data['paramCodes']
+        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
+        kwargs = cast_macro_kwargs(func_code, kwargs)
+    except KeyError:
         logging.error(traceback.format_exc())
         return {"status": 400,
                 "message": "Invalid request argument",
                 "data": None}
+    except ValueError:
+      logging.error(traceback.format_exc())
+      raise InternalServerError
+    ret =  []
+    plot_infos = get_plot(func_code, kwargs)
     for pinfo in plot_infos:
         if pinfo.ptype == Ptype.CANDLE:
             for index, each in pinfo.data:

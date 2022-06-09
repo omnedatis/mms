@@ -2107,14 +2107,14 @@ def do_pattern_task(market, patterns, mode,
     freturns = SMD.rencode(freturns)
     ret_mdates[market] = mdates
     ret_freturns[market] = freturns
-        if len(patterns) > 0:
-            result_buffer = []
-            for pattern in patterns:
-                result_buffer.append(pattern.run(market).rename(pattern.pid))
-            pattern_result = fast_concat(result_buffer)
-            pvalues = SMD.pencode(pattern_result.values)
-            ret_pvalues[market] = pvalues
-            if ret_lptterns is not None and len(pattern_result) > 0:
+    if len(patterns) > 0:
+        result_buffer = []
+        for pattern in patterns:
+            result_buffer.append(pattern.run(market).rename(pattern.pid))
+        pattern_result = fast_concat(result_buffer)
+        pvalues = SMD.pencode(pattern_result.values)
+        ret_pvalues[market] = pvalues
+        if ret_lptterns is not None and len(pattern_result) > 0:
             ret_lptterns.append(get_latest_patterns(market,
                                                     list(pattern_result.columns),
                                                     mdates[-1], pvalues[-1]))
@@ -2628,17 +2628,38 @@ def get_macro_params(func_code):
     db = get_db()
     return db.get_macro_param_type(func_code)
 
-def verify_pattern(func, kwargs):
+def cast_macro_kwargs(func, macro_kwargs):
     macro_info = get_macro_params(func)
-    kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
+    if 'market_id' in macro_info:
+        del macro_info['market_id']
+    try:
+        ret = {}
+        params = eval(f'{func}.params')
+        invalids = 0
+        for each in params:
+            if each.code not in macro_info:
+                invalids += 1
+            elif each.dtype.value.code != macro_info[each.code]:
+                invalids +=1
+        if invalids:
+            raise ValueError('inconsist data type')
+        for key, value in macro_kwargs.items():
+            kwarg = TYPE_MAP[macro_info[key]](value)
+            if str(kwarg) != value:
+                raise KeyError('invalid data type')
+            ret[key] = kwarg
+        if len(macro_kwargs) != len(macro_info):
+            raise KeyError('got unexpected keyword arguments')
+        return {key:TYPE_MAP[macro_info[key]](value) for key, value in macro_kwargs.items()}
+
+    except Exception as esp:
+        raise esp
+
+def verify_pattern(func, kwargs):
     return eval(f"{func}.check(**kwargs)")
 
 def get_plot(func, kwargs):
-    macro_info = get_macro_params(func)
-    kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
     return eval(f"{func}.plot(**kwargs)")
 
 def get_frame(func, kwargs):
-    macro_info = get_macro_params(func)
-    kwargs = {key:TYPE_MAP[macro_info[key]](value) for key, value in kwargs.items()}
     return eval(f"{func}.frame(**kwargs)")
