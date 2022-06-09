@@ -845,7 +845,7 @@ if __name__ == '__main__':
         model_queue.start()
         pattern_queue.start()
         set_exec_mode(exec_mode)
-        set_db(MimosaDB(mode=exec_mode, read_only=True, write_local=True))
+        set_db(MimosaDB(mode=exec_mode))
         set_market_data_provider(MarketDataFromDb())
         load_smd()
 
