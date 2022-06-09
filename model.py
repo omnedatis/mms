@@ -2084,8 +2084,9 @@ def gen_return_value_v2(mid: str):
 def do_pattern_task(market, patterns, mode,
                     ret_mdates, ret_pvalues, ret_freturns,
                     ret_values, ret_mscores, ret_lptterns):
-    from func._td import set_market_data_provider
-    from dao import MimosaDB
+    try:
+        from func._td import set_market_data_provider
+        from dao import MimosaDB
 
     class MDP:
         def __init__(self, mode):
@@ -2099,24 +2100,27 @@ def do_pattern_task(market, patterns, mode,
 
     rvalues, freturns, mscores = gen_return_value_v2(market)
     if ret_values is not None:
-        ret_values.append(rvalues)
-    if ret_mscores is not None:
-        ret_mscores.append(mscores)
-    result_buffer = []
-    for pattern in patterns:
-        result_buffer.append(pattern.run(market).rename(pattern.pid))
-    pattern_result = fast_concat(result_buffer)
-    mdates = SMD.dencode(pattern_result.index.values)
-    pvalues = SMD.pencode(pattern_result.values)
-    freturns = SMD.rencode(freturns)
-    ret_mdates[market] = mdates
-    ret_pvalues[market] = pvalues
-    ret_freturns[market] = freturns
-    if ret_lptterns is not None and len(pattern_result) > 0:
-        ret_lptterns.append(get_latest_patterns(market,
-                                                list(pattern_result.columns),
-                                                mdates[-1], pvalues[-1]))
-    return f'update patterns: {market}'
+            ret_values.append(rvalues)
+        if ret_mscores is not None:
+            ret_mscores.append(mscores)
+        mdates = SMD.dencode(freturns.index.values)
+        freturns = SMD.rencode(freturns)
+        ret_mdates[market] = mdates
+        ret_freturns[market] = freturns
+        if len(patterns) > 0:
+            result_buffer = []
+            for pattern in patterns:
+                result_buffer.append(pattern.run(market).rename(pattern.pid))
+            pattern_result = fast_concat(result_buffer)
+            pvalues = SMD.pencode(pattern_result.values)
+            ret_pvalues[market] = pvalues
+            if ret_lptterns is not None and len(pattern_result) > 0:
+                ret_lptterns.append(get_latest_patterns(market,
+                                                        list(pattern_result.columns),
+                                                        mdates[-1], pvalues[-1]))
+        return f'update patterns: {market}'
+    except Exception as esp:
+        return f'update patterns error: {market} - {esp}'
 
 def print_error(e):
     try:
@@ -2129,9 +2133,8 @@ def pattern_update(controller, batch_type=BatchType.SERVICE_BATCH):
     smd_buffer = {}
     patterns = get_patterns()
     markets = get_markets()
-    if len(patterns) <= 0 or len(markets) <= 0:
+    if len(markets) <= 0:
         logging.debug(f'get markets: \n{markets}')
-        logging.debug(f'get patterns: \n{patterns}')
         return
     if batch_type == BatchType.SERVICE_BATCH:
         latest_pattern_writer = LatestPatternWriter(controller)
