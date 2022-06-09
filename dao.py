@@ -1509,7 +1509,7 @@ class MimosaDB:
                 chunksize=10000,
                 method='multi',
                 index=False)
-        return exec_id
+            return exec_id
 
     def set_pattern_execution_complete(self, exec_id:str):
         """Set pattern execution complete on DB.

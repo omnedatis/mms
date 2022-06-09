@@ -2018,7 +2018,7 @@ def get_latest_patterns(mids, pids, dates, pvalues):
     return ret
 
 def gen_return_value_v2(mid: str):
-    cps = get_market_data(mid)['CP'].dropna()
+    cps = get_market_data(mid)['CP']
     ds = cps.index.values
     vs = cps.values
     mis = []
@@ -2079,14 +2079,14 @@ def gen_return_value_v2(mid: str):
         ret_2[MarketScoreField.UPPER_BOUND.value] = np.concatenate(ubs)
         ret_2[MarketScoreField.LOWER_BOUND.value] = np.concatenate(lbs)
         ret_2[MarketScoreField.MARKET_ID.value] = mid
-    return ret, ret_1, ret_2
+    return ret, ret_1, ret_2, ds
 
 def do_pattern_task(market, patterns, mode,
                     ret_mdates, ret_pvalues, ret_freturns,
                     ret_values, ret_mscores, ret_lptterns):
-    try:
-        from func._td import set_market_data_provider
-        from dao import MimosaDB
+
+    from func._td import set_market_data_provider
+    from dao import MimosaDB
 
     class MDP:
         def __init__(self, mode):
@@ -2098,15 +2098,15 @@ def do_pattern_task(market, patterns, mode,
     set_db(MimosaDB(mode=mode))
     set_market_data_provider(MDP(mode))
 
-    rvalues, freturns, mscores = gen_return_value_v2(market)
+    rvalues, freturns, mscores, mdates = gen_return_value_v2(market)
     if ret_values is not None:
-            ret_values.append(rvalues)
-        if ret_mscores is not None:
-            ret_mscores.append(mscores)
-        mdates = SMD.dencode(freturns.index.values)
-        freturns = SMD.rencode(freturns)
-        ret_mdates[market] = mdates
-        ret_freturns[market] = freturns
+        ret_values.append(rvalues)
+    if ret_mscores is not None:
+        ret_mscores.append(mscores)
+    mdates = SMD.dencode(mdates)
+    freturns = SMD.rencode(freturns)
+    ret_mdates[market] = mdates
+    ret_freturns[market] = freturns
         if len(patterns) > 0:
             result_buffer = []
             for pattern in patterns:
@@ -2115,12 +2115,11 @@ def do_pattern_task(market, patterns, mode,
             pvalues = SMD.pencode(pattern_result.values)
             ret_pvalues[market] = pvalues
             if ret_lptterns is not None and len(pattern_result) > 0:
-                ret_lptterns.append(get_latest_patterns(market,
-                                                        list(pattern_result.columns),
-                                                        mdates[-1], pvalues[-1]))
-        return f'update patterns: {market}'
-    except Exception as esp:
-        return f'update patterns error: {market} - {esp}'
+            ret_lptterns.append(get_latest_patterns(market,
+                                                    list(pattern_result.columns),
+                                                    mdates[-1], pvalues[-1]))
+    else:
+        ret_pvalues[market] = None
 
 def print_error(e):
     try:
