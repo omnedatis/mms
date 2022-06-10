@@ -22,7 +22,6 @@ from const import *
 from utils import *
 from func._tp import *
 import logging
-from logging import handlers
 from func._td import MD_CACHE
 
 PATTERN_UPDATE_CPUS = 7
@@ -1777,10 +1776,14 @@ class ExecQueue:
                     def callback():
                         cur_size = size
                         logging.info(f'Do {func.__name__}')
-                        if args is not None:
-                            ret = func(*args)
-                        else:
-                            ret = func()
+                        try:
+                            if args is not None:
+                                ret = func(*args)
+                            else:
+                                ret = func()
+                        except Exception as esp:
+                            logging.error(traceback.format_exc())
+                            ret = None
                         self._occupants -= cur_size
                         return ret
                     t = CatchableTread(target=callback)
