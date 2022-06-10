@@ -95,44 +95,44 @@ def _checker(**kwargs) -> dict:
     for key, value in kwargs.items():
         if _is_positive_int(value):
             ret[key].append(_is_positive_int(value))
-    length = ret['period_1']
+    length = kwargs['period_1']
     period = '第一MA均線天數'
-    if ret['period_2'] < length:
+    if kwargs['period_2'] < length:
         ret['period_2'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_2']
+        length = kwargs['period_2']
         period = '第二MA均線天數'
-    if ret['period_3'] < length:
+    if kwargs['period_3'] < length:
         ret['period_3'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_3']
+        length = kwargs['period_3']
         period = '第三MA均線天數'
-    if ret['period_4'] < length:
+    if kwargs['period_4'] < length:
         ret['period_4'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_4']
+        length = kwargs['period_4']
         period = '第四MA均線天數'
-    if ret['period_5'] < length:
+    if kwargs['period_5'] < length:
         ret['period_5'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_5']
+        length = kwargs['period_5']
         period = '第五MA均線天數'
-    if ret['period_6'] < length:
+    if kwargs['period_6'] < length:
         ret['period_6'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_6']
+        length = kwargs['period_6']
         period = '第六MA均線天數'
-    if ret['period_7'] < length:
+    if kwargs['period_7'] < length:
         ret['period_7'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_7']
+        length = kwargs['period_7']
         period = '第七MA均線天數'
-    if ret['period_8'] < length:
+    if kwargs['period_8'] < length:
         ret['period_8'].append(f'輸入值應大於{period}')
     else:
-        length = ret['period_8']
+        length = kwargs['period_8']
         period = '第八MA均線天數'
-    if ret['period_9'] < length:
+    if kwargs['period_9'] < length:
         ret['period_9'].append(f'輸入值應大於{period}')
     return {key: ', '.join(value) for key, value in ret.items() if value}
 

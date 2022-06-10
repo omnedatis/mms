@@ -2649,7 +2649,7 @@ def cast_macro_kwargs(func, macro_kwargs):
                 raise KeyError('invalid data type')
             ret[key] = kwarg
         if len(macro_kwargs) != len(macro_info):
-            raise KeyError('got unexpected keyword arguments')
+            raise KeyError('missing keyword arguments')
         return {key:TYPE_MAP[macro_info[key]](value) for key, value in macro_kwargs.items()}
 
     except Exception as esp:
