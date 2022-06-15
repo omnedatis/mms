@@ -1003,6 +1003,10 @@ class MimosaDB:
         model_id: str
             ID of model to delete.
 
+        Returns
+        -------
+        None.
+
         """
         engine = self._engine()
         if not self.READ_ONLY:
@@ -1019,6 +1023,14 @@ class MimosaDB:
                 DELETE FROM {TableName.PREDICT_RESULT_HISTORY.value}
                 WHERE
                     {PredictResultField.MODEL_ID.value}='{model_id}'
+            """
+            engine.execute(sql)
+
+            # DEL FCST_MODEL_EXECUTION
+            sql = f"""
+                DELETE FROM {TableName.MODEL_EXECUTION.value}
+                WHERE
+                    {ModelExecutionField.MODEL_ID.value}='{model_id}'
             """
             engine.execute(sql)
 
@@ -2395,3 +2407,36 @@ class MimosaDB:
             db_data = pd.concat([db_data, data], axis=0)
             pickle_dump(db_data, f'{DATA_LOC}/local_out/{TableName.MODEL_MKT_HIT_SUM.value}.pkl')
         logging.info(f'Update model hit sum finished')
+
+    def del_pattern_data(self, pattern_id: str):
+        """刪除 DB 中 Pattern 計算相關資訊，包含
+        1. FCST_PAT_EXECUTION
+        2. FCST_PAT_MKT_EVENT
+
+        Parameters
+        ----------
+        pattern_id: str
+            ID of pattern to delete.
+        
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+        if not self.READ_ONLY:
+            # DEL FCST_PAT_MKT_EVENT
+            sql = f"""
+                DELETE FROM {TableName.PATTERN_RESULT.value}
+                WHERE
+                    {PatternResultField.PATTERN_ID.value}='{pattern_id}'
+            """
+            engine.execute(sql)
+
+            # DEL FCST_PAT_EXECUTION
+            sql = f"""
+                DELETE FROM {TableName.PATTERN_EXECUTION.value}
+                WHERE
+                    {PatternExecutionField.PATTERN_ID.value}='{pattern_id}'
+            """
+            engine.execute(sql)
