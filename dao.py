@@ -1034,6 +1034,14 @@ class MimosaDB:
             """
             engine.execute(sql)
 
+            # DEL FCST_MODEL_HIT_SUM
+            sql = f"""
+                DELETE FROM {TableName.MODEL_MKT_HIT_SUM.value}
+                WHERE
+                    {ModelMarketHitSumField.MODEL_ID.value}='{model_id}'
+            """
+            engine.execute(sql)
+
     def save_model_latest_results(self, model_id:str, data:pd.DataFrame,
                                   exec_type:ModelExecution):
         """Save modle latest predicting results to DB.
