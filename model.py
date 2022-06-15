@@ -1586,12 +1586,16 @@ def remove_model(model_id):
     MT_MANAGER.release(model_id)
     while MT_MANAGER.exists(model_id):
         time.sleep(1)
-    # del_model_data(model_id)
+    del_model_data(model_id)
     model_dir = _get_model_dir(model_id)
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     logging.info('finish remove model')
 
+def edit_model(model_id: str):
+    remove_model(model_id)
+    add_model(model_id)
+    return
 
 def model_create(model: ModelInfo, controller: ThreadController):
     """建立模型
@@ -1722,9 +1726,10 @@ def model_backtest(model: ModelInfo, controller: ThreadController):
                     logging.info('model backtest terminated')
                     return
                 # 將此輪所有市場的回測結果上傳至DB
-                logging.info('finish model backtest')
+                
                 save_model_results(model.model_id, ret, ModelExecution.ADD_BACKTEST)
                 all_results.append(ret)
+        logging.info('finish model backtest')
     if controller.isactive:
         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
         set_model_execution_complete(exection_id)
@@ -2540,6 +2545,15 @@ def add_pattern(pid):
     else:
         smd.update(pids=pids, pvalues=pvalues)
     smd_lock.release()
+
+def del_pattern_data(pattern_id:str):
+    db = get_db()
+    db.del_pattern_data(pattern_id)
+
+def edit_pattern(pattern_id:str):
+    del_pattern_data(pattern_id)
+    add_pattern(pattern_id)
+    return
 
 def get_market_rise_prob(period, market_type=None, category_code=None):
     def func(r):

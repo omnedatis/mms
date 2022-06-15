@@ -33,7 +33,7 @@ from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_patter
                    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
                    get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
                    remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd, verify_pattern,
-                   get_frame, get_plot, cast_macro_kwargs)
+                   get_frame, get_plot, cast_macro_kwargs, edit_model, edit_pattern)
 from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
 from func.common import Ptype
 import datetime
@@ -126,6 +126,35 @@ def api_remove_model(modelId):
     t.start()
     return {"status": 202, "message": "accepted", "data": None}
 
+@app.route("/models/<string:modelId>", methods=["PATCH"])
+def api_edit_model(modelId):
+    """
+    編輯模型
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: modelId
+        in: path
+        type: string
+        required: true
+    responses:
+      202:
+        decription: 請求已接收，等待執行
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: string
+              nullable: true
+    """
+    logging.info(f"api_edit_model receiving: {modelId}")
+    model_queue.push(edit_model, size=1, args=(modelId,))
+    return {"status": 202, "message": "accepted", "data": None}
 
 @app.route("/pattern/dates", methods=["POST"])
 def api_get_pattern_dates():
@@ -409,6 +438,35 @@ def api_add_pattern(patternId):
     pattern_queue.push(add_pattern, size=1, args=(patternId,))
     return {"status": 202, "message": "accepted", "data": None}
 
+@app.route("/patterns/<string:patternId>", methods=["PATCH"])
+def api_edit_pattern(patternId):
+    """
+    編輯現象
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: patternId
+        in: path
+        type: string
+        required: true
+    responses:
+      202:
+        decription: 請求已接收，等待執行
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: string
+              nullable: true
+    """
+    logging.info(f"api_edit_pattern receiving: {patternId}")
+    pattern_queue.push(edit_pattern, size=1, args=(patternId,))
+    return {"status": 202, "message": "accepted", "data": None}
 
 @app.route("/markets/upprob", methods=["GET"])
 def api_market_upprob():
