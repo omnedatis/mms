@@ -3,8 +3,10 @@
 Created on Tue March 8 17:07:36 2021
 
 """
-from enum import Enum
+from enum import Enum, IntEnum
 import datetime
+from typing import Optional
+import re
 
 PREDICT_PERIODS = [5, 10, 20, 40, 60, 120]
 DEFAULT_TRAIN_BEGIN_DATE = datetime.date(2007, 7, 1)
@@ -24,11 +26,45 @@ FUNC_CACHE_SIZE = 2000
 MULTI_PATTERN_CACHE_SIZE = 2000 * 100
 MIN_DB_WRITING_LENGTH = 0
 MA_GRAPH_SAMPLE_NUM = 10
-TYPE_MAP = {
-        "string":str,
-        "int":int,
-        "float":float
-    }
+
+class TypeCheckMap(str,Enum):
+    STRING = "string", "字串", str, "[A-z]+"
+    INT = "int", "整數", int, "\d+\.?"
+    FLOAT = "float", "浮點數", float, "\d+\.\d*"
+
+    def __new__(cls, value, cstring, type, pattern):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.cstring = cstring
+        obj.type = type
+        obj._pattern = re.compile(pattern)
+        return obj
+
+    
+    def check(self, value):
+        return not not (self._pattern.fullmatch(value)) 
+
+
+class HttpResponseCode(IntEnum):
+    
+    OK = 200, "OK"
+    ACCEPTED = 202, "Accepted"
+    BAD_REQUEST = 400, "Bad request"
+    NOT_FOUND = 404, "Not found"
+    METHOD_NOT_ALLOWED = 405, "Method not allowed"
+    INTERNAL_SERVER_ERROR = 500, "Internal server error"
+    
+    def __new__(cls, value, phrase):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+    
+        obj.phrase = phrase
+        return obj
+
+    
+    def format(self, data:Optional[dict]=None) -> dict:
+        return {"status":self.value, "message":self.phrase, "data":data}
+        
 class BatchType(str, Enum):
     """Batch 的執行型態
 

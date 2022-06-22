@@ -1492,6 +1492,8 @@ def add_model(model_id: str):
     model_create, model_backtest
 
     """
+    if MT_MANAGER.exists(model_id):
+        return
     controller = MT_MANAGER.acquire(model_id)
     if not controller.isactive:
         MT_MANAGER.release(model_id)
@@ -2645,29 +2647,40 @@ def get_macro_params(func_code):
     db = get_db()
     return db.get_macro_param_type(func_code)
 
+def check_macro_info(func):
+    macro_info = get_macro_params(func)
+    if 'market_id' in macro_info:
+        del macro_info['market_id']
+
+    params = eval(f'{func}.params')
+    invalids = 0
+    for each in params:
+        if each.code not in macro_info:
+            invalids += 1
+        elif each.dtype.value.code != macro_info[each.code]:
+            invalids +=1
+
+    return invalids
+
 def cast_macro_kwargs(func, macro_kwargs):
     macro_info = get_macro_params(func)
     if 'market_id' in macro_info:
         del macro_info['market_id']
     try:
         ret = {}
-        params = eval(f'{func}.params')
-        invalids = 0
-        for each in params:
-            if each.code not in macro_info:
-                invalids += 1
-            elif each.dtype.value.code != macro_info[each.code]:
-                invalids +=1
-        if invalids:
-            raise ValueError('inconsist data type')
+        msg = {}
         for key, value in macro_kwargs.items():
-            kwarg = TYPE_MAP[macro_info[key]](value)
-            if str(kwarg) != value:
-                raise KeyError('invalid data type')
-            ret[key] = kwarg
+            if key not in macro_info:
+                raise KeyError(f'keyword argument {key} not in macro info')
+            macro_type = macro_info[key]
+            is_valid = TypeCheckMap(macro_type).check(value)
+            if is_valid:
+                ret[key] = TypeCheckMap(macro_type).type(value)
+            else:
+                msg[key] = '參數型態錯誤'+f'，應為{TypeCheckMap(macro_type).cstring}'
         if len(macro_kwargs) != len(macro_info):
             raise KeyError('missing keyword arguments')
-        return {key:TYPE_MAP[macro_info[key]](value) for key, value in macro_kwargs.items()}
+        return ret, msg
 
     except Exception as esp:
         raise esp
