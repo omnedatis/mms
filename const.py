@@ -252,7 +252,7 @@ class ModelStatus(int, Enum):
     CREATED = 2
     COMPLETE = 3
 
-class DBModelStatus(int, Enum):
+class DBModelStatus(str, Enum):
     """ 觀點在資料庫中的狀態
 
     Members
@@ -264,13 +264,13 @@ class DBModelStatus(int, Enum):
     PUBLIC_AND_INVALID: 發布且無效
 
     """
-    PRIVATE_AND_VALID = 0
-    PUBLIC_AND_VALID = 1
-    DRAFT = 2
-    PRIVATE_AND_INVALID = 3
-    PUBLIC_AND_INVALID = 4
+    PRIVATE_AND_VALID = '0'
+    PUBLIC_AND_VALID = '1'
+    DRAFT = '2'
+    PRIVATE_AND_INVALID = '3'
+    PUBLIC_AND_INVALID = '4'
 
-class DBPatternStatus(int, Enum):
+class DBPatternStatus(str, Enum):
     """ 現象在資料庫中的狀態
 
     Members
@@ -282,11 +282,11 @@ class DBPatternStatus(int, Enum):
     PUBLIC_AND_INVALID: 發布且無效
 
     """
-    PRIVATE_AND_VALID = 0
-    PUBLIC_AND_VALID = 1
-    DRAFT = 2
-    PRIVATE_AND_INVALID = 3
-    PUBLIC_AND_INVALID = 4
+    PRIVATE_AND_VALID = '0'
+    PUBLIC_AND_VALID = '1'
+    DRAFT = '2'
+    PRIVATE_AND_INVALID = '3'
+    PUBLIC_AND_INVALID = '4'
 
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
@@ -607,3 +607,48 @@ class ModelMarketHitSumField(Enum):
     DATE_PERIOD = "DATE_PERIOD"
     HIT = "HIT"
     FCST_CNT = "FCST_CNT"
+
+
+class SerialNoType(Enum):
+    """呼叫取得序列號時需要使用的參數
+
+    EXECUTION: 執行狀態的序列號
+    """
+    EXECUTION = 'EXEC_ID'
+
+
+class DataType(Enum):
+    """資料庫中的資料型態
+
+    STRING: 字串
+    INT: 整數
+    FLOAT: 浮點數
+    DATETIME: 日期時間
+    DATE: 日期
+    BOOLEAN: 布林值
+    """
+    STRING = 'str'
+    INT = 'int32'
+    FLOAT = 'float32'
+    DATETIME = 'datetime64[s]'
+    DATE = 'datetime64[D]'
+    BOOLEAN = 'bool'
+
+
+class CacheName(Enum):
+    MKT_HISTORY_PRICE = TableName.MKT_HISTORY_PRICE._value_
+    MKT_INFO = TableName.MKT_INFO.value
+    DS_S_STOCK = TableName.DS_S_STOCK.value
+    PAT_INFO = TableName.PAT_INFO.value
+    PAT_PARAM = TableName.PAT_PARAM.value
+    MACRO_INFO = TableName.MACRO_INFO.value
+    MACRO_PARAM = TableName.MACRO_PARAM.value
+    MODEL_INFO = TableName.MODEL_INFO.value
+    MODEL_EXECUTION = TableName.MODEL_EXECUTION.value
+    MODEL_MKT_MAP = TableName.MODEL_MKT_MAP.value
+    MODEL_PAT_MAP = TableName.MODEL_PAT_MAP.value
+    SCORE_META = TableName.SCORE_META.value
+    PATTERNS = 'patterns'
+    MODELS = 'models'
+
+
