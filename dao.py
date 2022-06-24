@@ -1710,6 +1710,10 @@ class MimosaDB:
                 model_id, exection, start_dt, end_dt]]
             data = pd.DataFrame(data, columns=COLUMNS)
             self._insert(table_name, data)
+
+            # 同步本地端快取資料
+            local_status = self.cache_manager._convert_exec_to_status(data)[model_id]
+            self.cache_manager.set_model_status(model_id, local_status)
         return exec_id
 
     def set_pattern_execution_start(self, pid: str, exection: str) -> str:

@@ -138,7 +138,6 @@ def save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update:bool=False
         db = get_db()
         if update:
             for pid, data in trans2dbformat(recv).groupby(by=PatternResultField.PATTERN_ID.value):
-                print(pid, data)
                 db.update_latest_pattern_results(pid, data)
         else:
             db.save_latest_pattern_results(trans2dbformat(recv))
