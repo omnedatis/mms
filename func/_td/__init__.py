@@ -17,7 +17,7 @@ TimeSeries: A sequence of data points indexed by time.
 """
 
 # pylint: disable=unused-import
-from ._db import get_cp, get_hp, get_lp, get_op, MarketData, set_market_data_provider, MD_CACHE
+from ._db import get_cp, get_hp, get_lp, get_op, MarketData, set_market_data_provider, MD_CACHE, MarketDataProvider
 from ._index import TimeIndex, TimeUnit  # noqa: F401
 from ._series import BooleanTimeSeries, NumericTimeSeries, TimeSeries  # noqa: F401
 
@@ -29,7 +29,7 @@ ts_average = NumericTimeSeries.average
 ts_max = NumericTimeSeries.max
 ts_min = NumericTimeSeries.min
 
-__ALL__ = ['TimeIndex', 'TimeUnit', 'MD_CACHE']
+__ALL__ = ['TimeIndex', 'TimeUnit', 'MD_CACHE', 'MarketDataProvider']
 __ALL__ += ['BooleanTimeSeries', 'NumericTimeSeries', 'TimeSeries']
 __ALL__ += ['get_cp', 'get_hp', 'get_lp', 'get_op', 'MarketData', 'set_db_id']
 __ALL__ += ['ts_all', 'ts_any', 'ts_max', 'ts_min']

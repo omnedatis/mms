@@ -23,18 +23,18 @@ Batch api call could fail to execute if the previous controller
 has not yet being released.
 """
 import argparse
-from concurrent.futures import thread
 import os
 import traceback
 import threading as mt
 import sys
-from func._td._db import set_market_data_provider
-from model import (set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
-                   get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
-                   get_market_rise_prob, get_mkt_dist_info, set_exec_mode, add_pattern, add_model,
-                   remove_model, MarketDataFromDb, model_queue, pattern_queue, load_smd, verify_pattern,
-                   get_frame, get_plot, cast_macro_kwargs, edit_model, edit_pattern)
-from const import ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT, MarketPeriodField
+from model import (
+    set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
+    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
+    get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
+    model_queue, pattern_queue, verify_pattern, get_frame, get_plot,
+    cast_macro_kwargs, edit_model, edit_pattern)
+from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
+                   MarketPeriodField)
 from func.common import Ptype
 import datetime
 from dao import MimosaDB
@@ -44,7 +44,6 @@ from waitress import serve
 from werkzeug.exceptions import MethodNotAllowed, NotFound, InternalServerError
 import logging
 from logging import handlers
-import json
 import warnings
 app = Flask(__name__)
 Swagger(app)
@@ -631,7 +630,7 @@ def api_get_market_price_date(marketId):
                 "data": None}
     ret = get_market_price_dates(marketId, start_date)
     ret = [{"dataDate": each[MarketPeriodField.DATA_DATE.value].strftime('%Y-%m-%d'),
-            "priceDate":each[MarketPeriodField.PRICE_DATE.value].strftime('%Y-%m-%d'), 
+            "priceDate":each[MarketPeriodField.PRICE_DATE.value].strftime('%Y-%m-%d'),
             "datePeriod":each[MarketPeriodField.DATE_PERIOD.value],} for each in ret]
     return {"status": 200, "message": "OK", "data": ret}
 
@@ -651,7 +650,7 @@ def api_pattern_paramscheck():
             type: string
           paramCodes:
             type: array
-            items: 
+            items:
               type: object
               properties:
                 paramCode:
@@ -714,7 +713,7 @@ def api_pattern_get_frame():
             type: string
           paramCodes:
             type: array
-            items: 
+            items:
               type: object
               properties:
                 paramCode:
@@ -773,7 +772,7 @@ def api_pattern_get_plot():
             type: string
           paramCodes:
             type: array
-            items: 
+            items:
               type: object
               properties:
                 paramCode:
@@ -902,13 +901,10 @@ if __name__ == '__main__':
                             err_hdlr, info_hdlr, file_hdlr])
         model_queue.start()
         pattern_queue.start()
-        set_exec_mode(exec_mode)
         set_db(MimosaDB(mode=exec_mode))
-        set_market_data_provider(MarketDataFromDb())
-        load_smd()
 
-    except Exception as esp:
-        logging.error(f"setting up failed")
+    except Exception:
+        logging.error("setting up failed")
         logging.error(traceback.format_exc())
     if (not args.motionless) and (not args.batchless):
         t = mt.Thread(target=init_db)

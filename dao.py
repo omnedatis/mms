@@ -10,9 +10,9 @@ import threading as mt
 from sqlalchemy import create_engine
 from threading import Lock
 from typing import Any, Dict, List, NamedTuple, Optional, Union
-from model import (ModelInfo, PatternInfo, CatchableTread,
-                pickle_dump, pickle_load,
-                get_filed_name_of_future_return)
+from _core import Pattern as PatternInfo
+from _core import View as ModelInfo
+from utils import CatchableTread, pickle_dump, pickle_load
 from const import (LOCAL_DB, DATA_LOC, EXCEPT_DATA_LOC, ExecMode, BatchType, 
                    MarketOccurField, ModelMarketHitSumField, PatternResultField,
                    TableName, MarketDistField, ModelExecution, PredictResultField,
@@ -550,7 +550,7 @@ class MimosaDB:
                     elif param_type == "string":
                         param_val = str(param_record[PatternParamField.PARAM_VALUE.value])
                     params[param_record[PatternParamField.PARAM_CODE.value]] = param_val
-                result[pid] = PatternInfo(pid, func, params)
+                result[pid] = PatternInfo.make(pid, func, params)
             result = [result[pid] for pid in result]
             with open(f'{DATA_LOC}/patterns.pkl', 'wb') as fp:
                 pickle.dump(result, fp)
@@ -992,7 +992,7 @@ class MimosaDB:
             raise Exception(f"get_model_info: 0 model pattern exception: {model_id}")
         patterns = patterns[m_cond][ModelPatternMapField.PATTERN_ID.value].values.tolist()
 
-        result = ModelInfo(model_id, patterns, markets, train_begin, train_gap)
+        result = ModelInfo.make(model_id, patterns, markets, train_begin, train_gap)
         return result
 
     def del_model_data(self, model_id: str):
@@ -2310,7 +2310,7 @@ class MimosaDB:
                 elif param_type == "string":
                     param_val = str(param_record[PatternParamField.PARAM_VALUE.value])
                 params[param_record[PatternParamField.PARAM_CODE.value]] = param_val
-            result[pid] = PatternInfo(pid, func, params)
+            result[pid] = PatternInfo.make(pid, func, params)
         if pattern_id not in result:
             raise Exception(f'get_pattern_info: pattern info not found in db: {pattern_id}')
         result = result[pattern_id]

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """Financial Market DataBase."""
 
-from typing import NamedTuple, Optional, Any, List
+from abc import ABCMeta, abstractmethod
+from typing import NamedTuple, Optional
+
+import pandas as pd
 
 from ._series import NumericTimeSeries, TimeIndex
 from utils import Cache
@@ -11,22 +14,37 @@ _DB = None
 
 MD_CACHE = Cache(FUNC_CACHE_SIZE)
 
-def set_market_data_provider(db_):
+class MarketDataProvider(metaclass=ABCMeta):
+    @abstractmethod
+    def get_ohlc(self, market_id: str) -> pd.DataFrame:
+        """Get OHLC data of the designated market.
+
+        Parameters
+        ----------
+        market_id: str
+            ID of the designated market.
+
+        Returns
+        -------
+        Pandas' DataFrame
+            A Pandas' DataFrame consisted of four floating time-series with
+            names, `OP`, `HP`, `LP`, and `CP`.
+
+        """
+        pass
+
+def set_market_data_provider(db_: MarketDataProvider):
     """
-    
+
     Parameters
     ----------
-    db_: object
-        An object support `get_ohlc` method which receive a 
-        string of market id and return a Pandas' DataFrame
-        consisted of four floating time-series with names, 
-        'OP', 'HP', 'LP', and 'CP'.
-        
+    db_: MarketDataProvider
+
     """
     global _DB
     _DB = db_
 
-def get_market_data_provider():
+def get_market_data_provider() -> MarketDataProvider:
     return _DB
 
 class MarketData(NamedTuple):
