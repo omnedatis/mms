@@ -32,8 +32,8 @@ MA_GRAPH_SAMPLE_NUM = 10
 
 class TypeCheckMap(str,Enum):
     STRING = "string", "字串", str, "[A-z]+"
-    INT = "int", "整數", int, "\d+\.?"
-    FLOAT = "float", "浮點數", float, "\d+\.\d*"
+    INT = "int", "整數", int, "-?\d+\.?"
+    FLOAT = "float", "浮點數", float, "-?\d+\.\d*"
 
     def __new__(cls, value, cstring, type, pattern):
         obj = str.__new__(cls, value)
