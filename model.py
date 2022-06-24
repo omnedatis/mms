@@ -29,7 +29,7 @@ from utils import *
 from const import (BatchType, MarketPeriodField, MarketScoreField,
                    ModelExecution, ModelMarketHitSumField, ModelStatus,
                    PatternExecution, PatternResultField, PredictResultField,
-                   MIN_BACKTEST_LEN, PREDICT_PERIODS, TYPE_MAP)
+                   MIN_BACKTEST_LEN, PREDICT_PERIODS)
 from utils import extend_working_dates, CatchableTread, ThreadController
 
 #from func._tp import

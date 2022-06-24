@@ -136,7 +136,7 @@ def view_update(view: View, latest_dates: Dict[str, datetime.date],
                                          model.predict(cur_x)))
     else:
         return None
-    if len(ret) > 0
+    if len(ret) > 0:
         return pd.concat(ret, axis=0)
 
 def view_backtest(view: View, earlist_dates: Dict[str, datetime.date],
