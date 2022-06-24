@@ -594,6 +594,10 @@ class MimosaDBCacheManager:
         ])
         pickle_dump(history_data, fp)
 
+    def del_model_result(self, model_id:str):
+        fp = f'{DATA_LOC}/views/{model_id}'
+        shutil.rmtree(fp)
+
     def clone(self):
         self._clone_base_tables()
         self._build_valid_patterns()
@@ -1984,6 +1988,7 @@ class MimosaDB:
                      whereby=[
                          (ModelMarketHitSumField.MODEL_ID.value, model_id)
                      ])
+        self.cache_manager.del_model_result(model_id)
 
     def del_pattern_data(self, pattern_id: str):
         """刪除 DB 中 Pattern 計算相關資訊，包含
