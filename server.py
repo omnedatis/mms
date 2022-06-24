@@ -16,7 +16,7 @@ from model import (
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     model_queue, pattern_queue, verify_pattern, get_frame, get_plot,
-    cast_macro_kwargs, edit_model, edit_pattern)
+    cast_macro_kwargs, edit_model, edit_pattern, check_macro_info, CatchableTread)
 from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
                    MarketPeriodField, HttpResponseCode)
 from func.common import Ptype
