@@ -3,8 +3,10 @@
 Created on Tue March 8 17:07:36 2021
 
 """
-from enum import Enum
+from enum import Enum, IntEnum
 import datetime
+from typing import Optional
+import re
 
 PREDICT_PERIODS = [5, 10, 20, 40, 60, 120]
 DEFAULT_TRAIN_BEGIN_DATE = datetime.date(2007, 7, 1)
@@ -27,11 +29,45 @@ FUNC_CACHE_SIZE = 2000
 MULTI_PATTERN_CACHE_SIZE = 2000 * 100
 MIN_DB_WRITING_LENGTH = 0
 MA_GRAPH_SAMPLE_NUM = 10
-TYPE_MAP = {
-        "string":str,
-        "int":int,
-        "float":float
-    }
+
+class TypeCheckMap(str,Enum):
+    STRING = "string", "字串", str, "[A-z]+"
+    INT = "int", "整數", int, "\d+\.?"
+    FLOAT = "float", "浮點數", float, "\d+\.\d*"
+
+    def __new__(cls, value, cstring, type, pattern):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.cstring = cstring
+        obj.type = type
+        obj._pattern = re.compile(pattern)
+        return obj
+
+
+    def check(self, value):
+        return not not (self._pattern.fullmatch(value))
+
+
+class HttpResponseCode(IntEnum):
+
+    OK = 200, "OK"
+    ACCEPTED = 202, "Accepted"
+    BAD_REQUEST = 400, "Bad request"
+    NOT_FOUND = 404, "Not found"
+    METHOD_NOT_ALLOWED = 405, "Method not allowed"
+    INTERNAL_SERVER_ERROR = 500, "Internal server error"
+
+    def __new__(cls, value, phrase):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+
+        obj.phrase = phrase
+        return obj
+
+
+    def format(self, data:Optional[dict]=None) -> dict:
+        return {"status":self.value, "message":self.phrase, "data":data}
+
 class BatchType(str, Enum):
     """Batch 的執行型態
 
@@ -219,7 +255,7 @@ class ModelStatus(int, Enum):
     CREATED = 2
     COMPLETE = 3
 
-class DBModelStatus(int, Enum):
+class DBModelStatus(str, Enum):
     """ 觀點在資料庫中的狀態
 
     Members
@@ -231,13 +267,13 @@ class DBModelStatus(int, Enum):
     PUBLIC_AND_INVALID: 發布且無效
 
     """
-    PRIVATE_AND_VALID = 0
-    PUBLIC_AND_VALID = 1
-    DRAFT = 2
-    PRIVATE_AND_INVALID = 3
-    PUBLIC_AND_INVALID = 4
+    PRIVATE_AND_VALID = '0'
+    PUBLIC_AND_VALID = '1'
+    DRAFT = '2'
+    PRIVATE_AND_INVALID = '3'
+    PUBLIC_AND_INVALID = '4'
 
-class DBPatternStatus(int, Enum):
+class DBPatternStatus(str, Enum):
     """ 現象在資料庫中的狀態
 
     Members
@@ -249,11 +285,11 @@ class DBPatternStatus(int, Enum):
     PUBLIC_AND_INVALID: 發布且無效
 
     """
-    PRIVATE_AND_VALID = 0
-    PUBLIC_AND_VALID = 1
-    DRAFT = 2
-    PRIVATE_AND_INVALID = 3
-    PUBLIC_AND_INVALID = 4
+    PRIVATE_AND_VALID = '0'
+    PUBLIC_AND_VALID = '1'
+    DRAFT = '2'
+    PRIVATE_AND_INVALID = '3'
+    PUBLIC_AND_INVALID = '4'
 
 class MarketOccurField(Enum):
     """Fields of pattern market occur stat info table on DB.
@@ -574,3 +610,48 @@ class ModelMarketHitSumField(Enum):
     DATE_PERIOD = "DATE_PERIOD"
     HIT = "HIT"
     FCST_CNT = "FCST_CNT"
+
+
+class SerialNoType(Enum):
+    """呼叫取得序列號時需要使用的參數
+
+    EXECUTION: 執行狀態的序列號
+    """
+    EXECUTION = 'EXEC_ID'
+
+
+class DataType(Enum):
+    """資料庫中的資料型態
+
+    STRING: 字串
+    INT: 整數
+    FLOAT: 浮點數
+    DATETIME: 日期時間
+    DATE: 日期
+    BOOLEAN: 布林值
+    """
+    STRING = 'str'
+    INT = 'int32'
+    FLOAT = 'float32'
+    DATETIME = 'datetime64[s]'
+    DATE = 'datetime64[D]'
+    BOOLEAN = 'bool'
+
+
+class CacheName(Enum):
+    MKT_HISTORY_PRICE = TableName.MKT_HISTORY_PRICE._value_
+    MKT_INFO = TableName.MKT_INFO.value
+    DS_S_STOCK = TableName.DS_S_STOCK.value
+    PAT_INFO = TableName.PAT_INFO.value
+    PAT_PARAM = TableName.PAT_PARAM.value
+    MACRO_INFO = TableName.MACRO_INFO.value
+    MACRO_PARAM = TableName.MACRO_PARAM.value
+    MODEL_INFO = TableName.MODEL_INFO.value
+    MODEL_EXECUTION = TableName.MODEL_EXECUTION.value
+    MODEL_MKT_MAP = TableName.MODEL_MKT_MAP.value
+    MODEL_PAT_MAP = TableName.MODEL_PAT_MAP.value
+    SCORE_META = TableName.SCORE_META.value
+    PATTERNS = 'patterns'
+    MODELS = 'models'
+
+

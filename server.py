@@ -5,22 +5,6 @@ Created on Tue March 8 17:07:36 2021
 @author: Jeff
 
 WSGI python server
---------------------------------------------------------------
-
-Server build using `init_db` to create local database when
-
-detecting none. When building local database, pattern update
-
-and model recovery are executed.
-
-
-When server fails, restarting will automatically run batch,
-
-while api call `api_batch` could terminate this batch run.
-
-Batch api call could fail to execute if the previous controller
-
-has not yet being released.
 """
 import argparse
 import os
@@ -34,14 +18,14 @@ from model import (
     model_queue, pattern_queue, verify_pattern, get_frame, get_plot,
     cast_macro_kwargs, edit_model, edit_pattern)
 from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
-                   MarketPeriodField)
+                   MarketPeriodField, HttpResponseCode)
 from func.common import Ptype
 import datetime
 from dao import MimosaDB
 from flask import Flask, request
 from flasgger import Swagger
 from waitress import serve
-from werkzeug.exceptions import MethodNotAllowed, NotFound, InternalServerError
+from werkzeug.exceptions import MethodNotAllowed, NotFound, InternalServerError, BadRequest
 import logging
 from logging import handlers
 import warnings
@@ -60,7 +44,7 @@ def api_batch():
     """ Run batch. """
     model_queue.cut_line(batch, size=MODEL_QUEUE_LIMIT)
     pattern_queue.cut_line(batch, size=PATTERN_QUEUE_LIMIT)
-    return {"status": 202, "message": "accepted", "data": None}
+    return HttpResponseCode.ACCEPTED.format()
 
 
 @app.route("/models/<string:modelId>", methods=["POST"])
@@ -91,7 +75,7 @@ def api_add_model(modelId):
     """
     logging.info(f"api_add_model  receiving: {modelId}")
     model_queue.push(add_model, size=1, args=(modelId,))
-    return {"status": 202, "message": "accepted", "data": None}
+    return HttpResponseCode.ACCEPTED.format()
 
 
 @app.route("/models/<string:modelId>", methods=["DELETE"])
@@ -121,9 +105,10 @@ def api_remove_model(modelId):
               nullable: true
     """
     logging.info(f"api_remove_model  receiving: {modelId}")
-    t = mt.Thread(target=remove_model, args=(modelId,))
+    t = CatchableTread(target=remove_model, args=(modelId,))
     t.start()
-    return {"status": 202, "message": "accepted", "data": None}
+    return HttpResponseCode.ACCEPTED.format()
+
 
 @app.route("/models/<string:modelId>", methods=["PATCH"])
 def api_edit_model(modelId):
@@ -153,7 +138,8 @@ def api_edit_model(modelId):
     """
     logging.info(f"api_edit_model receiving: {modelId}")
     model_queue.push(edit_model, size=1, args=(modelId,))
-    return {"status": 202, "message": "accepted", "data": None}
+    return HttpResponseCode.ACCEPTED.format()
+
 
 @app.route("/pattern/dates", methods=["POST"])
 def api_get_pattern_dates():
@@ -206,16 +192,11 @@ def api_get_pattern_dates():
         start_date = data.get('startDate')
         end_date = data.get('endDate')
     except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        ret = get_mix_pattern_occur(market_id, patterns, start_date, end_date)
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": {"occurDates":[each.strftime('%Y-%m-%d') for each in ret]}}
+        raise BadRequest
+    ret = get_mix_pattern_occur(market_id, patterns, start_date, end_date)
+    ret = {"occurDates": [each.strftime('%Y-%m-%d') for each in ret]}
+
+    return HttpResponseCode.OK.format(ret)
 
 
 @app.route("/pattern/count", methods=["POST"])
@@ -264,19 +245,12 @@ def api_get_pattern_count():
         market_type = data.get('marketType')
         category_code = data.get('categoryCode')
     except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        occur, non_occur = get_mix_pattern_occur_cnt(
-            patterns, market_type, category_code)
+        raise BadRequest
 
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}}
-
+    occur, non_occur = get_mix_pattern_occur_cnt(
+        patterns, market_type, category_code)
+    ret = {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}
+    return HttpResponseCode.OK.format(ret)
 
 @app.route("/pattern/upprob", methods=["POST"])
 def api_get_pattern_upprob():
@@ -325,17 +299,11 @@ def api_get_pattern_upprob():
         market_type = data.get('marketType')
         category_code = data.get('categoryCode')
     except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        ret = get_mix_pattern_rise_prob(
-            patterns, date_period, market_type, category_code)
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": {"positiveWeight": float(ret)}}
+        raise BadRequest
+    ret = get_mix_pattern_rise_prob(
+        patterns, date_period, market_type, category_code)
+    ret = {"positiveWeight": float(ret)}
+    return HttpResponseCode.OK.format(ret)
 
 
 @app.route("/pattern/distribution", methods=["POST"])
@@ -393,19 +361,13 @@ def api_get_pattern_distribution():
         market_type = data.get('marketType')
         category_code = data.get('categoryCode')
     except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
-    try:
-        ret = get_mix_pattern_mkt_dist_info(
-            patterns, date_period, market_type, category_code)
-        ret = [{"marketCode": key, "returnMean": float(mean), "returnStd": float(
-            std), "samples": int(counts)} for key, (mean, std, counts) in ret.items()]
-    except Exception as esp:
-        logging.error(traceback.format_exc())
-        raise Exception
-    return {"status": 200, "message": "OK", "data": ret}
+        raise BadRequest
+    ret = get_mix_pattern_mkt_dist_info(
+        patterns, date_period, market_type, category_code)
+    ret = [{"marketCode": key, "returnMean": float(mean), "returnStd": float(
+        std), "samples": int(counts)} for key, (mean, std, counts) in ret.items()]
+
+    return HttpResponseCode.OK.format(ret)
 
 
 @app.route("/patterns/<string:patternId>", methods=["POST"])
@@ -435,7 +397,7 @@ def api_add_pattern(patternId):
               nullable: true
     """
     pattern_queue.push(add_pattern, size=1, args=(patternId,))
-    return {"status": 202, "message": "accepted", "data": None}
+    return HttpResponseCode.ACCEPTED.format()
 
 @app.route("/patterns/<string:patternId>", methods=["PATCH"])
 def api_edit_pattern(patternId):
@@ -465,7 +427,8 @@ def api_edit_pattern(patternId):
     """
     logging.info(f"api_edit_pattern receiving: {patternId}")
     pattern_queue.push(edit_pattern, size=1, args=(patternId,))
-    return {"status": 202, "message": "accepted", "data": None}
+    return HttpResponseCode.ACCEPTED.format()
+
 
 @app.route("/markets/upprob", methods=["GET"])
 def api_market_upprob():
@@ -508,12 +471,10 @@ def api_market_upprob():
         market_type = data.get("marketType") or None
         category_code = data.get("categoryCode") or None
     except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
+        raise BadRequest
     ret = get_market_rise_prob(int(date_period), market_type, category_code)
-    return {"status": 200, "message": "OK", "data": {"positiveWeight": float(ret)}}
+    ret =  {"positiveWeight": float(ret)}
+    return HttpResponseCode.OK.format(ret)
 
 
 @app.route("/markets/distribution", methods=["GET"])
@@ -565,14 +526,11 @@ def api_market_distribution():
         market_type = data.get("marketType") or None
         category_code = data.get("categoryCode") or None
     except Exception as esp:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
+        raise BadRequest
     ret = get_mkt_dist_info(int(date_period), market_type, category_code)
     ret = [{"marketCode": key, "returnMean": float(mean), "returnStd": float(
         std), "samples": int(counts)} for key, (mean, std, counts) in ret.items()]
-    return {"status": 200, "message": "OK", "data": ret}
+    return HttpResponseCode.OK.format(ret)
 
 
 @app.route('/markets/<string:marketId>/pricedate', methods=["GET"])
@@ -624,15 +582,12 @@ def api_get_market_price_date(marketId):
             start_date = datetime.datetime.strptime(
                 start_date, "%Y-%m-%d").date()
     except:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
+        raise BadRequest
     ret = get_market_price_dates(marketId, start_date)
     ret = [{"dataDate": each[MarketPeriodField.DATA_DATE.value].strftime('%Y-%m-%d'),
             "priceDate":each[MarketPeriodField.PRICE_DATE.value].strftime('%Y-%m-%d'),
-            "datePeriod":each[MarketPeriodField.DATE_PERIOD.value],} for each in ret]
-    return {"status": 200, "message": "OK", "data": ret}
+            "datePeriod":each[MarketPeriodField.DATE_PERIOD.value], } for each in ret]
+    return HttpResponseCode.OK.format(ret)
 
 @app.route('/pattern/paramcheck', methods=["POST"])
 def api_pattern_paramscheck():
@@ -683,19 +638,21 @@ def api_pattern_paramscheck():
         data = request.json
         func_code = data['funcCode']
         params_codes = data['paramCodes']
-        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
-        kwargs = cast_macro_kwargs(func_code, kwargs)
+        kwargs = {each["paramCode"]: each["paramValue"]
+                  for each in params_codes}
+        if check_macro_info(func_code):
+            raise InternalServerError(f'found inconsistent data type on {func_code}')
+        kwargs, msg = cast_macro_kwargs(func_code, kwargs)
+        if msg:
+          return HttpResponseCode.OK.format(msg)
     except KeyError:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
+        raise BadRequest
     except ValueError:
-      logging.error(traceback.format_exc())
-      raise InternalServerError
+        raise InternalServerError
     ret = [{"errorParam": key, "errorMessage": value}
-            for key, value in verify_pattern(func_code, kwargs).items()]
-    return {"status": 200, "message": "OK", "data": ret}
+           for key, value in verify_pattern(func_code, kwargs).items()]
+    return HttpResponseCode.OK.format(ret)
+
 
 @app.route('/pattern/frame', methods=["POST"])
 def api_pattern_get_frame():
@@ -742,18 +699,20 @@ def api_pattern_get_frame():
         data = request.json
         func_code = data['funcCode']
         params_codes = data['paramCodes']
-        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
-        kwargs = cast_macro_kwargs(func_code, kwargs)
+        kwargs = {each["paramCode"]: each["paramValue"]
+                  for each in params_codes}
+        if check_macro_info(func_code):
+            raise InternalServerError(f'found inconsistent data type on {func_code}')
+        kwargs, msg = cast_macro_kwargs(func_code, kwargs)
+        if msg:
+          raise BadRequest('Arguments type incorrect')
     except KeyError:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
+        raise BadRequest
     except ValueError:
-      logging.error(traceback.format_exc())
-      raise InternalServerError
+        raise InternalServerError
     ret = get_frame(func_code, kwargs)
-    return {"status": 200, "message": "OK", "data": {"patternInterval": ret}}
+    ret = {"patternInterval": ret}
+    return HttpResponseCode.OK.format(ret)
 
 
 @app.route('/pattern/plot', methods=["POST"])
@@ -817,62 +776,71 @@ def api_pattern_get_plot():
         data = request.json
         func_code = data['funcCode']
         params_codes = data['paramCodes']
-        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
-        kwargs = cast_macro_kwargs(func_code, kwargs)
+        kwargs = {each["paramCode"]: each["paramValue"]
+                  for each in params_codes}
+        if check_macro_info(func_code):
+            raise InternalServerError(f'found inconsistent data type on {func_code}')
+        kwargs, msg = cast_macro_kwargs(func_code, kwargs)
+        if msg:
+          raise BadRequest('Arguments type incorrect')
     except KeyError:
-        logging.error(traceback.format_exc())
-        return {"status": 400,
-                "message": "Invalid request argument",
-                "data": None}
+        raise BadRequest
     except ValueError:
-      logging.error(traceback.format_exc())
-      raise InternalServerError
-    ret =  []
+        raise InternalServerError
+    ret = []
     plot_infos = get_plot(func_code, kwargs)
     for pinfo in plot_infos:
         if pinfo.ptype == Ptype.CANDLE:
             for index, each in pinfo.data:
                 group = {
-                    0:Ptype.OP.value,
-                    1:Ptype.HP.value,
-                    2:Ptype.LP.value,
-                    3:Ptype.CP.value
+                    0: Ptype.OP.value,
+                    1: Ptype.HP.value,
+                    2: Ptype.LP.value,
+                    3: Ptype.CP.value
                 }[index]
                 ret.append({
-                    "figType":pinfo.ptype.value,
-                    "figName":pinfo.title,
-                    "figData":[{
-                      "group":group,
-                      "index":idx,
-                      "value":value
+                    "figType": pinfo.ptype.value,
+                    "figName": pinfo.title,
+                    "figData": [{
+                        "group": group,
+                        "index": idx,
+                        "value": value
                     } for idx, value in enumerate(each.tolist())]
                 })
         else:
             ret.append({
-              "figType":pinfo.ptype.value,
-                "figName":pinfo.title,
-                "figData":[{
-                  "group":pinfo.ptype.value,
-                  "index":idx,
-                  "value":value
+                "figType": pinfo.ptype.value,
+                "figName": pinfo.title,
+                "figData": [{
+                    "group": pinfo.ptype.value,
+                    "index": idx,
+                    "value": value
                 } for idx, value in enumerate(pinfo.data.tolist())]
             })
-    return {"status": 200, "message": "OK", "data": ret}
+    return HttpResponseCode.OK.format(ret)
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
-    return {"status": 405, "message": "Method not allowed", "data": None}
+    logging.error(traceback.format_exc())
+    return HttpResponseCode.METHOD_NOT_ALLOWED.format()
 
 
 @app.errorhandler(NotFound)
 def handle_not_allow_request(e):
-    return {"status": 404, "message": "Not Found", "data": None}
+    logging.error(traceback.format_exc())
+    return HttpResponseCode.NOT_FOUND.format()
 
 
 @app.errorhandler(InternalServerError)
 def handle_internal_server_error(e):
     logging.error(traceback.format_exc())
-    return {"status": 500, "message": "internal server error", "data": None}
+    return HttpResponseCode.INTERNAL_SERVER_ERROR.format()
+
+
+@app.errorhandler(BadRequest)
+def handle_bad_request(e):
+    logging.error(traceback.format_exc())
+    return HttpResponseCode.BAD_REQUEST.format()
 
 
 if __name__ == '__main__':
@@ -894,7 +862,7 @@ if __name__ == '__main__':
             filename=f'{LOG_LOC}/app.log', when='D', backupCount=7)
         fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
         level = {ExecMode.DEV.value: logging.DEBUG,
-                 ExecMode.UAT.value: logging.DEBUG,
+                 ExecMode.UAT.value: logging.INFO,
                  ExecMode.PROD.value: logging.ERROR}[exec_mode]
         file_hdlr.setLevel(level)
         logging.basicConfig(level=0, format=fmt, handlers=[
