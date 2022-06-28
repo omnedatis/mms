@@ -157,11 +157,11 @@ def view_backtest(view: View, earlist_dates: Dict[str, datetime.date],
     ldates = []
     for mid, data in _get_x_data(_db, markets, view.patterns, controller).items():
         dates = data.index.values.astype('datetime64[D]')
-        eidx = (dates < edate).sum()
+        eidx = (dates < earlist_dates[mid]).sum()
         if eidx > 0:
             x_data[mid] = data[:eidx]
             ldates.append(dates[eidx-1])
-    sdate = view.get_effective_date(np.array(ldates).min().tolist())
+    sdate = view.get_effective_date(np.array(ldates).max().tolist())
     edate = view.get_expiration_date(sdate)
     for mid, data in list(x_data.items()):
         dates = data.index.values.astype('datetime64[D]')
