@@ -256,8 +256,8 @@ class MimosaDB:
         return ret
 
     @staticmethod
-    def _gen_market_data(market_id):
-        recv = self._market_data_provider.get_ohlc(market_id)['CP']
+    def _gen_market_data(market_id, dbid: int):
+        recv = MarketDataProvider(dbid).get_ohlc(market_id)['CP']
         mdates = MarketDateCoder.encode(recv.index.values.astype('datetime64[D]'))
         cps = recv.values
         freturns = []
@@ -271,8 +271,8 @@ class MimosaDB:
         return market_id, mdates, ReturnValueCoder.encode(np.array(freturns).T)
 
     @staticmethod
-    def _gen_pattern_data(market_id, patterns):
-        set_market_data_provider(self._market_data_provider)
+    def _gen_pattern_data(market_id, patterns, dbid: int):
+        set_market_data_provider(MarketDataProvider(dbid))
         recv = [each.run(market_id).rename(each.pid).values for each in patterns]
         return market_id, PatternValueCoder.encode(np.array(recv).T)
 
@@ -313,13 +313,13 @@ class MimosaDB:
 
             for market in markets:
                 pool.apply_async(self._gen_market_data,
-                                 (market, ),
+                                 (market, self._dbid),
                                  callback=lambda recv: (_add_mdates(recv[0], recv[1]),
                                                         _add_freturns(recv[0], recv[2])),
                                  error_callback=print_error_info)
                 if len(patterns) > 0:
                     pool.apply_async(self._gen_pattern_data,
-                                     (market, shared_patterns, ),
+                                     (market, shared_patterns, self._dbid),
                                      callback=lambda recv: _add_pvalues(recv[0], recv[1]),
                                      error_callback=print_error_info)
                 else:
