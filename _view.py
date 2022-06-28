@@ -73,7 +73,7 @@ def _update_model_markets(db_: MimosaDB, model: ViewModel, markets: List[str],
 def _combine_predict_results(view_id: str, period: int,
                              recv: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     if recv is None or len(recv) == 0:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=[each.value for each in PredictResultField])
     ret = []
     for market, data in recv.items():
         cur = pd.DataFrame()
