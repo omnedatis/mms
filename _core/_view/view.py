@@ -125,7 +125,8 @@ class View(NamedTuple):
         year = recv.year
         month = recv.month + self.train_gap
         if month > 12:
-            month -= 12
-            year += 1
+            years = (month-1) // 12
+            month -= years * 12
+            year += years
         ret = datetime.date(year, month, 1)
         return ret
