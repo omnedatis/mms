@@ -411,7 +411,7 @@ def _create_model(model: ModelInfo, controller: ThreadController):
         model.view_id, ModelExecution.ADD_PREDICT)
     recv = view_create(model, controller)
     logging.info('finish model create')
-    if controller.isactive:
+    if recv is not None and controller.isactive:
         get_db().save_model_results(model.view_id, recv, ModelExecution.ADD_PREDICT)
     if controller.isactive:
         get_db().set_model_execution_complete(exection_id)
@@ -431,6 +431,9 @@ def _backtest_model(model: ModelInfo, controller: ThreadController):
             cur_thread and cur_thread.join()
             break
         recv = view_backtest(model, earlist_dates, controller)
+        if recv is None:
+            cur_thread and cur_thread.join()
+            break
         cur_thread and cur_thread.join()
         cur_thread = CatchableTread(target=get_db().save_model_results,
                                     args=(model.view_id, recv.dropna(),

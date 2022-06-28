@@ -71,11 +71,14 @@ def _update_model_markets(db_: MimosaDB, model: ViewModel, markets: List[str],
     return controller.isactive
 
 def _combine_predict_results(view_id: str, period: int,
-                             recv: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+                             recv: Dict[str, pd.DataFrame]
+                             ) -> Optional[pd.DataFrame]:
     if recv is None or len(recv) == 0:
-        return pd.DataFrame(columns=[each.value for each in PredictResultField])
+        return None
     ret = []
     for market, data in recv.items():
+        if data is None or len(data) == 0:
+            continue
         cur = pd.DataFrame()
         if len(data) > 0:
             cur[PredictResultField.DATE.value] = data.index.values
@@ -89,6 +92,8 @@ def _combine_predict_results(view_id: str, period: int,
             cur[PredictResultField.PERIOD.value] = period
             cur[PredictResultField.MODEL_ID.value] = view_id
         ret.append(cur)
+    if len(ret) == 0:
+        return None
     return pd.concat(ret, axis=0)
 
 def view_update(view: View, latest_dates: Dict[str, datetime.date],
@@ -133,9 +138,11 @@ def view_update(view: View, latest_dates: Dict[str, datetime.date],
             if (new_markets and
                 not _update_model_markets(_db, model, new_markets, controller)):
                 break
-            ret.append(
-                _combine_predict_results(view.view_id, period,
-                                         model.predict(cur_x)))
+            recv = model.predict(cur_x)
+            if recv is None or len(recv) == 0:
+                continue
+            recv = _combine_predict_results(view.view_id, period, recv)
+            ret.append(recv)
     else:
         return None
     if len(ret) > 0:
@@ -175,11 +182,13 @@ def view_backtest(view: View, earlist_dates: Dict[str, datetime.date],
         if (new_markets and
             not _update_model_markets(_db, model, new_markets, controller)):
             break
-        ret.append(
-            _combine_predict_results(view.view_id, period,
-                                     model.predict(x_data)))
-
-    return pd.concat(ret, axis=0)
+        recv = model.predict(x_data)
+        if recv is None or len(recv) == 0:
+            continue
+        recv = _combine_predict_results(view.view_id, period, recv)
+        ret.append(recv)
+    if len(ret) > 0:
+        return pd.concat(ret, axis=0)
 
 
 def view_create(view: View, controller: ThreadController) -> Optional[pd.DataFrame]:
@@ -217,9 +226,12 @@ def view_create(view: View, controller: ThreadController) -> Optional[pd.DataFra
             if (new_markets and
                 not _update_model_markets(_db, model, new_markets, controller)):
                 break
-            ret.append(
-                _combine_predict_results(view.view_id, period,
-                                         model.predict(cur_x)))
+            recv = model.predict(cur_x)
+            if recv is None or len(recv) == 0:
+                continue
+            recv = _combine_predict_results(view.view_id, period, recv)
+            ret.append(recv)
     else:
         return None
-    return pd.concat(ret, axis=0)
+    if len(ret) > 0:
+        return pd.concat(ret, axis=0)
