@@ -408,7 +408,7 @@ def _create_model(model: ModelInfo, controller: ThreadController):
         return
     exection_id = get_db().set_model_execution_start(
         model.view_id, ModelExecution.ADD_PREDICT)
-    recv = view_create(model, controller)
+    recv = view_create(model, controller).dropna()
     logging.info('finish model create')
     if recv is not None and controller.isactive:
         get_db().save_model_results(model.view_id, recv, ModelExecution.ADD_PREDICT)
@@ -589,7 +589,7 @@ def _model_update():
     def save_result(data, model_id, exec_id, controller):
         if controller.isactive:
             if data is not None:
-                get_db().save_model_results(model_id, data, ModelExecution.BATCH_PREDICT)
+                get_db().save_model_results(model_id, data.dropna(), ModelExecution.BATCH_PREDICT)
         if controller.isactive:
             get_db().set_model_execution_complete(exec_id)
         if controller.isactive:
