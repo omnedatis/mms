@@ -257,7 +257,7 @@ class MimosaDB:
 
     @staticmethod
     def _gen_market_data(market_id, dbid: int):
-        recv = MarketDataProvider(dbid).get_ohlc(market_id)['CP']
+        recv = LocalMarketDataProvider(dbid).get_ohlc(market_id)['CP']
         mdates = MarketDateCoder.encode(recv.index.values.astype('datetime64[D]'))
         cps = recv.values
         freturns = []
@@ -272,7 +272,7 @@ class MimosaDB:
 
     @staticmethod
     def _gen_pattern_data(market_id, patterns, dbid: int):
-        set_market_data_provider(MarketDataProvider(dbid))
+        set_market_data_provider(LocalMarketDataProvider(dbid))
         recv = [each.run(market_id).rename(each.pid).values for each in patterns]
         return market_id, PatternValueCoder.encode(np.array(recv).T)
 
