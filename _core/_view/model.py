@@ -89,11 +89,12 @@ class Labelization:
         boundaries = [(l[-1] + r[0]) / 2 for l, r in zip(sections[:-1], sections[1:])]
 
         # Deal with specified outlier
+        outlier = min([outlier, 0.25 / self.labels])
         outlier = int(dlen * outlier)
         llimit = data[outlier]
         rlimit = data[-(outlier+1)]
-        if llimit >= means[0] or rlimit <= means[-1]:
-            raise ValueError(f"'outlier' is too large: {outlier}")
+        means[0] = sections[0][outlier:].mean()
+        means[-1] = sections[-1][:-outlier].mean()
         boundaries = np.array([llimit] + boundaries + [rlimit])
         self._info = self.Info(self.labels, boundaries, means)
 
