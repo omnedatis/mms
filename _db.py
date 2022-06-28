@@ -98,7 +98,7 @@ class MimosaDB:
         return f'{LOCAL_DB}/db_{self._dbid}'
 
     @property
-    def market_data_provider(self):
+    def _market_data_provider(self):
         return LocalMarketDataProvider(self._dbid)
 
     def is_initialized(self):
