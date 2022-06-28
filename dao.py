@@ -1490,11 +1490,12 @@ class MimosaDB:
             max_date = np.max(group[PredictResultField.DATE.value].values)
             latest_data.append(
                 group[group[PredictResultField.DATE.value].values == max_date])
-        latest_data = pd.concat(latest_data, axis=0)
-        latest_data = self._extend_basic_cols(latest_data)
+        if len(latest_data) > 0:
+            latest_data = pd.concat(latest_data, axis=0)
+            latest_data = self._extend_basic_cols(latest_data)
 
-        # 開始儲存
-        self._insert_and_join_exist(table_name, latest_data,
+            # 開始儲存
+            self._insert_and_join_exist(table_name, latest_data,
                                     pk_info=[
                                         (PredictResultField.MODEL_ID.value,
                                          DataType.STRING),
