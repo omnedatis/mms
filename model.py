@@ -35,7 +35,7 @@ from utils import extend_working_dates, CatchableTread, ThreadController
 #from func._tp import
 
 from _core import Pattern
-from _db import get_dao, set_dao, LocalMarketDataProvider, MimosaDBManager
+from _db import get_dao, set_dao, MimosaDBManager
 
 batch_lock = Lock()
 
@@ -56,7 +56,6 @@ def clone_db_cache(batch_type):
     """Clone Mimosa DB to cache"""
     db = get_db()
     db.clone_db_cache(batch_type)
-    LocalMarketDataProvider().update()
 
 def save_mkt_score(recv: Dict[str, pd.DataFrame]):
     """save mkt score to DB."""

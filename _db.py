@@ -62,8 +62,8 @@ class MarketDateCoder:
         return int2datetime64d(values)
 
 class LocalMarketDataProvider(MarketDataProvider):
-    def __init__(self, path: str = f'{LOCAL_DB}/mdata'):
-        self._path = path
+    def __init__(self, idx: int, path: str = f'{LOCAL_DB}/mdata'):
+        self._path = f'{path}/{idx}'
 
     def _get_file(self, market_id: str) -> str:
         return f'{self._path}/{market_id}.pkl'
@@ -96,6 +96,10 @@ class MimosaDB:
     @property
     def _local_path(self):
         return f'{LOCAL_DB}/db_{self._dbid}'
+
+    @property
+    def market_data_provider(self):
+        return LocalMarketDataProvider(self._dbid)
 
     def is_initialized(self):
         if self._market_ids is None:
@@ -170,7 +174,7 @@ class MimosaDB:
             raise RuntimeError("market data is not initialized")
         if market_id not in self._market_ids:
             raise KeyError(f"market is not found: {market_id}")
-        return LocalMarketDataProvider().get_ohlc(market_id)['CP']
+        return self._market_data_provider.get_ohlc(market_id)['CP']
 
     def get_future_returns(self, market_id: str,
                            periods: Optional[List[int]]=None) -> pd.DataFrame:
@@ -253,7 +257,7 @@ class MimosaDB:
 
     @staticmethod
     def _gen_market_data(market_id):
-        recv = LocalMarketDataProvider().get_ohlc(market_id)['CP']
+        recv = self._market_data_provider.get_ohlc(market_id)['CP']
         mdates = MarketDateCoder.encode(recv.index.values.astype('datetime64[D]'))
         cps = recv.values
         freturns = []
@@ -268,12 +272,12 @@ class MimosaDB:
 
     @staticmethod
     def _gen_pattern_data(market_id, patterns):
-        set_market_data_provider(LocalMarketDataProvider())
+        set_market_data_provider(self._market_data_provider)
         recv = [each.run(market_id).rename(each.pid).values for each in patterns]
         return market_id, PatternValueCoder.encode(np.array(recv).T)
 
     def add_pattern(self, pattern):
-        set_market_data_provider(LocalMarketDataProvider())
+        set_market_data_provider(self._market_data_provider)
         pidx = self._pattern_ids.get(pattern.pid)
         for mid, midx in self._market_ids.items():
             pvalue = PatternValueCoder.encode(pattern.run(mid).values)
@@ -291,6 +295,7 @@ class MimosaDB:
 
     def update(self, markets, patterns, processes: int=PATTERN_UPDATE_CPUS):
         MD_CACHE.clear()  # clear cache <- old version
+        self._market_data_provider.update()
         self.clear()
         if len(markets) > 0:
             mdates = {}
