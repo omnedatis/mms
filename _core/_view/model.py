@@ -12,6 +12,8 @@ from typing import Any, Dict, List, NamedTuple, Optional
 import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier as Dtc
+from sklearn.exceptions import NotFittedError
+from sklearn.utils.validation import check_is_fitted
 
 from const import PredictResultField, Y_LABELS, MIN_Y_SAMPLES, Y_OUTLIER
 from utils import pickle_dump, pickle_load
@@ -183,6 +185,9 @@ class ModelMeta(metaclass=ABCMeta):
                 ) -> Dict[str, pd.DataFrame]:
         pass
 
+    @abstractmethod
+    def isfitted(self) -> bool:
+        pass
 
 class DecisionTreeClassifierModel(ModelMeta):
     class _TrainDataSet(NamedTuple):
@@ -204,6 +209,13 @@ class DecisionTreeClassifierModel(ModelMeta):
     @property
     def targets(self) -> List[str]:
         return list(self._y_coders.keys())
+
+    def isfitted(self):
+        try:
+            check_is_fitted(self._model)
+            return True
+        except NotFittedError:
+            return False
 
     @classmethod
     def _get_train_data(cls, x_data: Dict[str, pd.DataFrame],
@@ -257,23 +269,24 @@ class DecisionTreeClassifierModel(ModelMeta):
     def predict(self, x_data: Dict[str, pd.DataFrame]
                 ) -> Dict[str, pd.DataFrame]:
         ret = {}
-        columns = [ModelResultField.LOWER_BOUND.value,
-                   ModelResultField.UPPER_BOUND.value,
-                   ModelResultField.MEAN.value]
-        for key, data in x_data.items():
-            y_coder = self._y_coders.get(key)
-            if y_coder is None:
-                values = np.full((len(data), len(columns)), np.nan)
-                ret[key] = pd.DataFrame(values, index=data.index, columns=columns)
-                continue
-            index = data.index
-            isnan = np.isnan(data.values).any(axis=1)
-            labels = self._model.predict(np.nan_to_num(data.values, nan=0).astype(bool))
-            values = np.array([y_coder.label2lowerbound(labels),
-                               y_coder.label2upperbound(labels),
-                               y_coder.label2mean(labels)]).T
-            values[isnan] = np.nan
-            ret[key] = pd.DataFrame(values, index=index, columns=columns)
+        if self.isfitted():
+            columns = [ModelResultField.LOWER_BOUND.value,
+                       ModelResultField.UPPER_BOUND.value,
+                       ModelResultField.MEAN.value]
+            for key, data in x_data.items():
+                y_coder = self._y_coders.get(key)
+                if y_coder is None:
+                    values = np.full((len(data), len(columns)), np.nan)
+                    ret[key] = pd.DataFrame(values, index=data.index, columns=columns)
+                    continue
+                index = data.index
+                isnan = np.isnan(data.values).any(axis=1)
+                labels = self._model.predict(np.nan_to_num(data.values, nan=0).astype(bool))
+                values = np.array([y_coder.label2lowerbound(labels),
+                                   y_coder.label2upperbound(labels),
+                                   y_coder.label2mean(labels)]).T
+                values[isnan] = np.nan
+                ret[key] = pd.DataFrame(values, index=index, columns=columns)
         return ret
 
 class ModelCategory(Enum):
