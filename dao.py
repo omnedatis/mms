@@ -595,7 +595,7 @@ class MimosaDBCacheManager:
         ])
         pickle_dump(history_data, fp)
 
-    def del_model_result(self, model_id:str):
+    def del_model_result(self, model_id: str):
         fp = f'{DATA_LOC}/views/{model_id}'
         shutil.rmtree(fp)
 
@@ -611,6 +611,23 @@ class MimosaDBCacheManager:
                 os.remove(f'{DATA_LOC}/{table.value}.pkl')
         if os.path.exists(f'{DATA_LOC}/markets'):
             shutil.rmtree(f'{DATA_LOC}/markets')
+
+    def refresh(self, tables: Optional[List[str]] = None):
+        """更新本地快取資料
+
+        Parameters
+        ----------
+        tables: List[str] | None
+            指定本地端要刷新的 Table 名稱, 若為空, 則刷新全部的基本資料表
+
+        Returns
+        -------
+        None.
+        """
+        if tables is None:
+            tables = self.BASE_TABLES
+        for table in tables:
+            self._clone_table(table, self.TABLE_SCHEMA_INFO[table])
 
 
 class MimosaDB:
@@ -834,60 +851,6 @@ class MimosaDB:
         data = self.cache_manager.get_data(CacheName.MODELS.value)
         return data
 
-    def get_model_info(self, model_id: str) -> ModelInfo:
-        """根據指定的 Model ID, 取得對應的 ModelInfo 物件
-
-        Parameters
-        ----------
-        model_id: str
-            觀點 ID
-
-        Returns
-        -------
-        result: ModelInfo
-            對應的 ModelInfo 物件
-
-        """
-        # 取得觀點的訓練資訊
-        model_info = self.cache_manager.get_data(CacheName.MODEL_INFO.value)
-        m_cond = model_info[ModelInfoField.MODEL_ID.value].values == model_id
-        if len(model_info[m_cond]) == 0:
-            # 若發生取不到資料的情況
-            raise Exception(f"get_model_info: model not found: {model_id}")
-
-        train_begin = model_info[m_cond].iloc[0][ModelInfoField.TRAIN_START_DT.value]
-        # (train_begin == train_begin) 用於判斷是否為 nan 或 nat
-        if train_begin is not None and (train_begin == train_begin):
-            train_begin = train_begin.date()
-        else:
-            train_begin = None
-
-        train_gap = model_info[m_cond].iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
-        # (train_gap == train_gap) 用於判斷是否為 nan 或 nat
-        if train_gap is not None and (train_gap == train_gap):
-            train_gap = int(train_gap)
-        else:
-            train_gap = None
-
-        # 取得觀點的所有標的市場
-        markets = self.cache_manager.get_data(CacheName.MODEL_MKT_MAP.value)
-        m_cond = markets[ModelMarketMapField.MODEL_ID.value].values == model_id
-        markets = markets[m_cond][ModelMarketMapField.MARKET_CODE.value].values.tolist(
-        )
-
-        # 取得觀點所有使用的現象 ID
-        patterns = self.cache_manager.get_data(CacheName.MODEL_PAT_MAP.value)
-        m_cond = patterns[ModelPatternMapField.MODEL_ID.value].values == model_id
-        if len(patterns[m_cond]) == 0:
-            # 若觀點下沒有任何現象, 則回傳例外
-            raise Exception(
-                f"get_model_info: 0 model pattern exception: {model_id}")
-        patterns = patterns[m_cond][ModelPatternMapField.PATTERN_ID.value].values.tolist(
-        )
-
-        result = ModelInfo.make(model_id, patterns, markets, train_begin, train_gap)
-        return result
-
     def get_score_meta_info(self) -> List[Tuple[int, float, float]]:
         """ 取得分數標準差倍率資訊
         取得各個分數區間所使用的上下界標準差倍率
@@ -1045,7 +1008,6 @@ class MimosaDB:
                 [(model_id, ModelExecution), ...]
 
         """
-        # TODO
         engine = self._engine()
         sql = f"""
             SELECT
@@ -1108,6 +1070,9 @@ class MimosaDB:
         result: PatternInfo
             現象計算所需的參數資訊
         """
+        self.cache_manager.refresh([
+            TableName.PAT_INFO.value, TableName.PAT_PARAM.value
+        ])
         logging.info(f'Get pattern info {pattern_id} from db')
         engine = self._engine()
         sql = f"""
@@ -1184,6 +1149,66 @@ class MimosaDB:
                 f'get_pattern_info: pattern info not found in db: {pattern_id}')
         result = result[pattern_id]
         logging.info(f'Get pattern info {pattern_id} from db finished')
+        return result
+
+    def get_model_info(self, model_id: str) -> ModelInfo:
+        """根據指定的 Model ID, 取得對應的 ModelInfo 物件, 
+        此動作會同步部分本地端快取資料
+
+        Parameters
+        ----------
+        model_id: str
+            觀點 ID
+
+        Returns
+        -------
+        result: ModelInfo
+            對應的 ModelInfo 物件
+
+        """
+        self.cache_manager.refresh([
+            TableName.MODEL_INFO.value, TableName.MODEL_MKT_MAP.value,
+            TableName.MODEL_PAT_MAP.value
+        ])
+        # 取得觀點的訓練資訊
+        model_info = self.cache_manager.get_data(CacheName.MODEL_INFO.value)
+        m_cond = model_info[ModelInfoField.MODEL_ID.value].values == model_id
+        if len(model_info[m_cond]) == 0:
+            # 若發生取不到資料的情況
+            raise Exception(f"get_model_info: model not found: {model_id}")
+
+        train_begin = model_info[m_cond].iloc[0][ModelInfoField.TRAIN_START_DT.value]
+        # (train_begin == train_begin) 用於判斷是否為 nan 或 nat
+        if train_begin is not None and (train_begin == train_begin):
+            train_begin = train_begin.date()
+        else:
+            train_begin = None
+
+        train_gap = model_info[m_cond].iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
+        # (train_gap == train_gap) 用於判斷是否為 nan 或 nat
+        if train_gap is not None and (train_gap == train_gap):
+            train_gap = int(train_gap)
+        else:
+            train_gap = None
+
+        # 取得觀點的所有標的市場
+        markets = self.cache_manager.get_data(CacheName.MODEL_MKT_MAP.value)
+        m_cond = markets[ModelMarketMapField.MODEL_ID.value].values == model_id
+        markets = markets[m_cond][ModelMarketMapField.MARKET_CODE.value].values.tolist(
+        )
+
+        # 取得觀點所有使用的現象 ID
+        patterns = self.cache_manager.get_data(CacheName.MODEL_PAT_MAP.value)
+        m_cond = patterns[ModelPatternMapField.MODEL_ID.value].values == model_id
+        if len(patterns[m_cond]) == 0:
+            # 若觀點下沒有任何現象, 則回傳例外
+            raise Exception(
+                f"get_model_info: 0 model pattern exception: {model_id}")
+        patterns = patterns[m_cond][ModelPatternMapField.PATTERN_ID.value].values.tolist(
+        )
+
+        result = ModelInfo.make(
+            model_id, patterns, markets, train_begin, train_gap)
         return result
 
 # 寫入資料進資料庫
@@ -1712,7 +1737,8 @@ class MimosaDB:
             self._insert(table_name, data)
 
             # 同步本地端快取資料
-            local_status = self.cache_manager._convert_exec_to_status(data)[model_id]
+            local_status = self.cache_manager._convert_exec_to_status(data)[
+                model_id]
             self.cache_manager.set_model_status(model_id, local_status)
         return exec_id
 
