@@ -231,7 +231,7 @@ class DecisionTreeClassifierModel(ModelMeta):
             #       `cur_y` for performance.
             y_values = cur_y.values
             x_values = cur_x.values
-            idxs = ~(np.isnan(x_values).any(axis=1) & np.isnan(y_values))
+            idxs = ~(np.isnan(x_values).any(axis=1) | np.isnan(y_values))
             if idxs.sum() < min_samples:
                 ret.append(cls._TrainDataSet(key, None, None))
                 continue
