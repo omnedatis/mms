@@ -220,19 +220,18 @@ class MimosaDBCacheManager:
     def _clone_table(self, table_name: str, cols: List[str]):
         filename = table_name if table_name[-5:
                                             ] != '_SWAP' else table_name[:-5]
-        if not os.path.exists(f'{DATA_LOC}/{filename}.pkl'):
-            logging.info(f'Clone {table_name} from db')
-            engine = self._engine()
-            sql = f"""
-                SELECT
-                    {','.join(cols)}
-                FROM
-                    {table_name}
-            """
-            data = pd.read_sql_query(sql, engine)
-            with open(f'{DATA_LOC}/{filename}.pkl', 'wb') as fp:
-                pickle.dump(data, fp)
-            logging.info(f'Clone {table_name} from db finished')
+        logging.info(f'Clone {table_name} from db')
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                {','.join(cols)}
+            FROM
+                {table_name}
+        """
+        data = pd.read_sql_query(sql, engine)
+        with open(f'{DATA_LOC}/{filename}.pkl', 'wb') as fp:
+            pickle.dump(data, fp)
+        logging.info(f'Clone {table_name} from db finished')
 
     def _clone_base_tables(self):
         for table in self.BASE_TABLES:
