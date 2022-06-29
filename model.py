@@ -163,7 +163,7 @@ def _evaluate_hit_sum(market, results, freturns):
         cur_result = cur_result[[PredictResultField.UPPER_BOUND.value,
                                  PredictResultField.LOWER_BOUND.value]]
         cur_freturn = freturns[period].rename('FR')
-        ubs, lbs, rs = pd.concat([cur_freturn, cur_result], axis=1, sort=True
+        ubs, lbs, rs = pd.concat([cur_result, cur_freturn], axis=1, sort=True
                                  ).dropna().values.T
         rs *= 100  # trans to percents
         cnts.append(len(rs))
