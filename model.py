@@ -182,18 +182,20 @@ def get_model_hit_sum(model_id: str, batch_type: BatchType):
     recv = [_evaluate_hit_sum(market, results.get(market),
                               _db.get_future_returns(market, PREDICT_PERIODS)
                               ) for market in _db.get_markets()]
-    ret = pd.concat(recv, axis=0)
-    ret['MODEL_ID'] = model_id
-    return ret
+    if len(recv) > 0:
+        ret = pd.concat(recv, axis=0)
+        ret['MODEL_ID'] = model_id
+        return ret
 
 def save_model_hit_sum(model_id: str, batch_type: BatchType):
     """Save model hit sum to DB."""
     recv = get_model_hit_sum(model_id, batch_type)
-    db = get_db()
-    if batch_type == BatchType.INIT_BATCH:
-        db.update_model_hit_sum(recv)
-    else:
-        db.save_model_hit_sum(recv)
+    if recv is not None:
+        db = get_db()
+        if batch_type == BatchType.INIT_BATCH:
+            db.update_model_hit_sum(recv)
+        else:
+            db.save_model_hit_sum(recv)
 
 def _get_backtest_length(market: str, earlist_date: datetime.date):
     db = get_db()
