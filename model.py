@@ -474,7 +474,7 @@ class ExecQueue:
                     logging.info(self._queue)
                     def callback():
                         cur_size = size
-                        logging.info(f'{self._thread.name} Do {func.__name__}')
+                        logging.info(f'{self._thread._thread.name} Do {func.__name__}')
                         try:
                             if args is not None:
                                 ret = func(*args)
