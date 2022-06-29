@@ -42,6 +42,7 @@ args = parser.parse_args()
 @app.route("/model/batch", methods=["GET"])
 def api_batch():
     """ Run batch. """
+    logging.info("Calling Batch")
     model_queue.cut_line(batch, size=MODEL_QUEUE_LIMIT)
     pattern_queue.cut_line(batch, size=PATTERN_QUEUE_LIMIT)
     return HttpResponseCode.ACCEPTED.format()

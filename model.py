@@ -471,9 +471,10 @@ class ExecQueue:
                 func, args, size = self._pop(0)
                 self._occupants += size
                 if self._occupants <= self._limit:
+                    logging.info(self._queue)
                     def callback():
                         cur_size = size
-                        logging.info(f'Do {func.__name__}')
+                        logging.info(f'{self._thread.name} Do {func.__name__}')
                         try:
                             if args is not None:
                                 ret = func(*args)
