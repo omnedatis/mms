@@ -8,6 +8,7 @@ import shutil
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
+from pymysql import IntegrityError
 
 from sqlalchemy import create_engine
 from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
@@ -444,16 +445,18 @@ class MimosaDBCacheManager:
             self.set_model_status(model_id, data[model_id])
         logging.info("Save local model execution status finished")
 
-    def _model_results_need_update(self, model_id, db_status: Dict[str, datetime.date]) -> bool:
+    def _model_results_need_update(self, model_id, db_status: Dict[str, Dict[str, datetime.date]]) -> bool:
         need_update = False
         fp = f'{DATA_LOC}/views/{model_id}'
         status_fp = f'{fp}/status.pkl'
         # 判斷是否需要更新歷史預測結果
+        if model_id not in db_status:
+            return True
         if not os.path.exists(status_fp):
             need_update = True
         else:
             local_status = self.get_model_status(model_id)
-            if not dict_equals(local_status, db_status):
+            if not dict_equals(local_status, db_status[model_id]):
                 need_update = True
         return need_update
 
@@ -494,7 +497,7 @@ class MimosaDBCacheManager:
             fp = f'{DATA_LOC}/views/{model_id}'
             if not os.path.exists(fp):
                 os.makedirs(f'{DATA_LOC}/views', exist_ok=True)
-            if self._model_results_need_update(model_id, db_status[model_id]):
+            if self._model_results_need_update(model_id, db_status):
                 sql = f"""
                     SELECT
                         *
@@ -1227,13 +1230,16 @@ class MimosaDB:
         -------
         None.
         """
-        data.to_sql(
-            table_name,
-            self._engine(),
-            if_exists='append',
-            chunksize=self.SAVE_BATCH_SIZE,
-            method='multi',
-            index=False)
+        try:
+            data.to_sql(
+                table_name,
+                self._engine(),
+                if_exists='append',
+                chunksize=self.SAVE_BATCH_SIZE,
+                method='multi',
+                index=False)
+        except IntegrityError as e:
+            logging.error(str(e))
 
     @_use_write_local
     @_do_if_not_read_only
@@ -1265,7 +1271,10 @@ class MimosaDB:
                 continue
             sql = sql_template + ','.join(vals[batch_idxs[idx_i-1]:idx])
             logging.info(f'Save {table_name}: #{batch_idxs[idx_i-1]} ~ #{idx}')
-            engine.execute(sql)
+            try:
+                engine.execute(sql)
+            except IntegrityError as e:
+                logging.error(str(e))
             logging.info(
                 f'Save {table_name}: #{batch_idxs[idx_i-1]} ~ #{idx} finished')
         logging.info(f'{table_name} len: {len(vals)} finished')
@@ -1302,13 +1311,16 @@ class MimosaDB:
         """
         engine.execute(sql)
 
-        data.to_sql(
+        try:
+            data.to_sql(
             table_name,
             engine,
             if_exists='append',
             chunksize=self.SAVE_BATCH_SIZE,
             method='multi',
             index=False)
+        except IntegrityError as e:
+            logging.error(str(e))
 
     @_use_write_local
     @_do_if_not_read_only
@@ -1356,13 +1368,16 @@ class MimosaDB:
             union_data[pk_col] = union_data[pk_col].astype(pk_type.value)
         union_data = union_data.drop_duplicates(subset=pks)
 
-        union_data.to_sql(
+        try:
+            union_data.to_sql(
             table_name,
             engine,
             if_exists='append',
             chunksize=self.SAVE_BATCH_SIZE,
             method='multi',
             index=False)
+        except IntegrityError as e:
+            logging.error(str(e))
 
     @_use_write_local
     @_do_if_not_read_only
@@ -1418,13 +1433,16 @@ class MimosaDB:
         """
         engine.execute(sql)
 
-        union_data.to_sql(
+        try:
+            union_data.to_sql(
             table_name,
             engine,
             if_exists='append',
             chunksize=self.SAVE_BATCH_SIZE,
             method='multi',
             index=False)
+        except IntegrityError as e:
+            logging.error(str(e))
 
     def save_model_latest_results(self, model_id: str, data: pd.DataFrame,
                                   exec_type: ModelExecution):
