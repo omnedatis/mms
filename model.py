@@ -5,7 +5,7 @@ Created on Tue March 8 17:07:36 2021
 """
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import datetime
 import logging
 import os
@@ -13,7 +13,7 @@ import shutil
 from threading import Lock
 import time
 import multiprocessing as mp
-from typing import Any, List, Optional, Dict, Callable
+from typing import Any, List, Optional, Dict, Callable, Tuple
 import numpy as np
 import pandas as pd
 from scipy.stats.distributions import norm
@@ -29,7 +29,7 @@ from utils import *
 from const import (BatchType, MarketPeriodField, MarketScoreField,
                    ModelExecution, ModelMarketHitSumField, ModelStatus,
                    PatternExecution, PatternResultField, PredictResultField,
-                   MIN_BACKTEST_LEN, PREDICT_PERIODS)
+                   MIN_BACKTEST_LEN, PREDICT_PERIODS, TaskLimitCode)
 from utils import extend_working_dates, CatchableTread, ThreadController
 
 #from func._tp import
@@ -328,9 +328,9 @@ def add_model(model_id: str):
         _create_model(model, controller)
         _backtest_model(model, controller)
         save_model_hit_sum(model_id, BatchType.INIT_BATCH)
-        logging.info('add model finished')
+        logging.info('End add model ')
     except Exception:
-        logging.error("add model failed ")
+        logging.error("Add model failed ")
         logging.error(traceback.format_exc())
     finally:
         MT_MANAGER.release(model_id)
@@ -387,7 +387,7 @@ def remove_model(model_id):
         ID of the designated model.
 
     """
-    logging.info('start remove model')
+    logging.info('Start model remove')
     MT_MANAGER.acquire(model_id).switch_off()
     MT_MANAGER.release(model_id)
     while MT_MANAGER.exists(model_id):
@@ -396,30 +396,32 @@ def remove_model(model_id):
     model_dir = ModelInfo.get_dir(model_id)
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
-    logging.info('finish remove model')
+    logging.info('End model remove')
 
 def edit_model(model_id: str):
+    logging.info("Start edit model")
     remove_model(model_id)
     add_model(model_id)
+    logging.info("End edit model")
     return
 
 def _create_model(model: ModelInfo, controller: ThreadController):
-    logging.info('start model create')
+    logging.info('Start model create')
     if not controller.isactive:
-        logging.info('model create terminated')
+        logging.info('Model create terminated')
         return
     exection_id = get_db().set_model_execution_start(
         model.view_id, ModelExecution.ADD_PREDICT)
-    recv = view_create(model, controller).dropna()
-    logging.info('finish model create')
+    recv = view_create(model, controller)
+    logging.info('End model create')
     if recv is not None and controller.isactive:
-        get_db().save_model_results(model.view_id, recv, ModelExecution.ADD_PREDICT)
+        get_db().save_model_results(model.view_id, recv.dropna(), ModelExecution.ADD_PREDICT)
     if controller.isactive:
         get_db().set_model_execution_complete(exection_id)
         get_db().stamp_model_execution([exection_id])
 
 def _backtest_model(model: ModelInfo, controller: ThreadController):
-    logging.info('start model backtest')
+    logging.info('Start model backtest')
     exection_id = get_db().set_model_execution_start(
         model.view_id, ModelExecution.ADD_BACKTEST)
     earlist_dates = get_db().get_earliest_dates(model.view_id)
@@ -445,36 +447,36 @@ def _backtest_model(model: ModelInfo, controller: ThreadController):
                                       ].values.min().astype('datetime64[D]').tolist()
 
     if not controller.isactive:
-        logging.info('model backtest terminated')
+        logging.info('Model backtest terminated')
         return
 
     # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
-    logging.info('finish model backtest')
+    logging.info('End model backtest')
     get_db().set_model_execution_complete(exection_id)
     get_db().stamp_model_execution([exection_id])
 
 class ExecQueue:
 
-    def __init__(self, limit, name):
-        self._limit = limit
-        self._occupants = 0
+    def __init__(self, name:str):
+
+        self.occupants = 0
         self._queue = []
         self.isactive = True
-        self.threads = []
+        self.is_paused = False
+        self.tasks = []
         self._lock = Lock()
         self._thread = CatchableTread(self._run, name=name)
-
+        self.name = name
+    
     def _run(self):
         while self.isactive:
-            # logging.debug(self._occupants)
-            if self._queue:
-                func, args, size = self._pop(0)
-                self._occupants += size
-                if self._occupants <= self._limit:
-                    logging.info(self._queue)
+            # logging.info(self.is_paused)
+            # print(self._queue)
+            if self._queue and not self.is_paused:
+                func, task_limit, args = self._pop(0)
+                self.occupants += 1
+                if self.occupants <= task_limit.value:
                     def callback():
-                        cur_size = size
-                        logging.info(f'{self._thread._thread.name} Do {func.__name__}')
                         try:
                             if args is not None:
                                 ret = func(*args)
@@ -483,50 +485,76 @@ class ExecQueue:
                         except Exception as esp:
                             logging.error(traceback.format_exc())
                             ret = None
-                        self._occupants -= cur_size
+                        self.occupants -= 1
                         return ret
                     t = CatchableTread(target=callback)
                     t.start()
-                    self.threads.append(t)
+                    self.tasks.append(t)
                 else:
-                    self.cut_line(func, args=args, size=size)
-                    self._occupants -= size
+                    self.cut_line(func, task_limit, args=args)
+                    self.occupants -= 1
             time.sleep(1)
 
     def start(self):
         self._thread.start()
 
-    def _pop(self, index):
+    def _pop(self, index) -> Tuple[Callable, TaskLimitCode, Tuple[Any]]:
         self._lock.acquire()
         item = self._queue.pop(index)
         self._lock.release()
         return item
 
-    def push(self, func:Callable, *, size:int, args:tuple=None):
+    def push(self, func:Callable, task_limit, *, args:tuple=None):
         self._lock.acquire()
-        assert size <= self._limit, 'exceed queue size'
-        self._queue.append((func, args, size))
+        self._queue.append((func, task_limit, args))
         self._lock.release()
 
-
-    def cut_line(self, func:Callable, *, size:int, args:tuple=None):
+    def cut_line(self, func:Callable, task_limit, *, args:tuple=None):
         self._lock.acquire()
-        assert size <= self._limit, 'exceed queue size'
-        self._queue.insert(0, (func, args, size))
+        self._queue.insert(0, (func, task_limit, args))
         self._lock.release()
-
-    def stop(self):
-        self.isactive = False
 
     def collect_threads(self):
         self._thread.join()
-        self.threads.append(self._thread)
-        return self.threads
+        self.tasks.append(self._thread)
+        return self.tasks
 
-model_queue = ExecQueue(MODEL_QUEUE_LIMIT, 'm_queue')
-pattern_queue = ExecQueue(PATTERN_QUEUE_LIMIT, 'p_queue')
+class QueueManager:
 
-def _db_update(batch_type=BatchType.SERVICE_BATCH):
+    def __init__(self, queues:Dict[TaskLimitCode, ExecQueue]):
+        self._queues = queues
+
+    def push(self, func:Callable, task_limit:int, *, args:Optional[tuple]=None):
+        self._queues[task_limit].push(func, task_limit, args=args)
+
+    def do_prioritized_task(self, func:Callable, args:Optional[tuple]=None):
+        def _task():
+            for each in self._queues.values():
+                each.is_paused = True 
+            while sum(i.occupants for i in self._queues.values()):
+                time.sleep(1)
+            try:
+                if args is None:
+                    ret = func()
+                else:
+                    ret = func(*args)      
+            except Exception as esp:
+                raise esp
+            for each in self._queues.values():
+                each.is_paused = False 
+            return ret
+        return CatchableTread(_task).start()
+
+    def start(self):
+        for each in self._queues.values():
+            each.start()
+
+task_queue = QueueManager({
+    TaskLimitCode.PATTERN:ExecQueue('pattern_queue'),
+    TaskLimitCode.MODEL:ExecQueue('model_queue')
+     })
+
+def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
     markets = get_db().get_markets()
     patterns = get_db().get_patterns()
     if batch_type == BatchType.SERVICE_BATCH:
@@ -566,25 +594,24 @@ def model_execution_recover(batch_type:BatchType):
 
 def init_db():
     try:
-        logging.info('start initiate db')
-        model_queue.cut_line(batch, size=MODEL_QUEUE_LIMIT, args=(BatchType.INIT_BATCH,))
-        pattern_queue.cut_line(batch, size=PATTERN_QUEUE_LIMIT, args=(BatchType.INIT_BATCH,))
-        logging.info('init finished')
+        logging.info('Start batch init')
+        task_queue.do_prioritized_task(batch, args=(BatchType.INIT_BATCH,))
+        logging.info('End batch init')
     except Exception:
-        logging.error("init db failed")
+        logging.error("Batch init failed")
         logging.error(traceback.format_exc())
 
 def batch(batch_type=BatchType.SERVICE_BATCH):
     batch_lock.acquire()
-    if MT_MANAGER.exists('batch executing'):
+    if MT_MANAGER.exists('Batch executing'):
         batch_lock.release()
-        while MT_MANAGER.exists('batch executing'):
+        while MT_MANAGER.exists('Batch executing'):
             time.sleep(1)
     else:
-        MT_MANAGER.acquire('batch executing')
+        MT_MANAGER.acquire('Batch executing')
         batch_lock.release()
         _batch(batch_type)
-        MT_MANAGER.release('batch executing')
+        MT_MANAGER.release('Batch executing')
 
 def _model_update():
     ModelUpdateMoniter = namedtuple('_ModelUpdateMoniter',
@@ -604,13 +631,13 @@ def _model_update():
 
         exec_id = get_db().set_model_execution_start(model_id,
                                                      ModelExecution.BATCH_PREDICT)
-        logging.info(f'start model update on {model_id}')
+        logging.info(f'Start model update on {model_id}')
         recv = _update_model(model_id, controller)
         if not controller.isactive:
             MT_MANAGER.release(model_id)
-            logging.info('model update terminated')
+            logging.info(f'Model update terminated {model_id}')
         else:
-            logging.info(f'finish model update on {model_id}')
+            logging.info(f'Finish model update on {model_id}')
             thread = CatchableTread(target=save_result,
                                     args=(recv, model_id, exec_id, controller))
             thread.start()
@@ -619,11 +646,11 @@ def _model_update():
     exec_ids = []
     for model_id, (controller, exec_id, thread) in moniters.items():
         if not controller.isactive:
-            logging.info('model update terminated')
+            logging.info(f'Model update terminated {model_id}')
         else:
             thread.join()
             if thread.esp is not None:
-                logging.error(thread.esp)
+                ...
             else:
                 exec_ids.append(exec_id)
         MT_MANAGER.release(model_id)
@@ -654,13 +681,12 @@ def _batch(batch_type):
             model_exec_ids = _model_update()
             for t in threads:
                 t.join()
-                t.esp and logging.error(t.esp)
             get_db().checkout_fcst_data()
             get_db().stamp_model_execution(model_exec_ids)
             MimosaDBManager().swap_db()
         logging.info("End batch")
     except Exception:
-        logging.error("batch failed")
+        logging.error("Batch failed")
         logging.error(traceback.format_exc())
 
 def get_mix_pattern_occur(market_id: str, patterns: List, start_date:str=None,

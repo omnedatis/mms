@@ -15,10 +15,10 @@ from model import (
     set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
-    model_queue, pattern_queue, verify_pattern, get_frame, get_plot,
+    task_queue, verify_pattern, get_frame, get_plot,
     cast_macro_kwargs, edit_model, edit_pattern, check_macro_info, CatchableTread)
 from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
-                   MarketPeriodField, HttpResponseCode)
+                   MarketPeriodField, HttpResponseCode, TaskLimitCode)
 from func.common import Ptype
 import datetime
 from dao import MimosaDB
@@ -29,7 +29,9 @@ from werkzeug.exceptions import MethodNotAllowed, NotFound, InternalServerError,
 import logging
 from logging import handlers
 import warnings
+
 app = Flask(__name__)
+
 Swagger(app)
 
 parser = argparse.ArgumentParser(prog="Program start server")
@@ -42,9 +44,8 @@ args = parser.parse_args()
 @app.route("/model/batch", methods=["GET"])
 def api_batch():
     """ Run batch. """
-    logging.info("Calling Batch")
-    model_queue.cut_line(batch, size=MODEL_QUEUE_LIMIT)
-    pattern_queue.cut_line(batch, size=PATTERN_QUEUE_LIMIT)
+    logging.info("Calling batch, pending")
+    task_queue.do_prioritized_task(batch)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -75,7 +76,7 @@ def api_add_model(modelId):
               nullable: true
     """
     logging.info(f"api_add_model  receiving: {modelId}")
-    model_queue.push(add_model, size=1, args=(modelId,))
+    task_queue.push(add_model, args=(modelId,), task_limit=TaskLimitCode.MODEL)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -138,7 +139,7 @@ def api_edit_model(modelId):
               nullable: true
     """
     logging.info(f"api_edit_model receiving: {modelId}")
-    model_queue.push(edit_model, size=1, args=(modelId,))
+    task_queue.push(edit_model, args=(modelId,), task_limit=TaskLimitCode.MODEL)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -397,7 +398,8 @@ def api_add_pattern(patternId):
               type: string
               nullable: true
     """
-    pattern_queue.push(add_pattern, size=1, args=(patternId,))
+    logging.info(f"api_add_pattern receiving: {patternId}")
+    task_queue.push(add_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
     return HttpResponseCode.ACCEPTED.format()
 
 @app.route("/patterns/<string:patternId>", methods=["PATCH"])
@@ -427,7 +429,7 @@ def api_edit_pattern(patternId):
               nullable: true
     """
     logging.info(f"api_edit_pattern receiving: {patternId}")
-    pattern_queue.push(edit_pattern, size=1, args=(patternId,))
+    task_queue.push(edit_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -868,15 +870,13 @@ if __name__ == '__main__':
         file_hdlr.setLevel(level)
         logging.basicConfig(level=0, format=fmt, handlers=[
                             err_hdlr, info_hdlr, file_hdlr])
-        model_queue.start()
-        pattern_queue.start()
-        set_db(MimosaDB(mode=exec_mode))
+        task_queue.start()
+        set_db(MimosaDB(mode=exec_mode, read_only=True, write_local=True))
 
     except Exception:
         logging.error("setting up failed")
         logging.error(traceback.format_exc())
     if (not args.motionless) and (not args.batchless):
-        t = mt.Thread(target=init_db)
-        t.start()
+        init_db()
     if (not args.motionless):
-        serve(app, port=PORT, threads=10)
+        serve(app, port=PORT, threads=10, )

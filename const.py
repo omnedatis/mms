@@ -30,6 +30,10 @@ MULTI_PATTERN_CACHE_SIZE = 2000 * 100
 MIN_DB_WRITING_LENGTH = 0
 MA_GRAPH_SAMPLE_NUM = 10
 
+class TaskLimitCode(Enum):
+    MODEL =  2
+    PATTERN = 1
+
 class TypeCheckMap(str,Enum):
     STRING = "string", "字串", str, "[A-z]+"
     INT = "int", "整數", int, "-?\d+\.?"
