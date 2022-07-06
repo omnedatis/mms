@@ -1752,7 +1752,10 @@ class MimosaDB:
                 create_by, create_dt, exec_id,
                 model_id, exection, start_dt, end_dt]]
             data = pd.DataFrame(data, columns=COLUMNS)
+
+            logging.info(f"[DB Create] Set model execution start: {model_id} -> {exection}")
             self._insert(table_name, data)
+            logging.info(f"[DB Create] Set model execution start finished: {model_id} -> {exection}")
 
             # 同步本地端快取資料
             local_status = self.cache_manager._convert_exec_to_status(data)[
@@ -1968,7 +1971,7 @@ class MimosaDB:
         """
         exec_data = pd.read_sql_query(sql, engine)
 
-        logging.info("Stamp model execution")
+        logging.info("[DB Update] Stamp model execution")
         for exec_id in exec_ids:
             # 取得資料庫模型ID 與執行狀態
             eid_cond = exec_data[ModelExecutionField.EXEC_ID.value].values == exec_id
@@ -1993,7 +1996,7 @@ class MimosaDB:
                              (ModelExecutionField.EXEC_ID.value, exec_id)
                          ]
                          )
-        logging.info("Stamp model execution finished")
+        logging.info("[DB Update] Stamp model execution finished")
 
 # 刪除資料庫資料
     @_do_if_not_read_only
@@ -2180,6 +2183,8 @@ class MimosaDB:
         status = finished_status[exec_data[ModelExecutionField.STATUS_CODE.value]]
         model_id = exec_data[ModelExecutionField.MODEL_ID.value]
 
+        logging.info(f"[Local Update] Set model execution complete: {model_id} -> {status}")
         local_status = self.cache_manager.get_model_status(model_id)
         local_status[status] = now
         self.cache_manager.set_model_status(model_id, local_status)
+        logging.info(f"[Local Update] Set model execution complete finished: {model_id} -> {status}")
