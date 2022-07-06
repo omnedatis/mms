@@ -2171,10 +2171,11 @@ class MimosaDB:
             WHERE
                 {ModelExecutionField.EXEC_ID.value}='{exec_id}';
         """
-        exec_data = pd.read_sql_query(sql, engine).iloc[0]
+        exec_data = pd.read_sql_query(sql, engine)
         if len(exec_data) == 0:
             raise Exception(
-                'call set_model_execution_complete before set_model_execution_start')
+                f'call set_model_execution_complete before set_model_execution_start: {exec_id}')
+        exec_data = exec_data.iloc[0]
 
         status = finished_status[exec_data[ModelExecutionField.STATUS_CODE.value]]
         model_id = exec_data[ModelExecutionField.MODEL_ID.value]
