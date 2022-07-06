@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from pymysql import IntegrityError
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, exc
 from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
                    DSStockInfoField, ExecMode, MacroInfoField, MacroParamField,
                    MarketHistoryPriceField, MarketInfoField,
@@ -1238,8 +1238,8 @@ class MimosaDB:
                 chunksize=self.SAVE_BATCH_SIZE,
                 method='multi',
                 index=False)
-        except IntegrityError as e:
-            logging.error(str(e))
+        except exc.SQLAlchemyError as e:
+            logging.error(e.__class__.__name__)
 
     @_use_write_local
     @_do_if_not_read_only
