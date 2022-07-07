@@ -1230,16 +1230,13 @@ class MimosaDB:
         -------
         None.
         """
-        try:
-            data.to_sql(
-                table_name,
-                self._engine(),
-                if_exists='append',
-                chunksize=self.SAVE_BATCH_SIZE,
-                method='multi',
-                index=False)
-        except exc.SQLAlchemyError as e:
-            logging.error(e.__class__.__name__)
+        data.to_sql(
+            table_name,
+            self._engine(),
+            if_exists='append',
+            chunksize=self.SAVE_BATCH_SIZE,
+            method='multi',
+            index=False)
 
     @_use_write_local
     @_do_if_not_read_only
