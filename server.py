@@ -863,15 +863,15 @@ if __name__ == '__main__':
         info_hdlr.setLevel(logging.INFO)
         file_hdlr = handlers.TimedRotatingFileHandler(
             filename=f'{LOG_LOC}/app.log', when='D', backupCount=7)
-        fmt = '%(asctime)s - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
+        fmt = '%(asctime)s.%(msecs)03d - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
         level = {ExecMode.DEV.value: logging.DEBUG,
                  ExecMode.UAT.value: logging.INFO,
                  ExecMode.PROD.value: logging.ERROR}[exec_mode]
         file_hdlr.setLevel(level)
         logging.basicConfig(level=0, format=fmt, handlers=[
-                            err_hdlr, info_hdlr, file_hdlr])
+                            err_hdlr, info_hdlr, file_hdlr], datefmt='%Y-%m-%d %H:%M:%S')
         task_queue.start()
-        set_db(MimosaDB(mode=exec_mode))
+        set_db(MimosaDB(mode=exec_mode, read_only=True, write_local=True))
 
     except Exception:
         logging.error("setting up failed")
