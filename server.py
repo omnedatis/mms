@@ -871,7 +871,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=0, format=fmt, handlers=[
                             err_hdlr, info_hdlr, file_hdlr], datefmt='%Y-%m-%d %H:%M:%S')
         task_queue.start()
-        set_db(MimosaDB(mode=exec_mode, read_only=True, write_local=True))
+        set_db(MimosaDB(mode=exec_mode))
 
     except Exception:
         logging.error("setting up failed")
