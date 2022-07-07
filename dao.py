@@ -851,7 +851,15 @@ class MimosaDB:
 
         """
         data = self.cache_manager.get_data(CacheName.MODELS.value)
-        return data
+        exec_info = self.cache_manager.get_data(CacheName.MODEL_EXECUTION.value)
+        model_ids = data[ModelInfoField.MODEL_ID.value]
+        result = []
+        for model_id in model_ids:
+            cond = exec_info[ModelExecutionField.MODEL_ID.value] == model_id
+            state_records = exec_info[cond][ModelExecutionField.STATUS_CODE.value].values
+            if ModelExecution.ADD_PREDICT_FINISHED.value in state_records:
+                result.append(model_id)
+        return result
 
     def get_score_meta_info(self) -> List[Tuple[int, float, float]]:
         """ 取得分數標準差倍率資訊
