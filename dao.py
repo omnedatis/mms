@@ -358,48 +358,6 @@ class MimosaDBCacheManager:
             results.append(PatternInfo.make(pattern_id, func_code, params))
         return results
 
-    def _build_valid_patterns(self):
-        pattern_info = self.get_data(TableName.PAT_INFO.value)
-        pattern_param_info = self.get_data(TableName.PAT_PARAM.value)
-        macro_info = self.get_data(TableName.MACRO_INFO.value)
-        macro_param_info = self.get_data(TableName.MACRO_PARAM.value)
-
-        pattern_info = self._df_find(pattern_info,
-                                     cols=[PatternInfoField.PATTERN_STATUS.value,
-                                           PatternInfoField.PATTERN_STATUS.value],
-                                     vals=[(DBPatternStatus.PRIVATE_AND_VALID.value),
-                                           DBPatternStatus.PUBLIC_AND_VALID.value],
-                                     method='or')
-        patterns = self._construct_pattern_info(
-            pattern_info, pattern_param_info, macro_info, macro_param_info)
-        with open(f'{DATA_LOC}/patterns.pkl', 'wb') as fp:
-            pickle.dump(patterns, fp)
-
-    def _build_valid_models(self):
-        model_info = self.get_data(TableName.MODEL_INFO.value)
-        model_info = self._df_find(
-            model_info,
-            cols=[ModelInfoField.MODEL_STATUS.value,
-                  ModelInfoField.MODEL_STATUS.value],
-            vals=[DBModelStatus.PRIVATE_AND_VALID.value,
-                  DBModelStatus.PUBLIC_AND_VALID.value],
-            method='or'
-        )
-        model_execution_info = self.get_data(TableName.MODEL_EXECUTION.value)
-        model_execution_info = self._df_find(
-            model_execution_info,
-            cols=[ModelExecutionField.STATUS_CODE.value],
-            vals=[ModelExecution.ADD_PREDICT_FINISHED.value])
-        model_execution_info = model_execution_info[
-            ~np.isnat(model_execution_info[ModelExecutionField.END_DT.value].values.astype(DataType.DATETIME.value))]
-        result = []
-        for i in range(len(model_info)):
-            model_id = model_info.iloc[i][ModelInfoField.MODEL_ID.value]
-            if model_id in model_execution_info[ModelExecutionField.MODEL_ID.value].values:
-                result.append(model_id)
-        with open(f'{DATA_LOC}/models.pkl', 'wb') as fp:
-            pickle.dump(result, fp)
-
     def _build_each_market_data(self):
         data = self.get_data(CacheName.MKT_HISTORY_PRICE.value)
         if not os.path.exists(f'{DATA_LOC}/markets'):
@@ -603,8 +561,6 @@ class MimosaDBCacheManager:
 
     def clone(self):
         self._clone_base_tables()
-        self._build_valid_patterns()
-        self._build_valid_models()
         self._build_each_market_data()
 
     def clean(self):
@@ -834,8 +790,20 @@ class MimosaDB:
         list of PatternInfo
 
         """
-        data = self.cache_manager.get_data(CacheName.PATTERNS.value)
-        return data
+        pattern_info = self.cache_manager.get_data(TableName.PAT_INFO.value)
+        pattern_param_info = self.cache_manager.get_data(TableName.PAT_PARAM.value)
+        macro_info = self.cache_manager.get_data(TableName.MACRO_INFO.value)
+        macro_param_info = self.cache_manager.get_data(TableName.MACRO_PARAM.value)
+
+        pattern_info = self.cache_manager._df_find(pattern_info,
+                                     cols=[PatternInfoField.PATTERN_STATUS.value,
+                                           PatternInfoField.PATTERN_STATUS.value],
+                                     vals=[(DBPatternStatus.PRIVATE_AND_VALID.value),
+                                           DBPatternStatus.PUBLIC_AND_VALID.value],
+                                     method='or')
+        patterns = self.cache_manager._construct_pattern_info(
+            pattern_info, pattern_param_info, macro_info, macro_param_info)
+        return patterns
 
     def get_models(self) -> List[str]:
         """取得所有執行狀態已經紀錄為 ADD_PREDICT_FINISHED 的 Model ID
@@ -850,14 +818,25 @@ class MimosaDB:
             所有執行狀態已標記為 ADD_PREDICT_FINISHED 的 Model ID 清單
 
         """
-        data = self.cache_manager.get_data(CacheName.MODELS.value)
+        model_info = self.cache_manager.get_data(CacheName.MODEL_INFO.value)
+        model_info = self.cache_manager._df_find(
+            model_info,
+            cols=[ModelInfoField.MODEL_STATUS.value,
+                  ModelInfoField.MODEL_STATUS.value],
+            vals=[DBModelStatus.PRIVATE_AND_VALID.value,
+                  DBModelStatus.PUBLIC_AND_VALID.value],
+            method='or'
+        )
         exec_info = self.cache_manager.get_data(CacheName.MODEL_EXECUTION.value)
-        model_ids = data[ModelInfoField.MODEL_ID.value]
+        apf_exec_info = self.cache_manager._df_find(
+            exec_info,
+            cols=[ModelExecutionField.STATUS_CODE.value],
+            vals=[ModelExecution.ADD_PREDICT_FINISHED.value])
+        
+        model_ids = model_info[ModelInfoField.MODEL_ID.value]
         result = []
         for model_id in model_ids:
-            cond = exec_info[ModelExecutionField.MODEL_ID.value] == model_id
-            state_records = exec_info[cond][ModelExecutionField.STATUS_CODE.value].values
-            if ModelExecution.ADD_PREDICT_FINISHED.value in state_records:
+            if model_id in apf_exec_info[ModelExecutionField.MODEL_ID.value].values:
                 result.append(model_id)
         return result
 
@@ -1022,6 +1001,7 @@ class MimosaDB:
         sql = f"""
             SELECT
                 model.{ModelInfoField.MODEL_ID.value},
+                model.{ModelInfoField.MODEL_STATUS.value},
                 me.{ModelExecutionField.STATUS_CODE.value},
                 me.{ModelExecutionField.END_DT.value}
             FROM
@@ -1036,6 +1016,9 @@ class MimosaDB:
                         {TableName.MODEL_EXECUTION.value}
                 ) AS me
             ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
+            WHERE
+                model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PRIVATE_AND_VALID.value}' OR 
+                model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PUBLIC_AND_VALID.value}'
         """
         data = pd.read_sql_query(sql, engine)
         group_data = data.groupby(ModelInfoField.MODEL_ID.value)

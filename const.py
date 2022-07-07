@@ -276,6 +276,7 @@ class DBModelStatus(str, Enum):
     DRAFT = '2'
     PRIVATE_AND_INVALID = '3'
     PUBLIC_AND_INVALID = '4'
+    REMOVED = '5'
 
 class DBPatternStatus(str, Enum):
     """ 現象在資料庫中的狀態
@@ -655,7 +656,3 @@ class CacheName(Enum):
     MODEL_MKT_MAP = TableName.MODEL_MKT_MAP.value
     MODEL_PAT_MAP = TableName.MODEL_PAT_MAP.value
     SCORE_META = TableName.SCORE_META.value
-    PATTERNS = 'patterns'
-    MODELS = 'models'
-
-
