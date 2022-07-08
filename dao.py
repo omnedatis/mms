@@ -475,6 +475,60 @@ class MimosaDBCacheManager:
         logging.info('Clone model predict result from db finished')
         self._save_all_model_status(db_status)
 
+    def sync_model_result_and_status(self, model_id: str):
+        """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
+        , 則將會沿用舊資料, 不會進行下載
+
+        Parameters
+        ----------
+        model_id: str
+            要刪除的 Model ID
+
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        # 這邊犧牲效能, 換取較小的記憶體消耗量
+        # 取得所有觀點ID
+        model_info = self.get_data(CacheName.MODEL_INFO.value)
+        model_ids = model_info[ModelInfoField.MODEL_ID.value].values.tolist()
+
+        # 取得最新執行狀態
+        sql = f"""
+            SELECT
+                *
+            FROM
+                {TableName.MODEL_EXECUTION.value}
+        """
+        model_exec_info = pd.read_sql_query(sql, engine)
+        db_status = self._convert_exec_to_status(model_exec_info)
+
+        fp = f'{DATA_LOC}/views/{model_id}'
+        if not os.path.exists(fp):
+            os.makedirs(f'{DATA_LOC}/views', exist_ok=True)
+        if model_id in model_ids:
+            if self._model_results_need_update(model_id, db_status):
+                logging.info(f'Clone model predict result from db: {model_id}')
+                sql = f"""
+                    SELECT
+                        *
+                    FROM
+                        {TableName.PREDICT_RESULT_HISTORY.value}
+                    WHERE
+                        {PredictResultField.MODEL_ID.value}='{model_id}'
+                """
+                data = pd.read_sql_query(sql, engine)
+                data[PredictResultField.DATE.value
+                     ] = data[PredictResultField.DATE.value
+                              ].values.astype('datetime64[D]')
+                os.makedirs(fp, exist_ok=True)
+                pickle_dump(data, f'{fp}/history_values.pkl')
+                logging.info(f'Clone model predict result from db finished: {model_id}')
+        logging.info(f'Sync model predict result status from db: {model_id}')
+        self._save_all_model_status(db_status)
+        logging.info(f'Sync model predict result status from db finished: {model_id}')
+
     def get_model_status(self, model_id: str) -> Dict[str, datetime.date]:
         """取得本地快取中指定 Model 的執行狀態與對應時間
 
@@ -881,6 +935,7 @@ class MimosaDB:
              - PredictResultField.UPPER_BOUND.value,
              - PredictResultField.LOWER_BOUND.value
         """
+        self.cache_manager.sync_model_result_and_status(model_id)
         data = self.cache_manager.get_model_results(model_id)
         return data
 
@@ -931,6 +986,28 @@ class MimosaDB:
             earliest_date = np.min(datas).tolist()
             result[market_id] = earliest_date
         return result
+
+    def get_removed_model(self) -> List[str]:
+        """ 取得資料庫中狀態被標記為已移除的 Model ID
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        model_ids: List[str]
+            資料庫中全部已被標記已移除的 Model ID
+        """
+        model_info = self.cache_manager.get_data(CacheName.MODEL_INFO.value)
+        model_info = self.cache_manager._df_find(
+            model_info,
+            cols=[ModelInfoField.MODEL_STATUS.value],
+            vals=[DBModelStatus.REMOVED.value],
+            method='or'
+        )
+        model_ids = model_info[ModelInfoField.MODEL_ID.value].values.tolist()
+        return model_ids
 
 # 當下由資料庫取得資料
     def get_macro_param_type(self, function_code: str) -> Dict[str, str]:
@@ -2000,6 +2077,23 @@ class MimosaDB:
         """
         engine.execute(sql)
 
+    def del_model_execution(self, model_id: str):
+        """移除資料庫中 Model 的所有 execution 狀態
+
+        Parameters
+        ----------
+        model_id: str
+            Model ID
+
+        Returns
+        -------
+        None.
+        """
+        self._delete(TableName.MODEL_EXECUTION.value,
+                     whereby=[
+                         (ModelExecutionField.MODEL_ID.value, model_id)
+                     ])
+
     def del_model_data(self, model_id: str):
         """移除資料庫中指定 Model 由 python 計算出的預測結果資訊
 
@@ -2020,14 +2114,6 @@ class MimosaDB:
         self._delete(TableName.PREDICT_RESULT_HISTORY.value,
                      whereby=[
                          (PredictResultField.MODEL_ID.value, model_id)
-                     ])
-        self._delete(TableName.MODEL_EXECUTION.value,
-                     whereby=[
-                         (ModelExecutionField.MODEL_ID.value, model_id)
-                     ])
-        self._delete(TableName.MODEL_MKT_HIT_SUM.value,
-                     whereby=[
-                         (ModelMarketHitSumField.MODEL_ID.value, model_id)
                      ])
         self.cache_manager.del_model_result(model_id)
 
