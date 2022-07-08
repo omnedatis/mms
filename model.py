@@ -324,6 +324,7 @@ def add_model(model_id: str):
         MT_MANAGER.release(model_id)
         return
     try:
+        del_model_data(model_id)
         model = get_db().get_model_info(model_id)
         _create_model(model, controller)
         _backtest_model(model, controller)
@@ -392,18 +393,18 @@ def remove_model(model_id):
     MT_MANAGER.release(model_id)
     while MT_MANAGER.exists(model_id):
         time.sleep(1)
+    del_model_data(model_id)
+    logging.info('End model remove')
+
+def del_model_execution(model_id: str):
+    get_db().del_model_execution(model_id)
+
+def del_model_data(model_id: str):
     get_db().del_model_data(model_id)
     model_dir = ModelInfo.get_dir(model_id)
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
-    logging.info('End model remove')
 
-def edit_model(model_id: str):
-    logging.info("Start edit model")
-    remove_model(model_id)
-    add_model(model_id)
-    logging.info("End edit model")
-    return
 
 def _create_model(model: ModelInfo, controller: ThreadController):
     logging.info('Start model create')
@@ -585,11 +586,14 @@ def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
 
 def model_execution_recover(batch_type:BatchType):
     logging.info('Start model execution recover')
+    for model_id in get_db().get_removed_model():
+        del_model_data(model_id)
     for model, etype in get_db().get_recover_model_execution():
         if etype == ModelExecution.ADD_PREDICT:
             model_recover(model, ModelStatus.ADDED)
         if etype == ModelExecution.ADD_BACKTEST:
             model_recover(model, ModelStatus.CREATED)
+            
     logging.info('End model execution recover')
 
 def init_db():
@@ -671,13 +675,11 @@ def _batch(batch_type):
         elif not MimosaDBManager().is_ready():
             threads = _db_update(batch_type) or []
         logging.info("End pattern update")
-
         model_prepare_thread.join()
-        if batch_type == BatchType.INIT_BATCH:
+        if batch_type == BatchType.SERVICE_BATCH:
             logging.info('Start model execution recover')
             model_execution_recover(batch_type)
             logging.info('End model execution recover')
-        if batch_type == BatchType.SERVICE_BATCH:
             model_exec_ids = _model_update()
             for t in threads:
                 t.join()
@@ -791,13 +793,7 @@ def add_pattern(pid):
     get_db().set_pattern_execution_complete(sid)
 
 def del_pattern_data(pattern_id:str):
-    db = get_db()
-    db.del_pattern_data(pattern_id)
-
-def edit_pattern(pattern_id:str):
-    del_pattern_data(pattern_id)
-    add_pattern(pattern_id)
-    return
+    get_db().del_pattern_data(pattern_id)
 
 def get_market_rise_prob(period, market_type=None, category_code=None):
     def func(r):

@@ -15,8 +15,8 @@ from model import (
     set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
-    task_queue, verify_pattern, get_frame, get_plot,
-    cast_macro_kwargs, edit_model, edit_pattern, check_macro_info, CatchableTread)
+    task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
+    cast_macro_kwargs, del_model_execution, check_macro_info, CatchableTread)
 from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
                    MarketPeriodField, HttpResponseCode, TaskLimitCode)
 from func.common import Ptype
@@ -107,6 +107,7 @@ def api_remove_model(modelId):
               nullable: true
     """
     logging.info(f"api_remove_model  receiving: {modelId}")
+    del_model_execution()
     t = CatchableTread(target=remove_model, args=(modelId,))
     t.start()
     return HttpResponseCode.ACCEPTED.format()
@@ -139,7 +140,8 @@ def api_edit_model(modelId):
               nullable: true
     """
     logging.info(f"api_edit_model receiving: {modelId}")
-    task_queue.push(edit_model, args=(modelId,), task_limit=TaskLimitCode.MODEL)
+    del_model_execution(modelId)
+    task_queue.push(add_model, args=(modelId,), task_limit=TaskLimitCode.MODEL)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -429,7 +431,8 @@ def api_edit_pattern(patternId):
               nullable: true
     """
     logging.info(f"api_edit_pattern receiving: {patternId}")
-    task_queue.push(edit_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
+    del_pattern_data(patternId)
+    task_queue.push(add_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
     return HttpResponseCode.ACCEPTED.format()
 
 
