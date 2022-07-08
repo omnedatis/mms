@@ -169,7 +169,7 @@ def _plotter(**kwargs) -> dict:
 
 
 def _framer(**kwargs) -> int:
-    return MA_GRAPH_SAMPLE_NUM
+    return 1
 
 
 def _jack_ma_through_ma_up_trend(market_id: str, **kwargs) -> pd.Series:

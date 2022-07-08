@@ -586,8 +586,6 @@ def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
 
 def model_execution_recover(batch_type:BatchType):
     logging.info('Start model execution recover')
-    for model_id in get_db().get_removed_model():
-        del_model_data(model_id)
     for model, etype in get_db().get_recover_model_execution():
         if etype == ModelExecution.ADD_PREDICT:
             model_recover(model, ModelStatus.ADDED)
@@ -676,10 +674,13 @@ def _batch(batch_type):
             threads = _db_update(batch_type) or []
         logging.info("End pattern update")
         model_prepare_thread.join()
-        if batch_type == BatchType.SERVICE_BATCH:
+        for model_id in get_db().get_removed_model():
+            del_model_data(model_id)
+        if batch_type == BatchType.INIT_BATCH:
             logging.info('Start model execution recover')
             model_execution_recover(batch_type)
             logging.info('End model execution recover')
+        if batch_type == BatchType.SERVICE_BATCH:
             model_exec_ids = _model_update()
             for t in threads:
                 t.join()
