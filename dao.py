@@ -145,6 +145,7 @@ class MimosaDBCacheManager:
             ScoreMetaField.UPPER_BOUND.value
         ]
     }
+    model_execution_stamp_queue = {}
 
     def _init_config(self, db_name: str, mode: str) -> Dict[str, str]:
         """
@@ -529,7 +530,7 @@ class MimosaDBCacheManager:
         self._save_all_model_status(db_status)
         logging.info(f'Sync model predict result status from db finished: {model_id}')
 
-    def get_model_status(self, model_id: str) -> Dict[str, datetime.date]:
+    def get_model_status(self, model_id: str) -> Dict[str, datetime.datetime]:
         """取得本地快取中指定 Model 的執行狀態與對應時間
 
         Parameters
@@ -547,7 +548,7 @@ class MimosaDBCacheManager:
         result = pickle_load(f"{fp}/status.pkl")
         return result
 
-    def set_model_status(self, model_id: str, data: Dict[str, datetime.date]):
+    def set_model_status(self, model_id: str, data: Dict[str, datetime.datetime]):
         """設定本地快取中指定 Model 的執行狀態與對應時間
 
         Parameters
@@ -565,6 +566,50 @@ class MimosaDBCacheManager:
         if not os.path.exists(fp):
             os.makedirs(f'{fp}', exist_ok=True)
         pickle_dump(data, f"{fp}/status.pkl")
+
+    def put_status_to_queue(self, model_id:str, status: Dict[str, datetime.datetime]):
+        """將更新的狀態戰存至記憶體
+
+        Parameters
+        ----------
+        model_id: str
+            要暫存的 Model ID
+        
+        Returns
+        -------
+        None.
+        """
+        self.model_execution_stamp_queue[model_id] = status
+
+    def get_status_from_queue(self, model_id:str) -> Dict[str, datetime.datetime]:
+        """從快取暫存中取得 Model 狀態
+
+        Parameters
+        ----------
+        model_id: str
+            觀點 ID
+
+        Returns
+        -------
+        result: Dict[str, str]
+            觀點狀態結果
+        """
+        result = self.model_execution_stamp_queue[model_id]
+        return result
+
+    def clean_status_queue(self):
+        """清空快取中 Model 的執行狀態
+        
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+
+        """
+        self.model_execution_stamp_queue = {}
 
     def get_model_results(self, model_id: str) -> Dict[str, pd.DataFrame]:
         """取得指定模型的歷史預測結果資料
@@ -2049,7 +2094,7 @@ class MimosaDB:
             status = finished_status[e_data[ModelExecutionField.STATUS_CODE.value]]
 
             # 取得本地端結束時間紀錄
-            local_status = self.cache_manager.get_model_status(model_id)
+            local_status = self.cache_manager.get_status_from_queue(model_id)
             end_dt = local_status[status]
             self._update(table_name,
                          set_value=[
@@ -2062,6 +2107,8 @@ class MimosaDB:
                              (ModelExecutionField.EXEC_ID.value, exec_id)
                          ]
                          )
+            self.cache_manager.set_model_status(model_id, local_status)
+        self.cache_manager.clean_status_queue()
         logging.info("[DB Update] Stamp model execution finished")
 
 # 刪除資料庫資料
@@ -2261,5 +2308,5 @@ class MimosaDB:
         logging.info(f"[Local Update] Set model execution complete: {model_id} -> {status}")
         local_status = self.cache_manager.get_model_status(model_id)
         local_status[status] = now
-        self.cache_manager.set_model_status(model_id, local_status)
+        self.cache_manager.put_status_to_queue(model_id, local_status)
         logging.info(f"[Local Update] Set model execution complete finished: {model_id} -> {status}")
