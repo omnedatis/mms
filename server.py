@@ -107,7 +107,7 @@ def api_remove_model(modelId):
               nullable: true
     """
     logging.info(f"api_remove_model  receiving: {modelId}")
-    del_model_execution()
+    del_model_execution(modelId)
     t = CatchableTread(target=remove_model, args=(modelId,))
     t.start()
     return HttpResponseCode.ACCEPTED.format()
