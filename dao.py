@@ -611,7 +611,8 @@ class MimosaDBCacheManager:
 
     def del_model_result(self, model_id: str):
         fp = f'{DATA_LOC}/views/{model_id}'
-        shutil.rmtree(fp)
+        if os.path.exists(fp):
+            shutil.rmtree(fp)
 
     def clone(self):
         self._clone_base_tables()
