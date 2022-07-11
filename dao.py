@@ -732,7 +732,7 @@ class MimosaDB:
     def _do_if_not_read_only(func: Callable) -> Callable:
         def wrap(self, *args, **kwargs):
             if not self.READ_ONLY:
-                func(self, *args, **kwargs)
+                return func(self, *args, **kwargs)
         return wrap
 
     def _use_write_local(func: Callable) -> Callable:
@@ -750,7 +750,7 @@ class MimosaDB:
                     record = pickle_load(fp)
                 record[str(now)] = data
                 pickle_dump(record, fp)
-            func(self, *args, **kwargs)
+            return func(self, *args, **kwargs)
         return wrap
 
     def _engine(self):
