@@ -1333,7 +1333,7 @@ class MimosaDB:
 # 寫入資料進資料庫
     @_use_write_local
     @_do_if_not_read_only
-    def _save_df_to_db(self, data: pd.DataFrame, table_name:str):
+    def _save_df_to_db(self, table_name:str, data: pd.DataFrame):
         """將 Dataframe 寫入資料庫中
 
         Parameters
