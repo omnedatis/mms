@@ -623,10 +623,13 @@ class MimosaDBCacheManager:
         -------
         data: Dict[str, pd.DataFrame]
             指定模型下的各市場預測結果, 欄位資料有
-             - PredictResultField.PERIOD.value,
-             - PredictResultField.DATE.value,
-             - PredictResultField.UPPER_BOUND.value,
-             - PredictResultField.LOWER_BOUND.value
+             - PredictResultField.MODEL_ID
+             - PredictResultField.MARKET_ID
+             - PredictResultField.DATE
+             - PredictResultField.PERIOD
+             - PredictResultField.PREDICT_VALUE
+             - PredictResultField.UPPER_BOUND
+             - PredictResultField.LOWER_BOUND
         """
         fp = f'{DATA_LOC}/views/{model_id}/history_values.pkl'
         if not os.path.exists(fp):
@@ -1624,6 +1627,21 @@ class MimosaDB:
         data[PredictResultField.PREDICT_VALUE.value] = py
         data[PredictResultField.UPPER_BOUND.value] = upper_bound
         data[PredictResultField.LOWER_BOUND.value] = lower_bound
+        
+        # 取得歷史最新預測結果資料
+        history_data = list(self.cache_manager.get_model_results(model_id).values())
+        # 與最新預測結果合併
+        sort_cols = [
+            PredictResultField.MODEL_ID.value,
+            PredictResultField.MARKET_ID.value,
+            PredictResultField.DATE.value,
+            PredictResultField.PERIOD.value,
+            PredictResultField.PREDICT_VALUE.value,
+            PredictResultField.UPPER_BOUND.value,
+            PredictResultField.LOWER_BOUND.value
+        ]
+        history_data = [x[sort_cols] for x in history_data]
+        data = pd.concat(history_data+[data[sort_cols]], axis=0)
 
         # 移除傳入預測結果中較舊的預測結果
         group_data = data.groupby([
