@@ -364,6 +364,7 @@ def model_recover(model_id: str, status: ModelStatus):
     try:
         model = get_db().get_model_info(model_id)
         if status < ModelStatus.CREATED:
+            del_model_data(model_id)
             _create_model(model, controller)
         _backtest_model(model, controller)
         save_model_hit_sum(model_id, BatchType.INIT_BATCH)
