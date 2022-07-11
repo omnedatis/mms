@@ -205,11 +205,7 @@ def frame(**kwargs) -> int:
     results: int
         現象發生時的範圍大小
     """
-    target_period = kwargs['target_period']
-    base_period = kwargs['base_period']
-    results = int(max([target_period, base_period]) * 2 / 10)
-    if results == 0:
-        results = 1
+    results = 1
     return results
 
 

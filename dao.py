@@ -736,6 +736,9 @@ class MimosaDB:
         return wrap
 
     def _use_write_local(func: Callable) -> Callable:
+        """使用 write local 裝飾詞時, 修飾的方法需要有
+        data 與 table_name 兩個參數
+        """
         def wrap(self, *args, **kwargs):
             if self.WRITE_LOCAL:
                 now = datetime.datetime.now()
@@ -1330,6 +1333,52 @@ class MimosaDB:
 # 寫入資料進資料庫
     @_use_write_local
     @_do_if_not_read_only
+    def _save_df_to_db(self, data: pd.DataFrame, table_name:str):
+        """將 Dataframe 寫入資料庫中
+
+        Parameters
+        ----------
+        data: pd.DataFrame
+            要儲存至資料庫中的資料
+        table_name: str
+            要儲存資料的資料表名稱
+        
+        Returns
+        -------
+        None.
+
+        """
+        engine = self._engine()
+        try:
+            data.to_sql(
+            table_name,
+            engine,
+            if_exists='append',
+            chunksize=self.SAVE_BATCH_SIZE,
+            method='multi',
+            index=False)
+        except IntegrityError as e:
+            logging.error(str(e))
+
+    @_do_if_not_read_only
+    def _execute_sql(self, sql: str):
+        """執行傳入的 sql 語句
+
+        Parameters
+        ----------
+        sql: str
+            要執行的 SQL 語句
+        
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        try:
+            engine.execute(sql)
+        except IntegrityError as e:
+            logging.error(str(e))
+
     def _insert(self, table_name: str, data: pd.DataFrame):
         """將傳入的資料寫入資料庫
 
@@ -1344,19 +1393,26 @@ class MimosaDB:
         -------
         None.
         """
-        data.to_sql(
-            table_name,
-            self._engine(),
-            if_exists='append',
-            chunksize=self.SAVE_BATCH_SIZE,
-            method='multi',
-            index=False)
+        self._save_df_to_db(data, table_name)
 
     @_use_write_local
-    @_do_if_not_read_only
     def _insert_by_sql(self, table_name: str, data: pd.DataFrame,
                        col_info: List[Tuple[str, DataType]]):
-        engine = self._engine()
+        """根據傳入的資料資訊, 建構出對應的 sql 儲存語法並執行
+
+        Parameters
+        ----------
+        table_name: str
+            要儲存的目標資料表名稱
+        data: pd.DataFrame
+            要儲存的目標資料
+        col_info: List[Tuple[str, DataType]]
+            儲存資料表的各欄位名稱與對應資料型態
+        
+        Returns
+        -------
+        None.
+        """
         logging.info(f'Save {table_name}')
         cols = [x[0] for x in col_info]
         sql_template = f"""
@@ -1382,16 +1438,11 @@ class MimosaDB:
                 continue
             sql = sql_template + ','.join(vals[batch_idxs[idx_i-1]:idx])
             logging.info(f'Save {table_name}: #{batch_idxs[idx_i-1]} ~ #{idx}')
-            try:
-                engine.execute(sql)
-            except IntegrityError as e:
-                logging.error(str(e))
+            self._execute_sql(sql)
             logging.info(
                 f'Save {table_name}: #{batch_idxs[idx_i-1]} ~ #{idx} finished')
         logging.info(f'{table_name} len: {len(vals)} finished')
 
-    @_use_write_local
-    @_do_if_not_read_only
     def _insert_and_delete(self,
                            table_name: str, data: pd.DataFrame,
                            whereby: List[Tuple[str, Union[str, int, float]]]):
@@ -1410,8 +1461,6 @@ class MimosaDB:
         -------
         None.
         """
-        engine = self._engine()
-
         whereby = [
             f"{col}={val}" if (isinstance(val, int) or isinstance(val, float))
             else f"{col}='{val}'" for col, val in whereby]
@@ -1420,21 +1469,9 @@ class MimosaDB:
             WHERE
                 {' AND '.join(whereby)}
         """
-        engine.execute(sql)
+        self._execute_sql(sql)
+        self._save_df_to_db(data, table_name)
 
-        try:
-            data.to_sql(
-            table_name,
-            engine,
-            if_exists='append',
-            chunksize=self.SAVE_BATCH_SIZE,
-            method='multi',
-            index=False)
-        except IntegrityError as e:
-            logging.error(str(e))
-
-    @_use_write_local
-    @_do_if_not_read_only
     def _insert_and_ignore_exist(self, table_name: str, data: pd.DataFrame,
                                  pk_info: List[Tuple[str, DataType]],
                                  whereby: List[Tuple[str, Union[str, int, float]]]):
@@ -1479,20 +1516,9 @@ class MimosaDB:
             union_data[pk_col] = union_data[pk_col].astype(pk_type.value)
         union_data = union_data.drop_duplicates(subset=pks)
 
-        try:
-            union_data.to_sql(
-            table_name,
-            engine,
-            if_exists='append',
-            chunksize=self.SAVE_BATCH_SIZE,
-            method='multi',
-            index=False)
-        except IntegrityError as e:
-            logging.error(str(e))
+        self._save_df_to_db(union_data, table_name)
 
-    @_use_write_local
-    @_do_if_not_read_only
-    def _insert_and_join_exist(self, table_name: str, data: pd.DataFrame,
+    def _insert_and_update_exist(self, table_name: str, data: pd.DataFrame,
                                pk_info: List[Tuple[str, DataType]],
                                whereby: List[Tuple[str, Union[str, int, float]]]):
         """將傳入的資料合併資料庫中的資料後一併寫入, 合併時當發生 pk 重複的狀況, 
@@ -1542,18 +1568,9 @@ class MimosaDB:
             WHERE
                 {' AND '.join(whereby)}
         """
-        engine.execute(sql)
+        self._execute_sql(sql)
 
-        try:
-            union_data.to_sql(
-            table_name,
-            engine,
-            if_exists='append',
-            chunksize=self.SAVE_BATCH_SIZE,
-            method='multi',
-            index=False)
-        except IntegrityError as e:
-            logging.error(str(e))
+        self._save_df_to_db(union_data, table_name)
 
     def save_model_latest_results(self, model_id: str, data: pd.DataFrame,
                                   exec_type: ModelExecution):
@@ -1623,7 +1640,7 @@ class MimosaDB:
             latest_data = self._extend_basic_cols(latest_data)
 
             # 開始儲存
-            self._insert_and_join_exist(table_name, latest_data,
+            self._insert_and_update_exist(table_name, latest_data,
                                     pk_info=[
                                         (PredictResultField.MODEL_ID.value,
                                          DataType.STRING),
@@ -1806,6 +1823,7 @@ class MimosaDB:
         self._insert(table_name, data)
         logging.info(f'Insert into model hit sum swap finished')
 
+    @_do_if_not_read_only
     def set_model_execution_start(self, model_id: str, exection: str) -> str:
         """ create model exec
 
@@ -1824,54 +1842,53 @@ class MimosaDB:
         """
         table_name = TableName.MODEL_EXECUTION.value
         exec_id = 'READ_ONLY_MODE'
-        if not self.READ_ONLY:
-            # 檢查是否為合法的 exection
-            if exection not in ModelExecution:
-                raise Exception(f"Unknown excetion code {exection}")
+        # 檢查是否為合法的 exection
+        if exection not in ModelExecution:
+            raise Exception(f"Unknown excetion code {exection}")
 
-            # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB
-            # 若是要儲存 AP 或是 AB, 那麼資料庫中就不應該已存在 AP 或 AB
-            # 因此要先清除原先的執行紀錄
-            if exection in [
-                    ModelExecution.ADD_PREDICT.value,
-                    ModelExecution.ADD_BACKTEST.value]:
-                self._delete(table_name,
-                             whereby=[
-                                 (ModelExecutionField.MODEL_ID.value, model_id),
-                                 (ModelExecutionField.STATUS_CODE.value, exection)
-                             ])
+        # 資料庫中對於一個觀點僅會存在一筆 AP 或 AB
+        # 若是要儲存 AP 或是 AB, 那麼資料庫中就不應該已存在 AP 或 AB
+        # 因此要先清除原先的執行紀錄
+        if exection in [
+                ModelExecution.ADD_PREDICT.value,
+                ModelExecution.ADD_BACKTEST.value]:
+            self._delete(table_name,
+                            whereby=[
+                                (ModelExecutionField.MODEL_ID.value, model_id),
+                                (ModelExecutionField.STATUS_CODE.value, exection)
+                            ])
 
-            # 取得 EXEC_ID
-            exec_id = self._get_serial_no(SerialNoType.EXECUTION)
+        # 取得 EXEC_ID
+        exec_id = self._get_serial_no(SerialNoType.EXECUTION)
 
-            # 建立 status
-            COLUMNS = [
-                'CREATE_BY', 'CREATE_DT',
-                ModelExecutionField.EXEC_ID.value,
-                ModelExecutionField.MODEL_ID.value,
-                ModelExecutionField.STATUS_CODE.value,
-                ModelExecutionField.START_DT.value,
-                ModelExecutionField.END_DT.value
-            ]
-            now = datetime.datetime.now()
-            now = np.datetime64(now).astype('datetime64[s]').tolist()
-            create_by = self.CREATE_BY
-            create_dt = now
-            start_dt = now
-            end_dt = None
-            data = [[
-                create_by, create_dt, exec_id,
-                model_id, exection, start_dt, end_dt]]
-            data = pd.DataFrame(data, columns=COLUMNS)
+        # 建立 status
+        COLUMNS = [
+            'CREATE_BY', 'CREATE_DT',
+            ModelExecutionField.EXEC_ID.value,
+            ModelExecutionField.MODEL_ID.value,
+            ModelExecutionField.STATUS_CODE.value,
+            ModelExecutionField.START_DT.value,
+            ModelExecutionField.END_DT.value
+        ]
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        create_by = self.CREATE_BY
+        create_dt = now
+        start_dt = now
+        end_dt = None
+        data = [[
+            create_by, create_dt, exec_id,
+            model_id, exection, start_dt, end_dt]]
+        data = pd.DataFrame(data, columns=COLUMNS)
 
-            logging.info(f"[DB Create] Set model execution start: {model_id} -> {exection}")
-            self._insert(table_name, data)
-            logging.info(f"[DB Create] Set model execution start finished: {model_id} -> {exection}")
+        logging.info(f"[DB Create] Set model execution start: {model_id} -> {exection}")
+        self._insert(table_name, data)
+        logging.info(f"[DB Create] Set model execution start finished: {model_id} -> {exection}")
 
-            # 同步本地端快取資料
-            local_status = self.cache_manager._convert_exec_to_status(data)[
-                model_id]
-            self.cache_manager.set_model_status(model_id, local_status)
+        # 同步本地端快取資料
+        local_status = self.cache_manager._convert_exec_to_status(data)[
+            model_id]
+        self.cache_manager.set_model_status(model_id, local_status)
         return exec_id
 
     def set_pattern_execution_start(self, pid: str, exection: str) -> str:
@@ -1932,11 +1949,9 @@ class MimosaDB:
         return exec_id
 
 # 更新資料庫中資料
-    @_do_if_not_read_only
     def _update(self, table_name: str,
                 set_value: List[Tuple[str, Union[str, int, float]]],
                 whereby: List[Tuple[str, Union[str, int, float]]]):
-        engine = self._engine()
         set_str = [
             f"{col}={val}" if (isinstance(val, int) or isinstance(val, float))
             else f"{col}='{val}'" for col, val in set_value]
@@ -1951,7 +1966,7 @@ class MimosaDB:
         WHERE
             {' AND '.join(whereby)};
         """
-        engine.execute(sql)
+        self._execute_sql(sql)
 
     def update_latest_pattern_results(self, pattern_id: str, data: pd.DataFrame):
         """儲存新增的最新現象當前發生資訊至資料表
@@ -2000,7 +2015,6 @@ class MimosaDB:
         self._insert(table_name, data)
         logging.info(f'Update model hit sum finished')
 
-    @_do_if_not_read_only
     def set_pattern_execution_complete(self, exec_id: str):
         """Set pattern execution complete on DB.
 
@@ -2052,7 +2066,7 @@ class MimosaDB:
 
     @_do_if_not_read_only
     def stamp_model_execution(self, exec_ids: List[str]):
-        """將所有模型執行狀態儲存至資料庫
+        """將所有模型執行狀態儲存至資料庫, 並同時更新本地端資料庫狀態
 
         Parameters
         ----------
@@ -2112,9 +2126,7 @@ class MimosaDB:
         logging.info("[DB Update] Stamp model execution finished")
 
 # 刪除資料庫資料
-    @_do_if_not_read_only
     def _delete(self, table_name: str, whereby: List[Tuple[str, Union[str, int, float]]]):
-        engine = self._engine()
         whereby = [
             f"{col}={val}" if (isinstance(val, int) or isinstance(val, float))
             else f"{col}='{val}'" for col, val in whereby]
@@ -2123,7 +2135,7 @@ class MimosaDB:
             WHERE
                 {' AND '.join(whereby)}
         """
-        engine.execute(sql)
+        self._execute_sql(sql)
 
     def del_model_execution(self, model_id: str):
         """移除資料庫中 Model 的所有 execution 狀態
