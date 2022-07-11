@@ -1523,6 +1523,7 @@ class MimosaDB:
 
     def _insert_and_update_exist(self, table_name: str, data: pd.DataFrame,
                                pk_info: List[Tuple[str, DataType]],
+                               cols: List[str],
                                whereby: List[Tuple[str, Union[str, int, float]]]):
         """將傳入的資料合併資料庫中的資料後一併寫入, 合併時當發生 pk 重複的狀況, 
         會將重複的部分以只寫入傳入的資料進行處理
@@ -1535,6 +1536,8 @@ class MimosaDB:
             要存入的資料
         pk_info: List[Tuple[str, str]]
             要避免重複的資料欄位與該欄位的型態
+        cols: List[str]
+            儲存時的欄位順序
         whereby: List[Tuple[str, Union[str, int, float]]])
             指定要刪除資料的欄位, 指定後會先刪除
 
@@ -1551,7 +1554,7 @@ class MimosaDB:
         db_data = None
         sql = f"""
             SELECT
-                {','.join(pks)}
+                *
             FROM
                 {table_name}
             WHERE
@@ -1560,7 +1563,7 @@ class MimosaDB:
         db_data = pd.read_sql_query(sql, engine)
 
         # 合併資料庫的資料
-        union_data = pd.concat([data, db_data], axis=0)
+        union_data = pd.concat([data[cols], db_data[cols]], axis=0)
         for pk_col, pk_type in pk_info:
             union_data[pk_col] = union_data[pk_col].values.astype(
                 pk_type.value)
@@ -1667,6 +1670,7 @@ class MimosaDB:
                                         (PredictResultField.PERIOD.value,
                                          DataType.INT)
                                     ],
+                                    cols=latest_data.columns.values.tolist(),
                                     whereby=[(PredictResultField.MODEL_ID.value, model_id)])
         logging.info(f'Saving model latest results finished: {model_id}')
 
@@ -2028,9 +2032,23 @@ class MimosaDB:
         """
         table_name = TableName.MODEL_MKT_HIT_SUM.value
         data = self._extend_basic_cols(data)
+        group_data = data.groupby([
+            ModelMarketHitSumField.MODEL_ID.value])
 
         logging.info(f'Update model hit sum')
-        self._insert(table_name, data)
+        for model_id, model_data in group_data:
+            self._insert_and_update_exist(
+                table_name, model_data,
+                pk_info=[
+                    (ModelMarketHitSumField.MODEL_ID.value, DataType.STRING),
+                    (ModelMarketHitSumField.MARKET_CODE.value, DataType.STRING),
+                    (ModelMarketHitSumField.DATE_PERIOD.value, DataType.INT)
+                ],
+                cols=model_data.columns.values.tolist(),
+                whereby=[
+                    (ModelMarketHitSumField.MODEL_ID.value, model_id)
+                ]
+            )
         logging.info(f'Update model hit sum finished')
 
     def set_pattern_execution_complete(self, exec_id: str):
@@ -2192,6 +2210,10 @@ class MimosaDB:
         self._delete(TableName.PREDICT_RESULT_HISTORY.value,
                      whereby=[
                          (PredictResultField.MODEL_ID.value, model_id)
+                     ])
+        self._delete(TableName.MODEL_MKT_HIT_SUM.value,
+                     whereby=[
+                         (ModelMarketHitSumField.MODEL_ID.value, model_id)
                      ])
         self.cache_manager.del_model_result(model_id)
 
