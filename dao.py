@@ -1393,7 +1393,7 @@ class MimosaDB:
         -------
         None.
         """
-        self._save_df_to_db(data, table_name)
+        self._save_df_to_db(table_name, data)
 
     @_use_write_local
     def _insert_by_sql(self, table_name: str, data: pd.DataFrame,
@@ -1470,7 +1470,7 @@ class MimosaDB:
                 {' AND '.join(whereby)}
         """
         self._execute_sql(sql)
-        self._save_df_to_db(data, table_name)
+        self._save_df_to_db(table_name, data)
 
     def _insert_and_ignore_exist(self, table_name: str, data: pd.DataFrame,
                                  pk_info: List[Tuple[str, DataType]],
@@ -1516,7 +1516,7 @@ class MimosaDB:
             union_data[pk_col] = union_data[pk_col].astype(pk_type.value)
         union_data = union_data.drop_duplicates(subset=pks)
 
-        self._save_df_to_db(union_data, table_name)
+        self._save_df_to_db(table_name, union_data)
 
     def _insert_and_update_exist(self, table_name: str, data: pd.DataFrame,
                                pk_info: List[Tuple[str, DataType]],
@@ -1570,7 +1570,7 @@ class MimosaDB:
         """
         self._execute_sql(sql)
 
-        self._save_df_to_db(union_data, table_name)
+        self._save_df_to_db(table_name, union_data)
 
     def save_model_latest_results(self, model_id: str, data: pd.DataFrame,
                                   exec_type: ModelExecution):
