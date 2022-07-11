@@ -183,7 +183,7 @@ class MimosaDBCacheManager:
                                 port, db_name, charset))
         return engine
 
-    def _convert_exec_to_status(self, exec_info: pd.DataFrame) -> Dict[str, Dict[str, datetime.date]]:
+    def _convert_exec_to_status(self, exec_info: pd.DataFrame) -> Dict[str, Dict[str, str]]:
         """將 EXECUTION RECORD 轉換為以完成狀態字典表示, 若 exec_info 長度為 0,
         則會回傳空字典 {}
 
@@ -194,7 +194,7 @@ class MimosaDBCacheManager:
 
         Returns
         -------
-        result: Dict[str, Dict[str, datetime.datetime]]
+        result: Dict[str, Dict[str, str]]
             完成狀態字典, 格式為 [model_id] - [status_code] - end_dt
         """
         FINISHED_STATUS = [
@@ -214,9 +214,9 @@ class MimosaDBCacheManager:
             if status_code not in FINISHED_STATUS:
                 continue
             max_date = np.max(
-                records[ModelExecutionField.END_DT.value].values.astype('datetime64[ms]'))
-            # datetime64[ms] 轉型為 datetime.datetime
-            result[model_id][status_code] = max_date.tolist()
+                records[ModelExecutionField.END_DT.value].values.astype('datetime64[s]'))
+            # datetime64[s] 轉型為 str
+            result[model_id][status_code] = str(max_date.tolist())
         return result
 
     def _clone_table(self, table_name: str, cols: List[str]):
@@ -404,7 +404,7 @@ class MimosaDBCacheManager:
             self.set_model_status(model_id, data[model_id])
         logging.info("Save local model execution status finished")
 
-    def _model_results_need_update(self, model_id, db_status: Dict[str, Dict[str, datetime.date]]) -> bool:
+    def _model_results_need_update(self, model_id, db_status: Dict[str, Dict[str, str]]) -> bool:
         need_update = False
         fp = f'{DATA_LOC}/views/{model_id}'
         status_fp = f'{fp}/status.pkl'
@@ -530,7 +530,7 @@ class MimosaDBCacheManager:
         self._save_all_model_status(db_status)
         logging.info(f'Sync model predict result status from db finished: {model_id}')
 
-    def get_model_status(self, model_id: str) -> Dict[str, datetime.datetime]:
+    def get_model_status(self, model_id: str) -> Dict[str, str]:
         """取得本地快取中指定 Model 的執行狀態與對應時間
 
         Parameters
@@ -548,7 +548,7 @@ class MimosaDBCacheManager:
         result = pickle_load(f"{fp}/status.pkl")
         return result
 
-    def set_model_status(self, model_id: str, data: Dict[str, datetime.datetime]):
+    def set_model_status(self, model_id: str, data: Dict[str, str]):
         """設定本地快取中指定 Model 的執行狀態與對應時間
 
         Parameters
@@ -567,7 +567,7 @@ class MimosaDBCacheManager:
             os.makedirs(f'{fp}', exist_ok=True)
         pickle_dump(data, f"{fp}/status.pkl")
 
-    def put_status_to_queue(self, model_id:str, status: Dict[str, datetime.datetime]):
+    def put_status_to_queue(self, model_id:str, status: Dict[str, str]):
         """將更新的狀態戰存至記憶體
 
         Parameters
@@ -581,7 +581,7 @@ class MimosaDBCacheManager:
         """
         self.model_execution_stamp_queue[model_id] = status
 
-    def get_status_from_queue(self, model_id:str) -> Dict[str, datetime.datetime]:
+    def get_status_from_queue(self, model_id:str) -> Dict[str, str]:
         """從快取暫存中取得 Model 狀態
 
         Parameters
@@ -2148,7 +2148,7 @@ class MimosaDB:
             end_dt = local_status[status]
             self._update(table_name,
                          set_value=[
-                             (ModelExecutionField.END_DT.value, str(end_dt)),
+                             (ModelExecutionField.END_DT.value, end_dt),
                              ('MODIFY_DT', str(now)),
                              ('MODIFY_BY', self.MODIFY_BY),
                              (ModelExecutionField.STATUS_CODE.value, status)
@@ -2359,6 +2359,6 @@ class MimosaDB:
 
         logging.info(f"[Local Update] Set model execution complete: {model_id} -> {status}")
         local_status = self.cache_manager.get_model_status(model_id)
-        local_status[status] = now
+        local_status[status] = str(now)
         self.cache_manager.put_status_to_queue(model_id, local_status)
         logging.info(f"[Local Update] Set model execution complete finished: {model_id} -> {status}")
