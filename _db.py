@@ -128,6 +128,7 @@ class MimosaDB:
         if not os.path.exists(path):
             os.mkdir(path)
         pickle_dump(self._market_ids, f'{path}/mids.pkl')
+        pickle_dump(self._market_info, f'{path}/minfo.pkl')
         pickle_dump(self._pattern_ids, f'{path}/pids.pkl')
         pickle_dump(self._patterns, f'{path}/patterns.pkl')
         pickle_dump(self._market_dates, f'{path}/mdates.pkl')
@@ -138,6 +139,7 @@ class MimosaDB:
         path = self._local_path
         if os.path.exists(path):
             self._market_ids = pickle_load(f'{path}/mids.pkl')
+            self._market_info = pickle_load(f'{path}/minfo.pkl')
             self._pattern_ids = pickle_load(f'{path}/pids.pkl')
             self._patterns = pickle_load(f'{path}/patterns.pkl')
             self._market_dates = pickle_load(f'{path}/mdates.pkl')
