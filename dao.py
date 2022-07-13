@@ -866,14 +866,38 @@ class MimosaDB:
         data = [x[0] for x in data if x[1] in cate_data]
         return data
 
-    def get_market_info(self):
+    def get_market_info(self) -> pd.DataFrame:
+        """取得 MIMOSA 市場基本資訊
+        
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        ret: pd.DataFrame
+            Index: 市場 CODE
+            Columns: MARKET_SOURCE_TYPE, MARKE_SOURCE_CODE
+        """
         recv = self.cache_manager.get_data(CacheName.MKT_INFO.value)
         ret = recv.set_index(MarketInfoField.MARKET_CODE.value
                              )[[MarketInfoField.MARKET_SOURCE_TYPE.value,
                                 MarketInfoField.MARKET_SOURCE_CODE.value]]
         return ret
 
-    def get_category_info(self):
+    def get_category_info(self) -> pd.DataFrame:
+        """取得 TEJ 中的市場資訊
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        ret: pd.DataFrame
+            Index: 市場 CODE
+            Columns: STOCK_CODE, TSE_INDUSTRY_CODE
+        """
         recv = self.cache_manager.get_data(CacheName.DS_S_STOCK.value)
         ret = recv.set_index(DSStockInfoField.STOCK_CODE.value
                              )[DSStockInfoField.TSE_INDUSTRY_CODE.value]
