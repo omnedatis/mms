@@ -586,11 +586,11 @@ def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
         ret += [CatchableTread(target=save_latest_pattern_results,
                                args=(_db.get_latest_pattern_values(), )),
                 CatchableTread(target=save_latest_mkt_period,
-                               args=({mid: _db.get_market_prices(mid)
-                                      for mid in markets}, )),
+                               args=({each.mid: _db.get_market_prices(each.mid)
+                                      for each in markets}, )),
                 CatchableTread(target=save_mkt_score,
-                               args=({mid: _db.get_future_returns(mid)
-                                      for mid in markets}, ))]
+                               args=({each.mid: _db.get_future_returns(each.mid)
+                                      for each in markets}, ))]
         for exec_id in exec_ids:
             get_db().set_pattern_execution_complete(exec_id)
     for t in ret:
