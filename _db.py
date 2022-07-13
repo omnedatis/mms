@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 from func._td import set_market_data_provider, MarketDataProvider, MD_CACHE
-from _core import Pattern
+from _core import Pattern, MarketInfo
 from dao import MimosaDB as MimosaDao
 from utils import (int2datetime64d, datetime64d2int, print_error_info,
                    pickle_dump, pickle_load, singleton)
@@ -85,6 +85,7 @@ class MimosaDB:
     def __init__(self, idx: int):
         self._dbid = idx
         self._market_ids: Optional[Dict[str, int]] = None
+        self._market_info: Optional[Dict[str, np.ndarray]] = None
         self._pattern_ids: Optional[Dict[str, int]] = None
         self._patterns: Optional[List[Pattern]] = None
         self._period_ids: Dict[int, int] = {
@@ -143,13 +144,27 @@ class MimosaDB:
             self._market_pattern_values = pickle_load(f'{path}/pvalues.pkl')
             self._market_future_returns = pickle_load(f'{path}/freturns.pkl')
 
-    def get_markets(self) -> List[str]:
+    def get_markets(self, mtype=None, category=None) -> List[str]:
         if self._market_ids is None:
             raise RuntimeError("market data is not initialized")
+        ret = list(self._market_ids.keys())
+        if mtype is not None:
+            idxs = self._market_info['mtype'] == mtype
+            if category is not None:
+                idxs &= self._market_info['category'] == category
+            return np.array(ret)[idxs].tolist()
         return list(self._market_ids.keys())
 
-    def _set_markets(self, markets: List[str]):
-        self._market_ids = {mid: idx for idx, mid in enumerate(markets)}
+    def _set_markets(self, market_info: List[MarketInfo]):
+        self._market_ids = {}
+        mtypes = []
+        categories = []
+        for idx, minfo in enumerate(market_info):
+            self._market_ids[minfo.mid] = idx
+            mtypes.append(minfo.mtype)
+            categories.append(minfo.category)
+        self._market_info = {'mtype': np.array(mtypes),
+                             'category': np.array(categories)}
 
     def get_pattern_ids(self) -> List[str]:
         if self._pattern_ids is None:
@@ -293,10 +308,11 @@ class MimosaDB:
         else:
             self._patterns[pidx] = pattern
 
-    def update(self, markets, patterns, processes: int=PATTERN_UPDATE_CPUS):
+    def update(self, market_info, patterns, processes: int=PATTERN_UPDATE_CPUS):
         MD_CACHE.clear()  # clear cache <- old version
         self._market_data_provider.update()
         self.clear()
+        markets = [each.mid for each in market_info]
         if len(markets) > 0:
             mdates = {}
             freturns = {}
@@ -328,7 +344,7 @@ class MimosaDB:
             pool.close()
             pool.join()
 
-        self._set_markets(markets)
+        self._set_markets(market_info)
         self._set_patterns(patterns)
         self._market_dates = [mdates[mid] for mid in markets]
         self._market_future_returns = [freturns[mid] for mid in markets]

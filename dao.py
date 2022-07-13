@@ -240,8 +240,8 @@ class MimosaDBCacheManager:
             self._clone_table(table, self.TABLE_SCHEMA_INFO[table])
 
     def get_data(self, pkl_name: str) -> Union[pd.DataFrame, List[PatternInfo], List[str]]:
-        """根據指定的檔案名稱, 取得本地快取資料.  
-        這個方法只會取得本地檔案, 不會在檔案不存在時進行自動下載的動作,  
+        """根據指定的檔案名稱, 取得本地快取資料.
+        這個方法只會取得本地檔案, 不會在檔案不存在時進行自動下載的動作,
         因此在檔案不存在時, 會拋出 RuntimeError
 
         Parameters
@@ -263,9 +263,9 @@ class MimosaDBCacheManager:
         return data
 
     def get_market_data(self, market_id: str) -> pd.DataFrame:
-        """根據傳入的 market ID, 取得對應的市場資料 DataFrame.  
+        """根據傳入的 market ID, 取得對應的市場資料 DataFrame.
         市場資料格式必須包含四個欄位:
-            OP, CP, HP, LP  
+            OP, CP, HP, LP
         並且 Index 必須為 datetime.date
 
         Parameters
@@ -574,7 +574,7 @@ class MimosaDBCacheManager:
         ----------
         model_id: str
             要暫存的 Model ID
-        
+
         Returns
         -------
         None.
@@ -599,7 +599,7 @@ class MimosaDBCacheManager:
 
     def clean_status_queue(self):
         """清空快取中 Model 的執行狀態
-        
+
         Parameters
         ----------
         None.
@@ -866,6 +866,19 @@ class MimosaDB:
         data = [x[0] for x in data if x[1] in cate_data]
         return data
 
+    def get_market_info(self):
+        recv = self.cache_manager.get_data(CacheName.MKT_INFO.value)
+        ret = recv.set_index(MarketInfoField.MARKET_CODE.value
+                             )[[MarketInfoField.MARKET_SOURCE_TYPE.value,
+                                MarketInfoField.MARKET_SOURCE_CODE.value]]
+        return ret
+
+    def get_category_info(self):
+        recv = self.cache_manager.get_data(CacheName.DS_S_STOCK.value)
+        ret = recv.set_index(DSStockInfoField.STOCK_CODE.value
+                             )[DSStockInfoField.TSE_INDUSTRY_CODE.value]
+        return ret
+
     def get_market_data(self, market_id: str, begin_date: Optional[datetime.date] = None) -> pd.DataFrame:
         """根據傳入的市場 ID 與起始日期, 取得指定的市場資料
 
@@ -874,7 +887,7 @@ class MimosaDB:
         market_id: str
             市場 ID
         begin_date: datetime.date | None
-            市場資料的起始日期, 回傳資料會取得該日期至最新的市場資料, 若為 None, 
+            市場資料的起始日期, 回傳資料會取得該日期至最新的市場資料, 若為 None,
             就會回傳全部的市場資料
 
         Returns
@@ -938,7 +951,7 @@ class MimosaDB:
             exec_info,
             cols=[ModelExecutionField.STATUS_CODE.value],
             vals=[ModelExecution.ADD_PREDICT_FINISHED.value])
-        
+
         model_ids = model_info[ModelInfoField.MODEL_ID.value]
         result = []
         for model_id in model_ids:
@@ -1107,13 +1120,13 @@ class MimosaDB:
         return result
 
     def get_recover_model_execution(self) -> List[Tuple[str, ModelExecution]]:
-        """ 取得模型最新執行狀態  
-        取得新增模型預測與新增模型回測的最新更新狀態，這兩個狀態對於任一模型而言  
-        都必須且應該只會各有一筆  
-         - 當新增模型狀態沒有找到且新增模型完成狀態也沒有找到時，狀態為需要新增預測  
-         - 當新增模型狀態找到了但沒有結束時間時，狀態為需要新增預測  
-         - 當新增模型完成找到但新增回測且新增回測完成狀態沒有沒找到時，狀態為需要新增回測  
-         - 當新增回測狀態找到但沒有結束時間時，狀態為需要新增回測  
+        """ 取得模型最新執行狀態
+        取得新增模型預測與新增模型回測的最新更新狀態，這兩個狀態對於任一模型而言
+        都必須且應該只會各有一筆
+         - 當新增模型狀態沒有找到且新增模型完成狀態也沒有找到時，狀態為需要新增預測
+         - 當新增模型狀態找到了但沒有結束時間時，狀態為需要新增預測
+         - 當新增模型完成找到但新增回測且新增回測完成狀態沒有沒找到時，狀態為需要新增回測
+         - 當新增回測狀態找到但沒有結束時間時，狀態為需要新增回測
 
         Parameters
         ----------
@@ -1146,7 +1159,7 @@ class MimosaDB:
                 ) AS me
             ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
             WHERE
-                model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PRIVATE_AND_VALID.value}' OR 
+                model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PRIVATE_AND_VALID.value}' OR
                 model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PUBLIC_AND_VALID.value}'
         """
         data = pd.read_sql_query(sql, engine)
@@ -1274,7 +1287,7 @@ class MimosaDB:
         return result
 
     def get_model_info(self, model_id: str) -> ModelInfo:
-        """根據指定的 Model ID, 取得對應的 ModelInfo 物件, 
+        """根據指定的 Model ID, 取得對應的 ModelInfo 物件,
         此動作會同步部分本地端快取資料
 
         Parameters
@@ -1345,7 +1358,7 @@ class MimosaDB:
             要儲存至資料庫中的資料
         table_name: str
             要儲存資料的資料表名稱
-        
+
         Returns
         -------
         None.
@@ -1371,7 +1384,7 @@ class MimosaDB:
         ----------
         sql: str
             要執行的 SQL 語句
-        
+
         Returns
         -------
         None.
@@ -1411,7 +1424,7 @@ class MimosaDB:
             要儲存的目標資料
         col_info: List[Tuple[str, DataType]]
             儲存資料表的各欄位名稱與對應資料型態
-        
+
         Returns
         -------
         None.
@@ -1525,7 +1538,7 @@ class MimosaDB:
                                pk_info: List[Tuple[str, DataType]],
                                cols: List[str],
                                whereby: List[Tuple[str, Union[str, int, float]]]):
-        """將傳入的資料合併資料庫中的資料後一併寫入, 合併時當發生 pk 重複的狀況, 
+        """將傳入的資料合併資料庫中的資料後一併寫入, 合併時當發生 pk 重複的狀況,
         會將重複的部分以只寫入傳入的資料進行處理
 
         Parameters
@@ -1630,7 +1643,7 @@ class MimosaDB:
         data[PredictResultField.PREDICT_VALUE.value] = py
         data[PredictResultField.UPPER_BOUND.value] = upper_bound
         data[PredictResultField.LOWER_BOUND.value] = lower_bound
-        
+
         # 取得歷史最新預測結果資料
         history_data = list(self.cache_manager.get_model_results(model_id).values())
         # 與最新預測結果合併

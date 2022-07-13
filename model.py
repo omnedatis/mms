@@ -22,6 +22,7 @@ import traceback
 
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
+from _core import MarketInfo
 from func._tp import *
 from _view import view_backtest, view_create, view_update
 from const import *
@@ -56,6 +57,18 @@ def clone_db_cache(batch_type):
     """Clone Mimosa DB to cache"""
     db = get_db()
     db.clone_db_cache(batch_type)
+
+def get_markets():
+    db = get_db()
+    minfo = db.get_market_info()
+    cinfo = db.get_category_info()
+    cinfo = {key: value for key, value in zip(cinfo.index.values.tolist(),
+                                              cinfo.values.tolist())}
+    ret = []
+    for mid, (mtype, code) in zip(minfo.index.values, minfo.values):
+        mcate = cinfo.get(code)
+        ret.append(MarketInfo.make(mid, mtype, mcate))
+    return ret
 
 def save_mkt_score(recv: Dict[str, pd.DataFrame]):
     """save mkt score to DB."""
@@ -469,7 +482,7 @@ class ExecQueue:
         self._lock = Lock()
         self._thread = CatchableTread(self._run, name=name)
         self.name = name
-    
+
     def _run(self):
         while self.isactive:
             # logging.info(self.is_paused)
@@ -532,18 +545,18 @@ class QueueManager:
     def do_prioritized_task(self, func:Callable, args:Optional[tuple]=None):
         def _task():
             for each in self._queues.values():
-                each.is_paused = True 
+                each.is_paused = True
             while sum(i.occupants for i in self._queues.values()):
                 time.sleep(1)
             try:
                 if args is None:
                     ret = func()
                 else:
-                    ret = func(*args)      
+                    ret = func(*args)
             except Exception as esp:
                 raise esp
             for each in self._queues.values():
-                each.is_paused = False 
+                each.is_paused = False
             return ret
         return CatchableTread(_task).start()
 
@@ -557,7 +570,7 @@ task_queue = QueueManager({
      })
 
 def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
-    markets = get_db().get_markets()
+    markets = get_markets()
     patterns = get_db().get_patterns()
     if batch_type == BatchType.SERVICE_BATCH:
         _db = MimosaDBManager().next_db
@@ -592,7 +605,7 @@ def model_execution_recover(batch_type:BatchType):
             model_recover(model, ModelStatus.ADDED)
         if etype == ModelExecution.ADD_BACKTEST:
             model_recover(model, ModelStatus.CREATED)
-            
+
     logging.info('End model execution recover')
 
 def init_db():
@@ -725,7 +738,7 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
         return occurs, cnts - occurs
 
     _db = MimosaDBManager().current_db
-    markets = get_db().get_markets(market_type, category_code)
+    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return 0, 0
 
@@ -741,7 +754,7 @@ def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=
         return len(ret), (ret>0).sum().tolist()
 
     _db = MimosaDBManager().current_db
-    markets = get_db().get_markets(market_type, category_code)
+    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return 0
 
@@ -762,7 +775,7 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
         return ret.mean() * 100, ret.std() * 100, len(ret)
 
     _db = MimosaDBManager().current_db
-    markets = get_db().get_markets(market_type, category_code)
+    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return {}
 
@@ -803,7 +816,7 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
         return len(ret), (ret>0).sum().tolist()
 
     _db = MimosaDBManager().current_db
-    markets = get_db().get_markets(market_type, category_code)
+    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return 0
 
@@ -820,7 +833,7 @@ def get_mkt_dist_info(period, market_type=None, category_code=None):
         return ret.mean() * 100, ret.std() * 100, len(ret)
 
     _db = MimosaDBManager().current_db
-    markets = get_db().get_markets(market_type, category_code)
+    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return {}
 
