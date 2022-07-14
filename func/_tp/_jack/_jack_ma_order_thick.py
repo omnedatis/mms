@@ -9,6 +9,7 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
 from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from .common import MAX_PRICE_LEN
 from .._context import TimeUnit
 from .._context import TechnicalIndicator as TI
 import const
@@ -27,6 +28,10 @@ def _is_positive_int(value) -> str:
         return ''
     return '輸入值必須為正整數'
 
+def _is_bounded(value) -> str:
+    if value <= MAX_PRICE_LEN:
+        return ''
+    return f'輸入值超過合法上限 {MAX_PRICE_LEN}'
 
 params = [
     MacroParam(code='ma_long_period', name='長期均線天數', desc='長期均線天數',
@@ -71,6 +76,8 @@ def _checker(**kwargs) -> dict:
     for key, value in kwargs.items():
         if _is_positive_int(value):
             ret[key].append(_is_positive_int(value))
+        if _is_bounded(value):
+            ret[key].append(_is_bounded(value))
     if kwargs['ma_short_period'] >= kwargs['ma_mid_period']:
         ret['ma_mid_period'].append('輸入值應大於短天期 MA')
     if kwargs['ma_mid_period'] >= kwargs['ma_long_period']:

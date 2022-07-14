@@ -9,12 +9,13 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
 from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from .common import MAX_PRICE_LEN
 from .._context import TimeUnit, get_cp, ts_any
 from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
-
+MAX_PRICE_LEN = 2520
 
 def _get_ma(data, period) -> np.ndarray:
     new_shape = (period, data.shape[0]-period+1)
@@ -27,6 +28,10 @@ def _is_positive_int(value) -> str:
         return ''
     return '輸入值必須為正整數'
 
+def _is_bounded(value) -> str:
+    if value <= MAX_PRICE_LEN:
+        return ''
+    return f'輸入值超過合法上限 {MAX_PRICE_LEN}'
 
 params = [
     MacroParam(code='period_1', name='MA均線天數(最小)', desc='MA均線天數(最小)',
@@ -95,6 +100,8 @@ def _checker(**kwargs) -> dict:
     for key, value in kwargs.items():
         if _is_positive_int(value):
             ret[key].append(_is_positive_int(value))
+        if _is_bounded(value):
+            ret[key].append(_is_bounded(value))
     length = kwargs['period_1']
     period = '第一MA均線天數'
     if kwargs['period_2'] < length:
