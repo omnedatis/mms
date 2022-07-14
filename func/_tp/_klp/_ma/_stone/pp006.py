@@ -54,10 +54,11 @@ def arg_checker(period_1, period_2, period_3, period_4, period_5,
             lower = None
 
     # check `statistical_duration` and `min_occurence`
-    upper = None
     if 0 < trough_index < 7:
         upper = min([periods[trough_index+1] - periods[trough_index],
                      MAX_SMAPLES])
+    else:
+        upper = MAX_SMAPLES
     checker = LimitedVariable(lower=1, upper=upper)
     if not checker.check(statistical_duration):
         ret['statistical_duration'] = checker.message
