@@ -47,6 +47,11 @@ def check(**kwargs) -> Dict[str, str]:
         錯誤訊息字典, 內容為參數與其對應的錯誤原因
 
     """
+    def add_message(msgs: Dict[str, str], param_name: str, msg: str):
+        if param_name in msgs:
+            msgs[param_name] += msg
+        msgs[param_name] = msg
+
     def _is_positive_integer(value: int) -> bool:
         if isinstance(value, int) and value > 0:
             return True
@@ -62,19 +67,27 @@ def check(**kwargs) -> Dict[str, str]:
     results = {}
     # 每個值都必須為正整數
     if not _is_positive_integer(target_period):
-        results['target_period'] = "目標均線天期必須要為正整數; "
+        add_message(results, 'target_period', "目標均線天期必須要為正整數; ")
     if not _is_positive_integer(base_period):
-        results['base_period'] = "基準均線天期必須要為正整數; "
+        add_message(results, 'base_period', "基準均線天期必須要為正整數; ")
     if not _is_positive_integer(min_occurence):
-        results['min_occurence'] = "發生天數必須要為正整數; "
+        add_message(results, 'min_occurence', "發生天數必須要為正整數; ")
     if not _is_positive_integer(statistical_duration):
-        results['statistical_duration'] = "判斷天數必須要為正整數; "
+        add_message(results, 'statistical_duration', "判斷天數必須要為正整數; ")
     if target_period == base_period:
-        results['target_period'] = "目標天期與基底天期相等, 請修正為不同數值; "
-        results['base_period'] = "目標天期與基底天期相等, 請修正為不同數值; "
+        add_message(results, 'target_period', "目標天期與基底天期相等, 請修正為不同數值; ")
+        add_message(results, 'base_period', "目標天期與基底天期相等, 請修正為不同數值; ")
     if min_occurence > statistical_duration:
-        results['statistical_duration'] = "發生天數超過判斷天數, 請進行調整; "
-        results['min_occurence'] = "發生天數超過判斷天數, 請進行調整; "
+        add_message(results, 'statistical_duration', "發生天數超過判斷天數, 請進行調整; ")
+        add_message(results, 'min_occurence', "發生天數超過判斷天數, 請進行調整; ")
+    # 均線天期需要小於 2520 
+    if target_period > 2520:
+        add_message(results, 'target_period', "目標均線天期必須少於 2520; ")
+    if base_period > 2520:
+        add_message(results, 'base_period', "基準均線天期必須少於 2520; ")
+    # 判斷天期需要少於 252
+    if statistical_duration > 252:
+        add_message(results, 'statistical_duration', "判斷天數必須要少於 252 日; ")
     return results
 
 

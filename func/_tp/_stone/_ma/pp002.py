@@ -55,6 +55,11 @@ def check(**kwargs) -> Dict[str, str]:
         錯誤訊息字典, 內容為參數與其對應的錯誤原因
 
     """
+    def add_message(msgs: Dict[str, str], param_name: str, msg: str):
+        if param_name in msgs:
+            msgs[param_name] += msg
+        msgs[param_name] = msg
+
     def _is_positive_integer(value: int) -> bool:
         if isinstance(value, int) and value > 0:
             return True
@@ -69,24 +74,33 @@ def check(**kwargs) -> Dict[str, str]:
     results = {}
     # 每個值都必須為正整數
     if not _is_positive_integer(target_period):
-        results['target_period'] = "目標均線天期必須要為正整數; "
+        add_message(results, 'target_period', "目標均線天期必須要為正整數; ")
     for i, base_period in enumerate(base_periods):
         if not _is_positive_integer(base_period):
-            results[f'base_period_{i+1}'] = f"基準均線天期(t{i+1})必須要為正整數; "
+            add_message(results, f'base_period_{i+1}', f"基準均線天期(t{i+1})必須要為正整數; ")
     if not _is_positive_integer(statistical_duration):
-        results['statistical_duration'] = "判斷天數必須要為正整數; "
+        add_message(results, 'statistical_duration', "判斷天數必須要為正整數; ")
     if len(set(base_periods)) != len(base_periods):
         for base_period in set(base_periods):
             idxs = np.argwhere(np.array(base_periods) == base_period)
             if len(idxs) > 0:
                 for idx in idxs:
-                    results[f'base_period_{idx[0]+1}'] = "基礎均線天期發生重複, 請重新設定; "
+                    add_message(results, f'base_period_{idx[0]+1}', f"基礎均線天期發生重複, 請重新設定;")
     if len(set([target_period]+base_periods)) != (len(base_periods) + 1):
-        results['target_period'] = "目標均線天期與基礎均線天期重複, 請重新設定; "
+        add_message(results, 'target_period', "目標均線天期與基礎均線天期重複, 請重新設定; ")
         idxs = np.argwhere(np.array(base_periods) == target_period)
         if len(idxs) > 0:
             for idx in idxs:
-                results[f'base_period_{idx[0]+1}'] = "基礎均線天期發生重複, 請重新設定; "
+                add_message(results, f'base_period_{idx[0]+1}', f"基礎均線天期發生重複, 請重新設定; ")
+    # 均線天期需要小於 2520 
+    if target_period > 2520:
+        add_message(results, 'target_period', "目標均線天期必須少於 2520; ")
+    for i, base_period in enumerate(base_periods):
+        if base_period > 2520:
+            add_message(results, f'base_period_{i+1}', f"基準均線天期(t{i+1})必須少於 2520; ")
+    # 判斷天期需要少於 252
+    if statistical_duration > 252:
+        add_message(results, 'statistical_duration', "判斷天數必須要少於 252 日; ")
     return results
 
 
