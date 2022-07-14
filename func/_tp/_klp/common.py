@@ -5,7 +5,7 @@ Created on Wed Jun  1 16:49:39 2022
 @author: WaNiNi
 """
 
-from typing import Any, Callable, List, NamedTuple, Optional, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
 from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 _Number = Union[int, float]
