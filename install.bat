@@ -1,4 +1,4 @@
-call conda clean --all
+call conda clean --all -y
 md "../env"
 call conda remove -p "../env/mimosa" --force-remove -y --all
 md "../env/mimosa"
