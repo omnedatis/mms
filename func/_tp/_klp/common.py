@@ -5,9 +5,67 @@ Created on Wed Jun  1 16:49:39 2022
 @author: WaNiNi
 """
 
-from typing import Any, Callable, Dict, List, NamedTuple
+from typing import Any, Callable, List, NamedTuple, Optional, Union
 from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
+_Number = Union[int, float]
+
+class LimitedCondition(NamedTuple):
+    expr: Callable[[Any, ], bool]
+    message: str
+
+    def check(self, value):
+        return self.expr(value)
+
+
+class LimitedVariable(NamedTuple):
+    lower: Optional[_Number] = None
+    upper: Optional[_Number] = None
+    valids: Optional[List[_Number]] = None
+    invalids: Optional[List[_Number]] = None
+
+    @classmethod
+    def make(cls, lower=None, upper=None, valids=None, invalids=None):
+        return cls(lower, upper, valids, invalids)
+
+
+    def _check_valids(self, value):
+        if value not in self.valids:
+            return f"有效值為{','.join(self.valids)}"
+
+    def check(self, value):
+        if self.valids:
+            return value in self.valids
+        if self.lower is not None and value < self.lower:
+            return False
+        if self.upper is not None and value > self.upper:
+            return False
+        if self.invalids and value in self.invalids:
+            return False
+        return True
+
+    @property
+    def message(self):
+        if self.valids:
+            return f"有效值為{','.join(self.valids)}"
+        # range conditions
+        if self.lower is None:
+            if self.upper is None:
+                ret = ""
+            else:
+                ret = f"不得大於{self.upper}"
+        elif self.upper is None:
+            ret = f"不得小於於{self.lower}"
+        else:
+            ret = f"必須介於{self.lower}~{self.upper}"
+        if self.invalids:
+            msg = f"不得為{','.join(map(str, self.invalids))}"
+            if ret == "":
+                ret = msg
+            else:
+                ret = f"{ret}且{msg}"
+        return ret
+    
 class RawMacro(NamedTuple):
     code: str
     name: str

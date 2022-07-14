@@ -7,7 +7,11 @@ Created on Wed Jun  1 17:04:59 2022
 
 import numpy as np
 
-from ..common import get_ma, RawMacro, MacroParam, ParamType, PlotInfo, Ptype
+from ..common import (get_ma, RawMacro, LimitedCondition, LimitedVariable,
+                      MacroParam, ParamType, PlotInfo, Ptype)
+
+MAX_MA_PERIOD = 2520
+MAX_SMAPLES = 252
 
 def fix_values(values, sp, lp, n, sign, n_cover=0):
     for i in range(n):
@@ -22,7 +26,7 @@ def fix_values(values, sp, lp, n, sign, n_cover=0):
             if i < n_cover:
                 values[sp+n_cover: ] -= (tar - base) * (lp - sp) / (lp - sp - n_cover + i)
             else:
-                values[i+sp: ] -= (tar - base) 
+                values[i+sp: ] -= (tar - base)
     return values
 
 def gen_cps4arranged_mas(periods, idx, n, sign=1, mu=0.002, sigma=0.005):
@@ -56,7 +60,7 @@ def gen_cps4arranged_mas_by_random_test(periods, idx, n, sign=1, sigma=0.01, max
         temp = np.cumsum(cps, axis=1)
         ret = np.concatenate([temp[:,:period] / np.arange(1, period+1),
                               (temp[:,period:] - temp[:,:-period]) / period], axis=1)
-        return ret       
+        return ret
     N = 10000
     L = periods[-1] + n - 1
     for i in range(max_times):
@@ -77,7 +81,7 @@ def gen_cps4arranged_mas_by_random_test(periods, idx, n, sign=1, sigma=0.01, max
         if conditions.any():
             return cps[conditions][0]
     raise RuntimeError('try over times')
- 
+
 def gen_cps4arranged_mas_by_random(periods, idx, m, n, sign=1, sigma=0.01, batch_size=10000, max_times=10):
     def get_ma(cps, period):
         if period <= 1:
@@ -85,7 +89,7 @@ def gen_cps4arranged_mas_by_random(periods, idx, m, n, sign=1, sigma=0.01, batch
         temp = np.cumsum(cps, axis=1)
         ret = np.concatenate([temp[:,:period] / np.arange(1, period+1),
                               (temp[:,period:] - temp[:,:-period]) / period], axis=1)
-        return ret    
+        return ret
     N = batch_size
     L = periods[-1] + m - 1
     for i in range(max_times):
@@ -106,7 +110,7 @@ def gen_cps4arranged_mas_by_random(periods, idx, m, n, sign=1, sigma=0.01, batch
         if conditions.any():
             return cps[conditions][0]
     return None
-    
+
 def check_cps4arranged_mas(cps, periods, idx, m, n, sign=1):
     mas = [get_ma(cps, p).round(2)[-m:] for p in periods]
     ret = []
