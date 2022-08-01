@@ -204,6 +204,14 @@ class TimeSeriesSampling(TimeSeriesRolling):
             values[masks] = np.nan
         return pd.DataFrame(values, index=index)
 
+    def apply(self, func: Callable, name: str) -> 'TimeSeries':
+        index = self._index
+        values = func(self._values.values.T).T
+        masks = self._values.masks.any(axis=1)
+        name = f'{self._name}.{name}()'
+        return NumericTimeSeries(data=values, index=index,
+                                 name=name, masks=masks)
+
     def first(self) -> 'TimeSeries':
         """The 1st element of each time-series in group."""
         index = self._index
