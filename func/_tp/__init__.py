@@ -8,11 +8,15 @@ from ._jack import (jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
                     jack_ma_through_price_down, jack_ma_through_price_up,
                     jack_ma_through_ma_down_trend, jack_ma_through_ma_up_trend)
 from func._tp._stone._ma import (stone_pp000, stone_pp001, stone_pp002)
+<<<<<<< HEAD
 from func._tp._klp._cc import (klp_cc_bullish_doji,
                                klp_cc_bearish_doji,
                                klp_cc_bullish_dragonfly_doji,
                                klp_cc_bearish_dragonfly_doji)
 
+=======
+from func._tp._sakata._wj import wj001
+>>>>>>> dc8ab66 (feat: 新增酒田戰法 WJ 版本型態)
 
 __all__ = []
 __all__ += ['stone_pp000', 'stone_pp001', 'stone_pp002']
@@ -21,5 +25,9 @@ __all__ += ['stone_pp003', 'stone_pp004', 'stone_pp005', 'stone_pp006',
 __all__ += ['jack_ma_order_up', 'jack_ma_order_thick', 'jack_ma_order_down',
             'jack_ma_through_price_down', 'jack_ma_through_price_up',
             'jack_ma_through_ma_down_trend', 'jack_ma_through_ma_up_trend']
+<<<<<<< HEAD
 __all__ += ['klp_cc_bullish_doji', 'klp_cc_bearish_doji']
 __all__ += ['klp_cc_bullish_dragonfly_doji', 'klp_cc_bearish_dragonfly_doji']
+=======
+__all__ += ['wj001']
+>>>>>>> dc8ab66 (feat: 新增酒田戰法 WJ 版本型態)

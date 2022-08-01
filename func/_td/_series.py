@@ -73,7 +73,7 @@ class TimeSeriesRolling:
     def first(self) -> 'TimeSeries':
         """The 1st element of each time-series in group."""
         def _first(values, masks=None):
-            if masks is None:
+            if masks is None or masks.all():
                 return values[0]
             else:
                 return values[~masks][0]
@@ -93,7 +93,7 @@ class TimeSeriesRolling:
     def max(self) -> 'TimeSeries':
         """Max of each time-series in group."""
         def _max(values, masks=None):
-            if masks is None:
+            if masks is None or masks.all():
                 return values.max()
             else:
                 return values[~masks].max()
@@ -114,7 +114,7 @@ class TimeSeriesRolling:
     def min(self) -> 'TimeSeries':
         """Min of each time-series in group."""
         def _min(values, masks=None):
-            if masks is None:
+            if masks is None or masks.all():
                 return values.min()
             else:
                 return values[~masks].min()
@@ -135,7 +135,7 @@ class TimeSeriesRolling:
     def last(self) -> 'TimeSeries':
         """The last element of each time-series in group."""
         def _first(values, masks=None):
-            if masks is None:
+            if masks is None or masks.all():
                 return values[-1]
             else:
                 return values[~masks][-1]
@@ -146,6 +146,48 @@ class TimeSeriesRolling:
             values = np.array(list(map(_first, self._values.values, self._values.masks)))
         masks = None
         name = f'{self._name}.first()'
+        if np.issubdtype(values.dtype, np.number):
+            return NumericTimeSeries(values, index=index, name=name, masks=masks)
+        if np.issubdtype(values.dtype, np.bool):
+            return BooleanTimeSeries(values, index=index, name=name, masks=masks)
+        return TimeSeries(values, index=index, name=name, masks=masks)
+    
+    def mean(self) -> 'TimeSeries':
+        """Mean of each time-series in group."""
+        def _mean(values, masks=None):
+            if masks is None or masks.all():
+                return values.mean()
+            else:
+                return values[~masks].mean()
+        index = self._index
+        if self._values.masks is None:
+            values = np.array([each.mean() for each in self._values.values])
+            masks = None
+        else:
+            values = np.array(list(map(_mean, self._values.values, self._values.masks)))
+            masks = np.array([each.any() for each in self._values.masks])
+        name = f'{self._name}.mean()'
+        if np.issubdtype(values.dtype, np.number):
+            return NumericTimeSeries(values, index=index, name=name, masks=masks)
+        if np.issubdtype(values.dtype, np.bool):
+            return BooleanTimeSeries(values, index=index, name=name, masks=masks)
+        return TimeSeries(values, index=index, name=name, masks=masks)
+    
+    def std(self) -> 'TimeSeries':
+        """Mean of each time-series in group."""
+        def _std(values, masks=None):
+            if masks is None or masks.all():
+                return values.std()
+            else:
+                return values[~masks].std()
+        index = self._index
+        if self._values.masks is None:
+            values = np.array([each.std() for each in self._values.values])
+            masks = None
+        else:
+            values = np.array(list(map(_std, self._values.values, self._values.masks)))
+            masks = np.array([each.any() for each in self._values.masks])
+        name = f'{self._name}.std()'
         if np.issubdtype(values.dtype, np.number):
             return NumericTimeSeries(values, index=index, name=name, masks=masks)
         if np.issubdtype(values.dtype, np.bool):
