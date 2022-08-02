@@ -797,21 +797,24 @@ def api_pattern_get_plot():
     plot_infos = get_plot(func_code, kwargs)
     for pinfo in plot_infos:
         if pinfo.ptype == Ptype.CANDLE:
+            cc_data = []
             for index, each in enumerate(pinfo.data):
                 group = {
-                    0: Ptype.OP.value,
-                    1: Ptype.HP.value,
-                    2: Ptype.LP.value,
-                    3: Ptype.CP.value
-                }[index]
-                ret.append({
-                    "figType": pinfo.ptype.value,
-                    "figName": pinfo.title,
-                    "figData": [{
+                        0: Ptype.OP.value,
+                        1: Ptype.HP.value,
+                        2: Ptype.LP.value,
+                        3: Ptype.CP.value
+                    }[index]
+                cc_data.extend([{
                         "group": group,
                         "index": idx,
                         "value": value
                     } for idx, value in enumerate(each.tolist())]
+                )
+            ret.append({
+                    "figType": pinfo.ptype.value,
+                    "figName": pinfo.title,
+                    "figData": cc_data
                 })
         else:
             ret.append({
