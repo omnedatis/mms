@@ -797,7 +797,7 @@ def api_pattern_get_plot():
     plot_infos = get_plot(func_code, kwargs)
     for pinfo in plot_infos:
         if pinfo.ptype == Ptype.CANDLE:
-            for index, each in pinfo.data:
+            for index, each in enumerate(pinfo.data):
                 group = {
                     0: Ptype.OP.value,
                     1: Ptype.HP.value,
