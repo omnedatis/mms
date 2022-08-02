@@ -186,7 +186,7 @@ def plot(**kwargs) -> List[PlotInfo]:
     result = [PlotInfo(
         ptype=Ptype.CANDLE, 
         title=f"吊人線_{kwargs['period_type']}", 
-        data=data)]
+        data=data.T)]
     return result
 
 def frame(**kwargs) -> int:
