@@ -8,7 +8,7 @@ from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj_001'
+code = 'wj001'
 name = '商智酒田戰法指標(WJ版)-吊人線'
 description = """
   
