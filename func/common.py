@@ -69,7 +69,7 @@ class MacroParam(NamedTuple):
                'PARAM_NAME': self.name,
                'PARAM_DESC': self.desc,
                'PARAM_DEFAULT': self.default,
-               'PARAM_TYPE': self.dtype.name}
+               'PARAM_TYPE': self.dtype.code}
         return ret
 
 class Ptype(Enum):
