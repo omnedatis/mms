@@ -559,6 +559,8 @@ class QueueManager:
                 else:
                     ret = func(*args)
             except Exception as esp:
+                for each in self._queues.values():
+                    each.is_paused = False
                 raise esp
             for each in self._queues.values():
                 each.is_paused = False
@@ -813,6 +815,7 @@ def add_pattern(pid):
     get_db().set_pattern_execution_complete(sid)
 
 def del_pattern_data(pattern_id:str):
+    logging.info('Start delete Pattern model')
     get_db().del_pattern_data(pattern_id)
 
 def get_market_rise_prob(period, market_type=None, category_code=None):
