@@ -8,7 +8,7 @@ from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj_000'
+code = 'wj_001'
 name = '商智酒田戰法指標(WJ版)-吊人線'
 description = """
   
@@ -146,7 +146,7 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj000 的範例圖製作函式
+    """wj001 的範例圖製作函式
 
     判斷規則:
     1. 型態發生前會有上升區段，或處於市場頂部
