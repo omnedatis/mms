@@ -411,6 +411,11 @@ def remove_model(model_id):
     logging.info('End model remove')
 
 def del_model_execution(model_id: str):
+    MT_MANAGER.acquire(model_id).switch_off()
+    MT_MANAGER.release(model_id)
+    while MT_MANAGER.exists(model_id):
+        time.sleep(1)
+    logging.info("Start model execution deletion")
     get_db().del_model_execution(model_id)
 
 def del_model_data(model_id: str):
