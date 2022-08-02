@@ -59,6 +59,12 @@ class Macro(NamedTuple):
         kwargs = self.filter_arguments(**kwargs)
         return self.arg_checker(**kwargs)
 
+    def to_dict(self):
+        ret = {'MACRO_NAME': self.name,
+               'MACRO_DESC': self.description,
+               'FUNC_CODE': self.code,
+               'PARAM': [each.to_dict() for each in self.parameters]}
+        return ret
 
 def gen_macro(recv: _Macro) -> Macro:
     ret = Macro(code=recv.code, name=recv.name, description=recv.desc,
@@ -69,9 +75,14 @@ def gen_macro(recv: _Macro) -> Macro:
     return ret
 
 
-class MacroManagerBase(Enum):
+class MacroManagerBase(Macro, Enum):
     @classmethod
     def get(cls, name: str) -> Optional[Macro]:
         if name in cls._member_map_:
             return cls._member_map_[name].value
         return None
+
+    @classmethod
+    def dump(cls):
+        ret = [each.to_dict() for each in cls]
+        return ret

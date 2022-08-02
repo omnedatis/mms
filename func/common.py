@@ -64,6 +64,14 @@ class MacroParam(NamedTuple):
     dtype: ParamType
     default: Any
 
+    def to_dict(self):
+        ret = {'PARAM_CODE': self.code,
+               'PARAM_NAME': self.name,
+               'PARAM_DESC': self.desc,
+               'PARAM_DEFAULT': self.default,
+               'PARAM_TYPE': self.dtype.name}
+        return ret
+
 class Ptype(Enum):
     CANDLE = 'Candle'
     OP = 'OP'
