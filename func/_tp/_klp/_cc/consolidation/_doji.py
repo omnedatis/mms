@@ -78,23 +78,23 @@ def _bullish(cct: Candlestick) -> NumericTimeSeries:
     ret = cond_0 & cond_1
     return ret
 
-def _macro(market: str, period_type: str):
+def _bullish_macro(market: str, period_type: str):
     tunit = TimeUnit.get(period_type)
     cct = get_candlestick(market, tunit)
     ret = _bullish(cct).to_pandas().rename(f'{cct.name}.IsBullish{_ENG_NAME}')
     return ret
 
-def _sample(period_type: str):
+def _bullish_sample(period_type: str):
     tunit = TimeUnit.get(period_type)
     ret = [PlotInfo(Ptype.CANDLE, 'K', _DEFAULT_SAMPLES['bullish'][tunit])]
     return ret
 
-def _interval(**kwargs):
+def _bullish_interval(**kwargs):
     return 1
 
 (klp_cc_bullish_doji
-) = Macro(code, name, description, COMMON_PARAS, _macro,
-          arg_checker, _sample, _interval)
+) = Macro(code, name, description, COMMON_PARAS, _bullish_macro,
+          arg_checker, _bullish_sample, _bullish_interval)
 
 # Bearish Doji
 code = 'klp_cc_bearish_doji'
@@ -115,21 +115,22 @@ def _bearish(cct: Candlestick) -> NumericTimeSeries:
     ret = cond_0 & cond_1
     return ret
 
-def _macro(market: str, period_type: str):
+def _bearish_macro(market: str, period_type: str):
     tunit = TimeUnit.get(period_type)
     cct = get_candlestick(market, tunit)
     ret = _bearish(cct).to_pandas().rename(f'{cct.name}.IsBearish{_ENG_NAME}')
     return ret
 
-def _sample(period_type: str):
+def _bearish_sample(period_type: str):
     tunit = TimeUnit.get(period_type)
     ret = [PlotInfo(Ptype.CANDLE, 'K', _DEFAULT_SAMPLES['bearish'][tunit])]
     return ret
 
-def _interval(**kwargs):
+def _bearish_interval(**kwargs):
     return 1
 
 (klp_cc_bearish_doji
-) = Macro(code, name, description, COMMON_PARAS, _macro,
-          arg_checker, _sample, _interval)
+) = Macro(code, name, description, COMMON_PARAS, _bearish_macro,
+          arg_checker, _bearish_sample, _bearish_interval)
+
 
