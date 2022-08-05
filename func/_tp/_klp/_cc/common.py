@@ -251,7 +251,7 @@ class CandlestickSettings(_CandlestickSetting, Enum):
                                            2.0,
                                            _StaticMethods.MEAN)
 
-_TREND_PERIODS = [1, 3, 6, 10]
+_TREND_PERIODS = [1, 2, 3, 5]
 
 
 class Candlestick(_CandleStickBase):
@@ -472,6 +472,40 @@ class Candlestick(_CandleStickBase):
             ret = ret & each
         return ret
 
+    def _is_strictly_bullish(self) -> BooleanTimeSeries:
+        #conds = [sma >= lma for sma, lma in zip(self._mas[:-1], self._mas[1:])]
+        # conds = ([sma >= lma for sma, lma
+        #           in zip(self._mas[:-1], self._mas[1:])] +
+        #          [sml >= lml for sml, lml
+        #           in zip(self._mls[:-1], self._mls[1:])] +
+        #          [smh >= lmh for smh, lmh
+        #           in zip(self._mhs[:-1], self._mhs[1:])])
+        conds = ([sma >= lma for sma, lma
+                  in zip(self._mas[:-1], self._mas[1:])] +
+                  [sml >= lml for sml, lml
+                  in zip(self._mls[:-1], self._mls[1:])])
+        ret = conds[0]
+        for each in conds[1:]:
+            ret = ret & each
+        return ret
+
+    def _is_strictly_bearish(self) -> BooleanTimeSeries:
+        #conds = [sma <= lma for sma, lma in zip(self._mas[:-1], self._mas[1:])]
+        # conds = ([sma >= lma for sma, lma
+        #           in zip(self._mas[:-1], self._mas[1:])] +
+        #          [sml <= lml for sml, lml
+        #           in zip(self._mls[:-1], self._mls[1:])] +
+        #          [smh <= lmh for smh, lmh
+        #           in zip(self._mhs[:-1], self._mhs[1:])])
+        conds = ([sma <= lma for sma, lma
+                  in zip(self._mas[:-1], self._mas[1:])] +
+                  [smh <= lmh for smh, lmh
+                  in zip(self._mhs[:-1], self._mhs[1:])])
+        ret = conds[0]
+        for each in conds[1:]:
+            ret = ret & each
+        return ret
+
     @property
     def is_bullish(self):
         pkey = 'IsBullish'
@@ -484,6 +518,20 @@ class Candlestick(_CandleStickBase):
         pkey = 'IsBearish'
         if pkey not in self._patterns:
             self._patterns[pkey] = self._is_bearish()
+        return self._patterns[pkey]
+
+    @property
+    def is_strictly_bullish(self):
+        pkey = 'IsStrictlyBullish'
+        if pkey not in self._patterns:
+            self._patterns[pkey] = self._is_strictly_bullish()
+        return self._patterns[pkey]
+
+    @property
+    def is_strictly_bearish(self):
+        pkey = 'IsStrictlyBearish'
+        if pkey not in self._patterns:
+            self._patterns[pkey] = self._is_strictly_bearish()
         return self._patterns[pkey]
 
     @property
