@@ -17,7 +17,7 @@ from func._tp import (
     klp_cc_dragonfly_doji,
     klp_cc_strictly_bullish_dragonfly_doji,
     klp_cc_strictly_bearish_dragonfly_doji,
-    wj001)
+    wj001, wj002, wj003, wj004)
 
 class MacroManager(MacroManagerBase):
     jack_ma_order_up = gen_macro(jack_ma_order_up)
@@ -48,3 +48,6 @@ class MacroManager(MacroManagerBase):
     klp_cc_strictly_bullish_dragonfly_doji = gen_macro(klp_cc_strictly_bullish_dragonfly_doji)
     klp_cc_strictly_bearish_dragonfly_doji = gen_macro(klp_cc_strictly_bearish_dragonfly_doji)
     wj001 = gen_macro(wj001)
+    wj002 = gen_macro(wj002)
+    wj003 = gen_macro(wj003)
+    wj004 = gen_macro(wj004)

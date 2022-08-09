@@ -19,7 +19,7 @@ from func._tp._klp._cc import (klp_cc_bullish_doji,
                                klp_cc_strictly_bullish_dragonfly_doji,
                                klp_cc_strictly_bearish_dragonfly_doji)
 
-from func._tp._sakata._wj import wj001
+from func._tp._sakata._wj import wj001, wj002, wj003, wj004
 
 __all__ = []
 __all__ += ['stone_pp000', 'stone_pp001', 'stone_pp002']
@@ -38,4 +38,4 @@ __all__ += ['klp_cc_bullish_dragonfly_doji',
             'klp_cc_dragonfly_doji',
             'klp_cc_strictly_bullish_dragonfly_doji',
             'klp_cc_strictly_bearish_dragonfly_doji']
-__all__ += ['wj001']
+__all__ += ['wj001', 'wj002', 'wj003', 'wj004']
