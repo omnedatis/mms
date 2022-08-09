@@ -179,29 +179,30 @@ class CandlestickSettings(_CandlestickSetting, Enum):
     NEAR = _CandlestickSetting('Near / Close To',
                                _CandlestickProperties.AMPLITUDE,
                                #5,
-                               {_DAY: 15, _WEEK: 10, _MONTH: 6},
+                               {_DAY: 30, _WEEK: 20, _MONTH: 12},
                                0.2,
                                _StaticMethods.MEAN)
 
     FAR_FROM = _CandlestickSetting('Far From',
                                    _CandlestickProperties.AMPLITUDE,
                                    #5,
-                                   {_DAY: 15, _WEEK: 10, _MONTH: 6},
+                                   {_DAY: 30, _WEEK: 20, _MONTH: 12},
                                    0.6,
                                    _StaticMethods.MEAN)
 
     EQUAL_TO = _CandlestickSetting('Equal To',
                                    _CandlestickProperties.AMPLITUDE,
                                    #5,
-                                   {_DAY: 15, _WEEK: 10, _MONTH: 6},
+                                   {_DAY: 30, _WEEK: 20, _MONTH: 12},
                                    0.05,
                                    _StaticMethods.MEAN)
 
+    # consistent with equal-to because doji-body means close equals to open
     DOJI_BODY = _CandlestickSetting('Doji Body / Very-Short Body',
                                     _CandlestickProperties.AMPLITUDE,
                                     #10,
                                     {_DAY: 30, _WEEK: 20, _MONTH: 12},
-                                    0.1,
+                                    0.05,
                                     _StaticMethods.MEAN)
 
     SHORT_BODY = _CandlestickSetting('Short Body',
@@ -229,7 +230,7 @@ class CandlestickSettings(_CandlestickSetting, Enum):
                                          _CandlestickProperties.AMPLITUDE,
                                          #10,
                                          {_DAY: 30, _WEEK: 20, _MONTH: 12},
-                                         0.1,
+                                         0.05,
                                          _StaticMethods.MEAN)
 
     SHORT_SHADOW = _CandlestickSetting('Short Shadow',
@@ -251,8 +252,9 @@ class CandlestickSettings(_CandlestickSetting, Enum):
                                            2.0,
                                            _StaticMethods.MEAN)
 
-_TREND_PERIODS = [1, 2, 3, 5]
-
+_TREND_PERIODS = {TimeUnit.DAY: [1, 3, 6, 10],
+                  TimeUnit.WEEK: [1, 2, 3, 5],
+                  TimeUnit.MONTH: [1,2,3]}
 
 class Candlestick(_CandleStickBase):
     def __init__(self, data: MarketData, name: str, tunit: TimeUnit):
@@ -379,19 +381,23 @@ class Candlestick(_CandleStickBase):
                 period = period[tunit]
             factor = setting.factor
             ret = setting.method(feature, period, tunit) * factor
+            if setting.feature == _CandlestickProperties.REALBODY and period <= 1:
+                additional = self._get_setting(CandlestickSettings.DOJI_BODY) * factor
+                ret = NumericTimeSeries.max(ret, additional)
             self._settings[setting.name] = ret
         ret = self._settings[setting.name]
         ret.rename(f'{self._name}.{setting.name}')
         return ret
 
     def _get_mas(self) -> List[NumericTimeSeries]:
-        cur_p = _TREND_PERIODS[0]
+        periods = _TREND_PERIODS[self._tunit]
+        cur_p = periods[0]
         cur_s = _moving_sum(self.close, cur_p, self._tunit)
         ma_ = cur_s / cur_p
         ma_.rename(f'{self._name}.MA[0:{cur_p}]')
         ret = [ma_]
         prev_p, prev_s = cur_p, cur_s
-        for cur_p in _TREND_PERIODS[1:]:
+        for cur_p in periods[1:]:
             cur_s = _moving_sum(self.close, cur_p, self._tunit)
             ma_ = (cur_s - prev_s) / (cur_p - prev_p)
             ma_.rename(f'{self._name}.MA[{prev_p}:{cur_p}]')
@@ -400,12 +406,13 @@ class Candlestick(_CandleStickBase):
         return ret
 
     def _get_mhs(self) -> List[NumericTimeSeries]:
-        cur_p = _TREND_PERIODS[0]
+        periods = _TREND_PERIODS[self._tunit]
+        cur_p = periods[0]
         mh_ = _moving_max(self.high, cur_p, 0, self._tunit)
         mh_.rename(f'{self._name}.MH[0:{cur_p}]')
         ret = [mh_]
         prev_p = cur_p
-        for cur_p in _TREND_PERIODS[1:]:
+        for cur_p in periods[1:]:
             mh_ = _moving_max(self.high, cur_p, prev_p, self._tunit)
             mh_.rename(f'{self._name}.MH[{prev_p}:{cur_p}]')
             ret.append(mh_)
@@ -413,12 +420,13 @@ class Candlestick(_CandleStickBase):
         return ret
 
     def _get_mls(self) -> List[NumericTimeSeries]:
-        cur_p = _TREND_PERIODS[0]
+        periods = _TREND_PERIODS[self._tunit]
+        cur_p = periods[0]
         ml_ = _moving_min(self.low, cur_p, 0, self._tunit)
         ml_.rename(f'{self._name}.ML[0:{cur_p}]')
         ret = [ml_]
         prev_p = cur_p
-        for cur_p in _TREND_PERIODS[1:]:
+        for cur_p in periods[1:]:
             ml_ = _moving_min(self.low, cur_p, prev_p, self._tunit)
             ml_.rename(f'{self._name}.ml[{prev_p}:{cur_p}]')
             ret.append(ml_)
@@ -535,7 +543,7 @@ class Candlestick(_CandleStickBase):
         return self._patterns[pkey]
 
     @property
-    def _near_tolerance(self) -> NumericTimeSeries:
+    def near_tolerance(self) -> NumericTimeSeries:
         """The tolerance for 'Near / Close To'. """
         return self._get_setting(CandlestickSettings.NEAR)
 
@@ -582,12 +590,18 @@ class Candlestick(_CandleStickBase):
     @property
     def _long_shadow_threshold(self) -> NumericTimeSeries:
         """The threshold for 'Long Shadow'. """
-        return self._get_setting(CandlestickSettings.LONG_SHADOW)
+        ret = NumericTimeSeries.min(
+            self._get_setting(CandlestickSettings.LONG_SHADOW),
+            self._long_body_threshold)
+        return ret
 
     @property
     def _verylong_shadow_threshold(self) -> NumericTimeSeries:
         """The threshold for 'Very-Long Shadow'. """
-        return self._get_setting(CandlestickSettings.VERY_LONG_SHADOW)
+        ret = NumericTimeSeries.min(
+            self._get_setting(CandlestickSettings.VERY_LONG_SHADOW),
+            self._verylong_body_threshold)
+        return ret
 
     @classmethod
     def _make(cls, open_: NumericTimeSeries, high: NumericTimeSeries,
@@ -654,13 +668,13 @@ class Candlestick(_CandleStickBase):
     def _is_long_body(self) -> BooleanTimeSeries:
         threshold = self._long_body_threshold
         realbody = self.realbody
-        ret = realbody > threshold
+        ret = realbody >= threshold
         return ret
 
     def _is_verylong_body(self) -> BooleanTimeSeries:
         threshold = self._verylong_body_threshold
         realbody = self.realbody
-        ret = realbody > threshold
+        ret = realbody >= threshold
         return ret
 
     @property
@@ -668,8 +682,9 @@ class Candlestick(_CandleStickBase):
         """With Short RealBody."""
         pkey = 'IsShortBody'
         if pkey not in self._patterns:
-            ret = ((self._is_short_body() | self.is_doji_body) &
-                   ~self._is_long_body())
+            # ret = (self._is_short_body() | self.is_doji_body) &
+            #        ~self._is_long_body()) <- Strictly
+            ret = self._is_short_body() | self.is_doji_body # only for this version
             ret.rename(f'{self._name}.IsShortBody')
             self._patterns[pkey] = ret
         return self._patterns[pkey]
@@ -679,7 +694,8 @@ class Candlestick(_CandleStickBase):
         """With Long RealBody."""
         pkey = 'IsLongBody'
         if pkey not in self._patterns:
-            ret = self._is_long_body() & ~self._is_short_body()
+            # ret = self._is_long_body() & ~self._is_short_body() <- Strictly
+            ret = self._is_long_body() # only for this version
             ret.rename(f'{self._name}.IsLongBody')
             self._patterns[pkey] = ret
         return self._patterns[pkey]
@@ -689,14 +705,15 @@ class Candlestick(_CandleStickBase):
         """With Very-Long RealBody."""
         pkey = 'IsVeryLongBody'
         if pkey not in self._patterns:
-            ret = self.is_long_body & self._is_verylong_body()
+            # ret = self.is_long_body & self._is_verylong_body() <- Strictly
+            ret = self._is_verylong_body() # only for this version
             ret.rename(f'{self._name}.IsVeryLongBody')
             self._patterns[pkey] = ret
         return self._patterns[pkey]
 
     def _is_without_shadow(self, shadow):
         tolerance = self._without_shadow_tolerance
-        return shadow < tolerance
+        return shadow <= tolerance
 
     def _is_short_shadow(self, shadow):
         threshold = self._short_shadow_threshold
@@ -704,11 +721,11 @@ class Candlestick(_CandleStickBase):
 
     def _is_long_shadow(self, shadow):
         threshold = self._long_shadow_threshold
-        return shadow > threshold
+        return shadow >= threshold
 
     def _is_verylong_shadow(self, shadow):
         threshold = self._verylong_shadow_threshold
-        return shadow > threshold
+        return shadow >= threshold
 
     @property
     def is_without_uppershadow(self):
@@ -737,7 +754,7 @@ class Candlestick(_CandleStickBase):
         if pkey not in self._patterns:
             ret = ((self._is_short_shadow(self.uppershadow) |
                     self._is_without_shadow(self.uppershadow)) &
-                   ~self._is_long_shadow(self.uppershadow))
+                    ~self._is_long_shadow(self.uppershadow))
             ret.rename(f'{self._name}.IsShortUpperShadow')
             self._patterns[pkey] = ret
         return self._patterns[pkey]
@@ -749,7 +766,7 @@ class Candlestick(_CandleStickBase):
         if pkey not in self._patterns:
             ret = ((self._is_short_shadow(self.lowershadow) |
                     self._is_without_shadow(self.lowershadow)) &
-                   ~self._is_long_shadow(self.lowershadow))
+                    ~self._is_long_shadow(self.lowershadow))
             ret.rename(f'{self._name}.IsShortLowerShadow')
             self._patterns[pkey] = ret
         return self._patterns[pkey]
@@ -835,11 +852,9 @@ def get_lookback_length(settings: List[CandlestickSettings], tunit: TimeUnit,
             ret = max([ret, each.period[tunit]])
         else:
             ret = max([ret, each.period])
-    if with_prefix_trend and ret < _TREND_PERIODS[-1]:
-        ret = _TREND_PERIODS[-1]
+    if with_prefix_trend and ret < _TREND_PERIODS[tunit][-1]:
+        ret = _TREND_PERIODS[tunit][-1]
     return ret
-
-LEADING_LEN = 5
 
 _SIGMA_TUNIT_MAP = {TimeUnit.DAY: 0.02,
                     TimeUnit.WEEK: 0.05,
@@ -904,6 +919,7 @@ class _RandomMarketDataProvider(MarketDataProvider):
 
 _MAX_RETRY_TIMES = 100
 def get_sample(macro: Callable, period_type: str, sign: int) -> np.ndarray:
+    interval = macro.get_interval(period_type=period_type)
     set_market_data_provider(_RandomMarketDataProvider())
     for i in range(_MAX_RETRY_TIMES):
         seed = f'{datetime.datetime.now()}_{random.random()}'
@@ -916,6 +932,6 @@ def get_sample(macro: Callable, period_type: str, sign: int) -> np.ndarray:
         cct = get_candlestick(mid, TimeUnit.DAY)
         for idx in np.argwhere(macro.evaluate(mid, period_type='day'
                                               ).values > 0).flatten().tolist():
-            if idx >= LEADING_LEN:
-                return cct.values[idx-LEADING_LEN: idx+1]
+            if idx >= interval:
+                return cct.values[idx-interval+1: idx+1]
     raise TimeoutError()
