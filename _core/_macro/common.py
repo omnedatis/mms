@@ -22,6 +22,8 @@ class Macro(NamedTuple):
     sample_generator: Callable
     interval_evaluator: Callable
     arg_checker: Callable
+    db_version: str = ""
+    py_version: str = ""
 
     def filter_arguments(self, **kwargs) -> Dict[str, Any]:
         ret = {}
@@ -68,6 +70,7 @@ class Macro(NamedTuple):
 
 def gen_macro(recv: _Macro) -> Macro:
     ret = Macro(code=recv.code, name=recv.name, description=recv.desc,
+                db_version=recv.db_ver, py_version=recv.py_ver,
                 parameters=recv.params, macro=recv.run,
                 arg_checker=recv.check,
                 sample_generator=recv.plot,

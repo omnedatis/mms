@@ -102,6 +102,8 @@ class Macro(NamedTuple):
     check: Callable[..., Dict[str, str]]
     plot: List[PlotInfo]
     frame: Callable[..., int]
+    db_ver: str = ""
+    py_ver: str = ""
 
 if __name__ == '__main__':
     assert int is ParamType.get('int').type
