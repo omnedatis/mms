@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 import pandas as pd
 
-from func.common import MacroParam, PlotInfo
+from func.common import Dtype, MacroParam, PlotInfo, ParamEnumBase
 from func.common import Macro as _Macro
 
 class Macro(NamedTuple):
@@ -88,4 +88,20 @@ class MacroManagerBase(Macro, Enum):
     @classmethod
     def dump(cls):
         ret = [each.to_dict() for each in cls]
+        return ret
+
+class MacroParaEnumManagerBase(Dtype, Enum):
+    @classmethod
+    def get(cls, dtype: str, value: str) -> Any:
+        for each in cls:
+            if each.value.code == dtype:
+                return each.value.type.get(value)
+        return None
+
+    @classmethod
+    def dump(cls):
+        values = []
+        for each in cls:
+            values += [[each.name, element.value.code, element.value.name] for element in each.value.type]
+        ret = pd.DataFrame(values, columns=['PARAM_CODE', 'VALUE_CODE', 'VALUE_NAME'])
         return ret

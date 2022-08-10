@@ -3,7 +3,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
 from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
@@ -50,11 +50,11 @@ description = """
 """
 params = [
     MacroParam(
-        code='period_type', 
-        name='K線週期', 
+        code='period_type',
+        name='K線週期',
         desc='希望以哪種 K 線週期來偵測傘型線',
-        dtype=ParamType.STR, 
-        default='day')
+        dtype=PeriodType,
+        default=PeriodType.type.DAY)
 ]
 
 def func(market_id:str, **kwargs) -> pd.Series:
@@ -81,7 +81,7 @@ def func(market_id:str, **kwargs) -> pd.Series:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj004'")
@@ -109,7 +109,7 @@ def func(market_id:str, **kwargs) -> pd.Series:
     # 4. 下影線很長
     lsb_ratio = candle.lower_shadow/candle.body
     cond_4 = lsb_ratio >= 2
-    
+
     cond = cond_1 & cond_2 & cond_3 & cond_4
     result = cond.to_pandas()
     return result
@@ -130,14 +130,14 @@ def check(**kwargs) -> Dict[str, str]:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj004'")
-    
+
     results = {}
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except ValueError as esp:
         results['period_type'] = f"invalid argument '{kwargs['period_type']}'"
     return results
@@ -163,7 +163,7 @@ def plot(**kwargs) -> List[PlotInfo]:
         畫圖所使用的多條序列與序列名稱
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj004'")
@@ -181,8 +181,8 @@ def plot(**kwargs) -> List[PlotInfo]:
     ]+[MokeCandle.make(KType.DOJI_UMBRELLA)]
     data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
-        ptype=Ptype.CANDLE, 
-        title=f"傘型線_{kwargs['period_type']}", 
+        ptype=Ptype.CANDLE,
+        title=f"傘型線_{kwargs['period_type']}",
         data=data.T)]
     return result
 
@@ -201,7 +201,7 @@ def frame(**kwargs) -> int:
         現象發生時的範圍大小
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj004'")

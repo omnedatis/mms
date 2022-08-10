@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" 
+"""
 Created on Thur Jun  2 10:30:29 2022
 
 @author: Jeff
@@ -8,7 +8,7 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from .common import MAX_PRICE_LEN
 from .._context import TimeUnit
 from .._context import TechnicalIndicator as TI
@@ -42,7 +42,7 @@ params = [
     MacroParam(code='ma_short_period', name='短期均線天數', desc='短期均線天數',
                dtype=ParamType.get('int'), default=1),
     MacroParam(code='period_type', name='K線週期', desc='K線週期',
-               dtype=ParamType.get('string'), default='day')
+               dtype=PeriodType, default=PeriodType.type.DAY)
 ]
 
 __doc__ = """

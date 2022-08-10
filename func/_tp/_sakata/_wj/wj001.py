@@ -3,7 +3,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
 from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
@@ -11,9 +11,9 @@ from func._tp._sakata._moke_candle import MokeCandle, KType
 code = 'wj001'
 name = '商智酒田戰法指標(WJ版)-吊人線'
 description = """
-  
+
 > 先漲後跌，由多轉空的反轉型態
-  
+
 ## 型態說明
 1. 型態發生前會有上升區段，或處於市場頂部
 2. 開盤價在當天價格高點
@@ -26,37 +26,37 @@ description = """
 
 ## 現象解釋
 ### 傳統解釋
-繼原先的上漲趨勢，開盤時持續向上開高，盤中面對大量的賣出壓力，使得價格大幅下降，即使  
+繼原先的上漲趨勢，開盤時持續向上開高，盤中面對大量的賣出壓力，使得價格大幅下降，即使
 買氣仍持續，但仍敵不過賣壓，最後雖收在開盤價附近的價位，但仍為黑線。
 
 ### 心理面解釋
-認為當前價格已達最高的投資人比例開始占多數，因此有急著趁高價脫手的現象發生，使得開高  
-後遇到大幅賣壓。當這些想脫手的投資人賣完後，仍有認為會續漲的投資人買進，但由於這些投  
-資人的人數沒有多到將先前的跌幅補足（但仍足夠多到可以將盤面拉回開盤價附近），因此最終  
+認為當前價格已達最高的投資人比例開始占多數，因此有急著趁高價脫手的現象發生，使得開高
+後遇到大幅賣壓。當這些想脫手的投資人賣完後，仍有認為會續漲的投資人買進，但由於這些投
+資人的人數沒有多到將先前的跌幅補足（但仍足夠多到可以將盤面拉回開盤價附近），因此最終
 收在開盤價附近。
-  
-酒田戰法認為，價格已達最高價的投資人會在該價位中保持一定比例，這會使得價格無法向上繼  
-續提升，進一步的讓更多原本不認為已達最高價的投資人開始認為真的已達最高價，並開始使得  
-認為這個價位為最高價的投資人比例持續提升，進一步造成盤面開始下跌，因此該現象將會是一  
+
+酒田戰法認為，價格已達最高價的投資人會在該價位中保持一定比例，這會使得價格無法向上繼
+續提升，進一步的讓更多原本不認為已達最高價的投資人開始認為真的已達最高價，並開始使得
+認為這個價位為最高價的投資人比例持續提升，進一步造成盤面開始下跌，因此該現象將會是一
 個高點反轉訊號。
 
 ### 備註
-這邊認為吊人線所造成的反轉現象會根據公司的股性不同而有所改變，反轉後的跌幅也會有所改  
+這邊認為吊人線所造成的反轉現象會根據公司的股性不同而有所改變，反轉後的跌幅也會有所改
 變。
-  
-股性價格本身就易受影響的股票，當現象發生後會發生反轉的時間點會較快，下跌的幅度也較高  
-；而價格本身不易受影響的股票則是會需要更多的時間來讓投資人相信價位已達高點，並且使其  
+
+股性價格本身就易受影響的股票，當現象發生後會發生反轉的時間點會較快，下跌的幅度也較高
+；而價格本身不易受影響的股票則是會需要更多的時間來讓投資人相信價位已達高點，並且使其
 緩慢下跌。
-  
+
 期間內越多次的吊人線應該會使得反轉現象更有機會發生
 """
 params = [
     MacroParam(
-        code='period_type', 
-        name='K線週期', 
+        code='period_type',
+        name='K線週期',
         desc='希望以哪種 K 線週期來偵測吊人線',
-        dtype=ParamType.STR, 
-        default='day')
+        dtype=PeriodType,
+        default=PeriodType.type.DAY)
 ]
 
 def func(market_id:str, **kwargs) -> pd.Series:
@@ -84,7 +84,7 @@ def func(market_id:str, **kwargs) -> pd.Series:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj001'")
@@ -133,14 +133,14 @@ def check(**kwargs) -> Dict[str, str]:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj001'")
-    
+
     results = {}
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except ValueError as esp:
         results['period_type'] = f"invalid argument '{kwargs['period_type']}'"
     return results
@@ -167,7 +167,7 @@ def plot(**kwargs) -> List[PlotInfo]:
         畫圖所使用的多條序列與序列名稱
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj001'")
@@ -184,8 +184,8 @@ def plot(**kwargs) -> List[PlotInfo]:
     ]+[MokeCandle.make(KType.BLACK_HAMMER)]
     data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
-        ptype=Ptype.CANDLE, 
-        title=f"吊人線_{kwargs['period_type']}", 
+        ptype=Ptype.CANDLE,
+        title=f"吊人線_{kwargs['period_type']}",
         data=data.T)]
     return result
 
@@ -204,7 +204,7 @@ def frame(**kwargs) -> int:
         現象發生時的範圍大小
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj001'")

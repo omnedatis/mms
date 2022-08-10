@@ -5,8 +5,10 @@ Created on Wed Jun  1 16:49:39 2022
 @author: WaNiNi
 """
 
+from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from func.common import (Macro, MacroParam, ParamType, PlotInfo, Ptype,
+                         ParamEnumBase, ParamEnumElement)
 
 _Number = Union[int, float]
 
@@ -65,7 +67,7 @@ class LimitedVariable(NamedTuple):
             else:
                 ret = f"{ret}且{msg}"
         return ret
-    
+
 class RawMacro(NamedTuple):
     code: str
     name: str
