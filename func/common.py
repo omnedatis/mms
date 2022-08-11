@@ -91,10 +91,14 @@ class MacroParam(NamedTuple):
     default: Any
 
     def to_dict(self):
+        if isinstance(self.default, ParamEnumElement):
+            dvalue = dvalue = self.default.code
+        else:
+            dvalue = str(self.default)
         ret = {'PARAM_CODE': self.code,
                'PARAM_NAME': self.name,
                'PARAM_DESC': self.desc,
-               'PARAM_DEFAULT': self.default,
+               'PARAM_DEFAULT': dvalue,
                'PARAM_TYPE': self.dtype.code}
         return ret
 
