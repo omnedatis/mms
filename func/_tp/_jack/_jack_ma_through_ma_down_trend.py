@@ -15,8 +15,8 @@ from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
-MAX_PRICE_LEN = 2520
-
+db_ver = '20220810-v1'
+py_ver = '20220810-v1'
 def _get_ma(data, period) -> np.ndarray:
     new_shape = (period, data.shape[0]-period+1)
     new_strides = (*data.strides, *data.strides)
@@ -213,7 +213,7 @@ def _jack_ma_through_ma_down_trend(market_id: str, **kwargs) -> pd.Series:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
         periods = [kwargs[f'period_{idx}'] for idx in range(1, 10)]
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
@@ -231,4 +231,4 @@ def _jack_ma_through_ma_down_trend(market_id: str, **kwargs) -> pd.Series:
 
 jack_ma_through_ma_down_trend = Macro(code='jack_ma_through_ma_down_trend', name='短期MA向下穿越長期MA', desc=__doc__,
                                        params=params, run=_jack_ma_through_ma_down_trend, check=_checker, plot=_plotter,
-                                       frame=_framer)
+                                       frame=_framer, db_ver=db_ver, py_ver=py_ver)
