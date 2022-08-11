@@ -158,5 +158,5 @@ dragonfly_doji = MacroInfo(symbol=_ENG_NAME,
                            func=_func,
                            interval=1,
                            samples=_DEFAULT_SAMPLES,
-                           py_version="2022-08-10-v1",
-                           db_version="2022-08-10-v1")
+                           py_version="2201",
+                           db_version="2201")
