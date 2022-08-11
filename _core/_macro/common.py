@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 import pandas as pd
+from ...const import MacroParamEnumField
 
 from func.common import Dtype, MacroParam, PlotInfo, ParamEnumBase
 from func.common import Macro as _Macro
@@ -105,5 +106,8 @@ class MacroParaEnumManagerBase(Dtype, Enum):
         values = []
         for each in cls:
             values += [[each.code, element.value.code, element.value.name] for element in each.value.type]
-        ret = pd.DataFrame(values, columns=['ENUM_CODE', 'ENUM_VALUE_CODE', 'ENUM_VALUE_NAME'])
+        ret = pd.DataFrame(values, columns=[
+            MacroParamEnumField.ENUM_CODE.value, 
+            MacroParamEnumField.ENUM_VALUE_CODE.value, 
+            MacroParamEnumField.ENUM_VALUE_NAME.value])
         return ret
