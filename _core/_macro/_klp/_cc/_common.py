@@ -26,8 +26,8 @@ from func.common import (Dtype, MacroParam, ParamEnumBase, ParamEnumElement,
 
 from ...common import Macro
 
-_PY_VERSION = '2022-08-10-v1'
-_DB_VERSION = '2022-08-10-v1'
+_PY_VERSION = '22-v1'
+_DB_VERSION = '22-v1'
 _PeriodTypes = PeriodType.type
 
 class _LeadingTrends(ParamEnumBase):

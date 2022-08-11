@@ -65,7 +65,9 @@ class Macro(NamedTuple):
         ret = {'MACRO_NAME': self.name,
                'MACRO_DESC': self.description,
                'FUNC_CODE': self.code,
-               'PARAM': [each.to_dict() for each in self.parameters]}
+               'PARAM': [each.to_dict() for each in self.parameters],
+               'MACRO_CODE_VERSION': self.py_version,
+               'MACRO_INFO_VERSION': self.db_version}
         return ret
 
 def gen_macro(recv: _Macro) -> Macro:

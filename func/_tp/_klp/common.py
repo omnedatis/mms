@@ -77,6 +77,8 @@ class RawMacro(NamedTuple):
     sample_generator: Callable
     interval_evaluator: Callable
     arg_checker: Callable
+    db_ver: str = ""
+    py_ver: str = ""
 
     def filter_arguments(self, **kwargs):
         ret = {}
@@ -130,5 +132,7 @@ def gen_macro(recv: RawMacro) -> Macro:
     ret = Macro(code=recv.code, name=recv.name, desc=recv.description,
                 params=recv.parameters, run=recv.execute,
                 check=recv.check_arguments, plot=recv.get_sample,
-                frame=recv.get_interval)
+                frame=recv.get_interval,
+                db_ver=recv.db_ver,
+                py_ver=recv.py_ver)
     return ret
