@@ -56,6 +56,8 @@ params = [
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
+db_ver = '20220810-v1'
+py_ver = '20220810-v1'
 
 def func(market_id:str, **kwargs) -> pd.Series:
     """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生傘型線的序列
@@ -100,9 +102,6 @@ def func(market_id:str, **kwargs) -> pd.Series:
     # 2. 沒有實體線
     ba_ratio = candle.body/candle.amplitude
     cond_2 = (ba_ratio == 0)
-    # avg_ampt = (candle.amplitude).rolling(period, period_type).mean()
-    oh_diff_ratio = (candle.high - candle.open)/candle.amplitude
-    cond_2 = oh_diff_ratio < 0.1
     # 3. 沒有上影線
     usa_ratio = candle.upper_shadow/candle.amplitude
     cond_3 = usa_ratio == 0
@@ -215,4 +214,5 @@ def frame(**kwargs) -> int:
 
 
 wj004 = Macro(code=code, name=name, desc=description, params=params,
-      run=func, check=check, plot=plot, frame=frame)
+        run=func, check=check, plot=plot, frame=frame,
+        db_ver=db_ver, py_ver=py_ver)

@@ -15,7 +15,8 @@ params = [
                desc='用於當作比較基準的 MA 計算時所使用的天期',
                dtype=ParamType.INT, default=10)
 ]
-
+db_ver = '20220810-v1'
+py_ver = '20220810-v1'
 
 def check(**kwargs) -> Dict[str, str]:
     """參數正確性檢查式, 用於判斷參數是否正常, 檢查項目為
@@ -220,4 +221,5 @@ def frame(**kwargs) -> int:
 
 
 stone_pp000 = Macro(code=code, name=name, desc=description, params=params,
-      run=func, check=check, plot=plot, frame=frame)
+        run=func, check=check, plot=plot, frame=frame,
+        db_ver=db_ver, py_ver=py_ver)
