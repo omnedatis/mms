@@ -15,7 +15,8 @@ from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
-
+db_ver = '20220810-v1'
+py_ver = '20220810-v1'
 
 def _get_ma(data, period) -> np.ndarray:
     new_shape = (period, data.shape[0]-period+1)
@@ -140,7 +141,7 @@ def _jack_ma_order_down(market_id: str, **kwargs) -> pd.Series:
         長期均線天數
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
         ma_short_period = kwargs['ma_short_period']
         ma_mid_period = kwargs['ma_mid_period']
         ma_long_period = kwargs['ma_long_period']
@@ -160,4 +161,4 @@ def _jack_ma_order_down(market_id: str, **kwargs) -> pd.Series:
 
 jack_ma_order_down = Macro(code='jack_ma_order_down', name='MA由小至大短中長排列', desc=__doc__,
                            params=params, run=_jack_ma_order_down, check=_checker, plot=_plotter,
-                           frame=_framer)
+                           frame=_framer, db_ver=db_ver, py_ver=py_ver)

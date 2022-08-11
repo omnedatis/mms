@@ -23,6 +23,8 @@ import traceback
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
 from _core import MarketInfo
+from _core._macro import MacroParaEnumManager
+from func.common import ParamType
 from func._tp import *
 from _view import view_backtest, view_create, view_update
 from const import *
@@ -877,6 +879,7 @@ def get_macro_params(func_code):
     return db.get_macro_param_type(func_code)
 
 def check_macro_info(func):
+    """Check mismatch of definitions between code and db."""
     macro_info = get_macro_params(func)
     if 'market_id' in macro_info:
         del macro_info['market_id']
@@ -884,14 +887,18 @@ def check_macro_info(func):
     params = eval(f'{func}.params')
     invalids = 0
     for each in params:
+        # senario 1: definition cannot be found in db
         if each.code not in macro_info:
             invalids += 1
-        elif each.dtype.value.code != macro_info[each.code]:
-            invalids +=1
+        # senario 1: definition type_code does not match what found in db
+        if each.dtype.code != macro_info[each.code]:
+            invalids += 1
 
     return invalids
 
 def cast_macro_kwargs(func, macro_kwargs):
+    """Check if exist invalid or missing arguments,
+       and cast marcro params type accordingly."""
     macro_info = get_macro_params(func)
     if 'market_id' in macro_info:
         del macro_info['market_id']
@@ -902,11 +909,17 @@ def cast_macro_kwargs(func, macro_kwargs):
             if key not in macro_info:
                 raise KeyError(f'keyword argument {key} not in macro info')
             macro_type = macro_info[key]
-            is_valid = TypeCheckMap(macro_type).check(value)
-            if is_valid:
-                ret[key] = TypeCheckMap(macro_type).type(value)
+            if MacroParaEnumManager.get(macro_type, value) is not None:
+                valid_param =  MacroParaEnumManager.get(macro_type, value)
+            elif ParamType.get(macro_type) is not None:
+                try:
+                    valid_param = ParamType.get(macro_type).value.type(value)
+                except ValueError:
+                    valid_param = None
+            if valid_param is not None:
+                ret[key] = valid_param
             else:
-                msg[key] = '參數型態錯誤'+f'，應為{TypeCheckMap(macro_type).cstring}'
+                msg[key] = '參數型態錯誤'
         if len(macro_kwargs) != len(macro_info):
             raise KeyError('missing keyword arguments')
         return ret, msg
