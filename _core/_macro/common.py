@@ -104,6 +104,6 @@ class MacroParaEnumManagerBase(Dtype, Enum):
     def dump(cls):
         values = []
         for each in cls:
-            values += [[each.name, element.value.code, element.value.name] for element in each.value.type]
-        ret = pd.DataFrame(values, columns=['PARAM_CODE', 'VALUE_CODE', 'VALUE_NAME'])
+            values += [[each.code, element.value.code, element.value.name] for element in each.value.type]
+        ret = pd.DataFrame(values, columns=['ENUM_CODE', 'ENUM_VALUE_CODE', 'ENUM_VALUE_NAME'])
         return ret
