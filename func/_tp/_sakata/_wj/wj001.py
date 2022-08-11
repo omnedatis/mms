@@ -58,8 +58,8 @@ params = [
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '20220810-v1'
-py_ver = '20220810-v1'
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 
 def func(market_id:str, **kwargs) -> pd.Series:

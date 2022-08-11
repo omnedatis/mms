@@ -21,8 +21,8 @@ params = [
                desc='在指定的統計天數中發生次數的臨界值(o)', 
                dtype=ParamType.INT, default=5)
 ]
-db_ver = '20220810-v1'
-py_ver = '20220810-v1'
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:
     """參數正確性檢查式, 用於判斷參數是否正常, 檢查項目為

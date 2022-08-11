@@ -15,8 +15,8 @@ from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
-db_ver = '20220810-v1'
-py_ver = '20220810-v1'
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def _get_ma(data, period) -> np.ndarray:
     new_shape = (period, data.shape[0]-period+1)

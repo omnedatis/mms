@@ -15,8 +15,8 @@ params = [
                desc='用於當作比較基準的 MA 計算時所使用的天期',
                dtype=ParamType.INT, default=10)
 ]
-db_ver = '20220810-v1'
-py_ver = '20220810-v1'
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:
     """參數正確性檢查式, 用於判斷參數是否正常, 檢查項目為

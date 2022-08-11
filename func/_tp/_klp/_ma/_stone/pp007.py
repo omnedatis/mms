@@ -99,4 +99,4 @@ def interval_evaluator(statistical_duration, **kwargs):
 
 stone_pp007 = RawMacro(code, name, description, parameters, macro,
                        sample_generator, interval_evaluator,
-                       arg_checker, '20220810-v1', '20220810-v1')
+                       arg_checker, '2022081001', '2022081001')
