@@ -58,6 +58,9 @@ params = [
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
+db_ver = '20220810-v1'
+py_ver = '20220810-v1'
+
 
 def func(market_id:str, **kwargs) -> pd.Series:
     """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生吊人線的序列
@@ -218,4 +221,5 @@ def frame(**kwargs) -> int:
 
 
 wj001 = Macro(code=code, name=name, desc=description, params=params,
-      run=func, check=check, plot=plot, frame=frame)
+        run=func, check=check, plot=plot, frame=frame, 
+        db_ver=db_ver, py_ver=py_ver)
