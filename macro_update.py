@@ -31,7 +31,7 @@ def generate_macro_ids(size: int, db: MimosaDB) -> List[str]:
     while len(results) < size:
         new_id = f'{prefix}{str(series_no).zfill(9)}'
         if new_id not in exist_ids:
-            results.append(series_no)
+            results.append(new_id)
         series_no += 1
     return results
 
@@ -87,19 +87,19 @@ def get_macro_info_from_db(db: MimosaDB):
             param_default = param[MacroParamField.PARAM_DEFAULT.value]
             param_type = param[MacroParamField.PARAM_TYPE.value]
             param_dict = {
-                'PARAM_CODE': param_code,
-                'PARAM_NAME': param_name,
-                'PARAM_DESC': param_desc,
-                'PARAM_DEFAULT': param_default,
-                'PARAM_TYPE': param_type
+                MacroParamField.PARAM_CODE.value: param_code,
+                MacroParamField.PARAM_NAME.value: param_name,
+                MacroParamField.PARAM_DESC.value: param_desc,
+                MacroParamField.PARAM_DEFAULT.value: param_default,
+                MacroParamField.PARAM_TYPE.value: param_type
             }
             params.append(param_dict)
         macro_dict = {
-            'FUNC_CODE': macro_func,
-            'MACRO_NAME': macro_name,
-            'MACRO_DESC': macro_desc,
-            'MACRO_INFO_VERSION': macro_info_version,
-            'MACRO_CODE_VERSION': macro_code_version,
+            MacroInfoField.FUNC_CODE.value: macro_func,
+            MacroInfoField.MACRO_NAME.value: macro_name,
+            MacroInfoField.MACRO_DESC.value: macro_desc,
+            MacroVersionInfoField.INFO_VERSION.value: macro_info_version,
+            MacroVersionInfoField.CODE_VERSION.value: macro_code_version,
             'PARAM': params
         }
         result[macro_id] = macro_dict
@@ -162,12 +162,12 @@ def check_macro(new, old):
     ret_d = []
     ret_u = {}
 
-    new = {each['FUNC_CODE']: each for each in new}
+    new = {each[MacroInfoField.FUNC_CODE.value]: each for each in new}
     for mid in old:
-        if old[mid]['FUNC_CODE'] not in new:
-            ret_m[mid] = f"運算函式 {old[mid]['MACRO_NAME']}已被系統刪除"
+        if old[mid][MacroInfoField.FUNC_CODE.value] not in new:
+            ret_m[mid] = f"運算函式 {old[mid][MacroInfoField.MACRO_NAME.value]}已被系統刪除"
             ret_d.append(mid)
-    func_to_mid = {old[each]['FUNC_CODE']: each for each in old}
+    func_to_mid = {old[each][MacroInfoField.FUNC_CODE.value]: each for each in old}
     for fid in new:
         if fid not in func_to_mid:
             ret_i.append(new[fid])
@@ -175,21 +175,21 @@ def check_macro(new, old):
         cur_n = new[fid]
         mid = func_to_mid[fid]
         cur_o = old[mid]
-        if cur_n['MACRO_CODE_VERSION'] == cur_o['MACRO_CODE_VERSION']:
-            if cur_n['MACRO_INFO_VERSION'] != cur_o['MACRO_INFO_VERSION']:
+        if cur_n[MacroVersionInfoField.CODE_VERSION.value] == cur_o[MacroVersionInfoField.CODE_VERSION.value]:
+            if cur_n[MacroVersionInfoField.INFO_VERSION.value] != cur_o[MacroVersionInfoField.INFO_VERSION.value]:
                 ret_u[mid] = cur_n
             continue
         ret_u[mid] = cur_n
         idx = 1
-        msg = (f"系統已發布 運算函式 {cur_o['MACRO_NAME']} 的更新版本：\n"
+        msg = (f"系統已發布 運算函式 {cur_o[MacroInfoField.MACRO_NAME.value]} 的更新版本：\n"
                f"{idx}. 運算邏輯更新；\n")
         idx += 1
-        if cur_n['MACRO_NAME'] != cur_o['MACRO_NAME']:
-            msg += f"{idx}. 更新名稱為 `{cur_o['MACRO_NAME']}`；\n"
+        if cur_n[MacroInfoField.MACRO_NAME.value] != cur_o[MacroInfoField.MACRO_NAME.value]:
+            msg += f"{idx}. 更新名稱為 `{cur_o[MacroInfoField.MACRO_NAME.value]}`；\n"
             idx += 1
-        para_n = {each['PARAM_NAME']: each['PARAM_TYPE']
+        para_n = {each[MacroParamField.PARAM_NAME.value]: each[MacroParamField.PARAM_TYPE.value]
                   for each in cur_n['PARAM']}
-        para_o = {each['PARAM_NAME']: each['PARAM_TYPE']
+        para_o = {each[MacroParamField.PARAM_NAME.value]: each[MacroParamField.PARAM_TYPE.value]
                   for each in cur_o['PARAM']}
         for each in para_n:
             if each not in para_o:
@@ -236,19 +236,20 @@ def convert_macro_to_df(macro, macro_id: str):
     """
     macro_info = [
         macro_id,
-        macro['FUNC_CODE'],
-        macro['MACRO_NAME'],
-        macro['MACRO_DESC'],
+        macro[MacroInfoField.FUNC_CODE.value],
+        macro[MacroInfoField.MACRO_NAME.value],
+        macro[MacroInfoField.MACRO_DESC.value],
     ]
     macro_info = pd.DataFrame([macro_info], columns=[
         MacroInfoField.MACRO_ID.value,
+        MacroInfoField.FUNC_CODE.value,
         MacroInfoField.MACRO_NAME.value,
         MacroInfoField.MACRO_DESC.value
     ])
     macro_version = [
         macro_id,
-        macro['MACRO_INFO_VERSION'],
-        macro['MACRO_CODE_VERSION'],
+        macro[MacroVersionInfoField.INFO_VERSION.value],
+        macro[MacroVersionInfoField.CODE_VERSION.value],
     ]
     macro_version = pd.DataFrame([macro_version], columns=[
         MacroVersionInfoField.MACRO_ID.value,
@@ -259,11 +260,11 @@ def convert_macro_to_df(macro, macro_id: str):
     for param in macro['PARAM']:
         params.append([
             macro_id,
-            param['PARAM_CODE'],
-            param['PARAM_NAME'],
-            param['PARAM_DESC'],
-            param['PARAM_DEFAULT'],
-            param['PARAM_TYPE'],
+            param[MacroParamField.PARAM_CODE.value],
+            param[MacroParamField.PARAM_NAME.value],
+            param[MacroParamField.PARAM_DESC.value],
+            param[MacroParamField.PARAM_DEFAULT.value],
+            param[MacroParamField.PARAM_TYPE.value],
         ])
     params = pd.DataFrame(params, columns=[
         MacroParamField.MACRO_ID.value,
@@ -277,6 +278,7 @@ def convert_macro_to_df(macro, macro_id: str):
 
 
 if __name__ == '__main__':
+    # 外部帶入參數值
     parser = argparse.ArgumentParser(prog="db_update_batch")
     parser.add_argument("--mode", "-md", action='store', default='uat')
     args = parser.parse_args()
@@ -288,6 +290,8 @@ if __name__ == '__main__':
         warnings.filterwarnings("ignore")
     if not os.path.exists(LOG_LOC):
         os.mkdir(LOG_LOC)
+    
+    # 設定 Log
     err_hdlr = logging.StreamHandler(stream=sys.stderr)
     err_hdlr.setLevel(logging.ERROR)
     info_hdlr = logging.StreamHandler(stream=sys.stdout)
@@ -301,10 +305,15 @@ if __name__ == '__main__':
     file_hdlr.setLevel(level)
     logging.basicConfig(level=0, format=fmt, handlers=[
                         err_hdlr, info_hdlr, file_hdlr], datefmt='%Y-%m-%d %H:%M:%S')
+    
+    logging.info('啟動 Macro 版本更新程式')
     db = MimosaDB(mode=mode)
 
+    logging.info('取得當前程式 Macro 資料')
     macro_info = MacroManager.dump()
+    logging.info('取得當前資料庫資料')
     old_macro = get_macro_info_from_db(db)
+    logging.info('開始檢查差異')
     adds, updates, msgs, dels = check_macro(macro_info, old_macro)
     
     # 新增 Macro
@@ -316,13 +325,18 @@ if __name__ == '__main__':
         info, version, param = convert_macro_to_df(macro, macro_ids[i])
         infos.append(info)
         versions.append(version)
-        params.append(params)
-    infos = pd.concat(infos, axis=0)
-    versions = pd.concat(versions, axis=0)
-    params = pd.concat(params, axis=0)
+        params.append(param)
+    if len(infos) > 0:
+        infos = pd.concat(infos, axis=0)
+    if len(versions) > 0:
+        versions = pd.concat(versions, axis=0)
+    if len(params) > 0:
+        params = pd.concat(params, axis=0)
+    logging.info('新增 Macro 資料')
     db.save_macro_info(infos)
     db.save_macro_version_info(versions)
     db.save_macro_param_info(params)
+    logging.info('新增 Macro 資料完成')
 
     # 更新 Macro
     infos = []
@@ -333,19 +347,26 @@ if __name__ == '__main__':
         info, version, param = convert_macro_to_df(macro, macro_id)
         infos.append(info)
         versions.append(version)
-        params.append(params)
-    infos = pd.concat(infos, axis=0)
-    versions = pd.concat(versions, axis=0)
-    params = pd.concat(params, axis=0)
+        params.append(param)
+    if len(infos) > 0:
+        infos = pd.concat(infos, axis=0)
+    if len(versions) > 0:
+        versions = pd.concat(versions, axis=0)
+    if len(params) > 0:
+        params = pd.concat(params, axis=0)
+    logging.info('更新 Macro 資料')
     db.update_macro_info(infos)
     db.update_macro_version_info(versions)
     db.update_macro_param_info(params)
+    logging.info('更新 Macro 資料完成')
 
     # 刪除 Macro
+    logging.info('移除資料庫過時 Macro 資料')
     for macro_id in dels:
         db.del_macro_info(macro_id)
         db.del_macro_param_info(macro_id)
         db.del_macro_version_info(macro_id)
+    logging.info('移除資料庫過時 Macro 資料完成')
     
     # 發布 Macro 異動資訊
     for macro_id, msg in msgs.items():
@@ -353,5 +374,8 @@ if __name__ == '__main__':
         pass
 
     # 更新 Macro Enum
+    logging.info('更新 Macro 參數 Enum 型態資料')
     enum_info = MacroParaEnumManager.dump()
     db.save_macro_param_enum(enum_info)
+    logging.info('更新 Macro 參數 Enum 型態資料完成')
+    logging.info('Macro 版本更新程式執行結束')

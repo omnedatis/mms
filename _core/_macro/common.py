@@ -9,8 +9,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 import pandas as pd
-from ...const import MacroParamEnumField
-
+from const import MacroInfoField, MacroParamEnumField, MacroVersionInfoField
 from func.common import Dtype, MacroParam, PlotInfo, ParamEnumBase
 from func.common import Macro as _Macro
 
@@ -63,12 +62,12 @@ class Macro(NamedTuple):
         return self.arg_checker(**kwargs)
 
     def to_dict(self):
-        ret = {'MACRO_NAME': self.name,
-               'MACRO_DESC': self.description,
-               'FUNC_CODE': self.code,
+        ret = {MacroInfoField.MACRO_NAME.value: self.name,
+               MacroInfoField.MACRO_DESC.value: self.description,
+               MacroInfoField.FUNC_CODE.value: self.code,
                'PARAM': [each.to_dict() for each in self.parameters],
-               'MACRO_CODE_VERSION': self.py_version,
-               'MACRO_INFO_VERSION': self.db_version}
+               MacroVersionInfoField.CODE_VERSION.value: self.py_version,
+               MacroVersionInfoField.INFO_VERSION.value: self.db_version}
         return ret
 
 def gen_macro(recv: _Macro) -> Macro:

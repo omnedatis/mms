@@ -2030,28 +2030,39 @@ class MimosaDB:
         -------
         None.
         """
+        def get_new_enum(old, new):
+            now_time = datetime.datetime.now()
+            new['CREATE_DT'] = now_time
+            new['MODIFY_DT'] = now_time
+            new['CREATE_BY'] = self.CREATE_BY
+            new['MODIFY_BY'] = self.MODIFY_BY
+            old = {f'{a}.{b}': old[idx: idx+1]
+                for idx, (a, b) in enumerate(
+                    zip(old[MacroParamEnumField.ENUM_CODE.value].values,
+                        old[MacroParamEnumField.ENUM_VALUE_CODE.value].values))}
+            new = {f'{a}.{b}': new[idx: idx+1]
+                for idx, (a, b) in enumerate(
+                    zip(new[MacroParamEnumField.ENUM_CODE.value].values,
+                        new[MacroParamEnumField.ENUM_VALUE_CODE.value].values))}
+            ret = []
+            for key in old:
+                if key in new:
+                    if (new[key][MacroParamEnumField.ENUM_VALUE_NAME.value].values == 
+                        old[key][MacroParamEnumField.ENUM_VALUE_NAME.value].values):
+                        ret.append(old[key])
+                    else:
+                        new[key]['CREATE_BY'] = old[key]['CREATE_BY']
+                        new[key]['CREATE_DT'] = old[key]['CREATE_DT']
+                        ret.append(new[key])
+                    del new[key]
+            ret += list(new.values())
+            return pd.concat(ret, axis=0)
         self.cache_manager.refresh(tables=[TableName.MACRO_PARAM_ENUM.value])
         db_enum = self.cache_manager.get_data(CacheName.MACRO_PARAM_ENUM.value)
-        extra_data = pd.concat([data, db_enum, db_enum], axis=0).drop_duplicates(
-            subset=[MacroParamEnumField.ENUM_CODE.value], keep=False)
-        extra_data = self._extend_basic_cols(extra_data)
-
-        db_extra_data = pd.concat([db_enum, data, data], axis=0).drop_duplicates(
-            subset=[MacroParamEnumField.ENUM_CODE.value], keep=False)
-        inter_data = pd.concat([db_enum, db_extra_data], axis=0).drop_duplicates(
-            subset=[MacroParamEnumField.ENUM_CODE.value], keep=False)
-        update_data = pd.concat([data, inter_data], axis=0).drop_duplicates(
-            subset=[MacroParamEnumField.ENUM_CODE.value], keep='first')
-        update_data = pd.concat([update_data, extra_data], axis=0).drop_duplicates(
-            subset=[MacroParamEnumField.ENUM_CODE.value], keep=False)
-
-        now = datetime.datetime.now()
-        now = np.datetime64(now).astype('datetime64[s]').tolist()
-        update_data['MODIFY_DT'] = str(now)
-        update_data['MODIFY_BY'] = self.MODIFY_BY
-        new_data = pd.concat([extra_data, update_data], axis=0)
+        new_data = get_new_enum(db_enum, data)
+        
         self._delete(TableName.MACRO_PARAM_ENUM.value, [])
-        self._insert(new_data)
+        self._insert(TableName.MACRO_PARAM_ENUM.value, new_data)
 
     @_do_if_not_read_only
     def set_model_execution_start(self, model_id: str, exection: str) -> str:

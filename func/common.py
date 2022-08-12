@@ -17,6 +17,8 @@ from typing import Any, Callable, Dict, List, NamedTuple
 import numpy as np
 import pandas as pd
 
+from const import MacroParamField
+
 from ._td import TimeUnit
 
 class Dtype(NamedTuple):
@@ -95,11 +97,11 @@ class MacroParam(NamedTuple):
             dvalue = dvalue = self.default.code
         else:
             dvalue = str(self.default)
-        ret = {'PARAM_CODE': self.code,
-               'PARAM_NAME': self.name,
-               'PARAM_DESC': self.desc,
-               'PARAM_DEFAULT': dvalue,
-               'PARAM_TYPE': self.dtype.code}
+        ret = {MacroParamField.PARAM_CODE.value: self.code,
+               MacroParamField.PARAM_NAME.value: self.name,
+               MacroParamField.PARAM_DESC.value: self.desc,
+               MacroParamField.PARAM_DEFAULT.value: dvalue,
+               MacroParamField.PARAM_TYPE.value: self.dtype.code}
         return ret
 
 class Ptype(Enum):
