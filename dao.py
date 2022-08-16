@@ -11,6 +11,7 @@ import pandas as pd
 from pymysql import IntegrityError
 
 from sqlalchemy import create_engine, exc
+from _core._macro import MacroParaEnumManager
 from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
                    DSStockInfoField, ExecMode, MacroInfoField, MacroParamEnumField, MacroParamField, MacroVersionInfoField,
                    MarketHistoryPriceField, MarketInfoField,
@@ -322,6 +323,7 @@ class MimosaDBCacheManager:
                                 macro_info: pd.DataFrame, macro_param_info: pd.DataFrame
                                 ) -> List[PatternInfo]:
         results = []
+        enum_types = set(MacroParaEnumManager.dump()[MacroParamEnumField.ENUM_CODE.value].values)
         for i in range(len(pattern_info)):
             pattern = pattern_info.iloc[i]
             pattern_id = pattern[PatternInfoField.PATTERN_ID.value]
@@ -367,7 +369,7 @@ class MimosaDBCacheManager:
                     param_val = int(param_val)
                 elif param_type == "float":
                     param_val = float(param_val)
-                elif param_type == "string":
+                elif param_type in enum_types:
                     param_val = str(param_val)
                 else:
                     raise RuntimeError(
