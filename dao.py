@@ -372,7 +372,7 @@ class MimosaDBCacheManager:
                 elif param_type == 'string':
                     param_val = str(param_val)
                 elif param_type in enum_types:
-                    param_val = str(param_val)
+                    param_val = MacroParaEnumManager.get(param_type, param_val)
                 else:
                     raise RuntimeError(
                         f'Unknown type {param_type} in {TableName.MACRO_PARAM.value}, check database')
