@@ -369,6 +369,8 @@ class MimosaDBCacheManager:
                     param_val = int(param_val)
                 elif param_type == "float":
                     param_val = float(param_val)
+                elif param_type == 'string':
+                    param_val = str(param_val)
                 elif param_type in enum_types:
                     param_val = str(param_val)
                 else:
