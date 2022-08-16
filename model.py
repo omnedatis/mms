@@ -3,7 +3,6 @@
 Created on Tue March 8 17:07:36 2021
 
 """
-
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import namedtuple, defaultdict
 import datetime
@@ -23,7 +22,7 @@ import traceback
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
 from _core import MarketInfo
-from _core._macro import MacroParaEnumManager
+from _core._macro import MacroManager, MacroParaEnumManager
 from func.common import ParamType
 from func._tp import *
 from _view import view_backtest, view_create, view_update
@@ -35,30 +34,35 @@ from const import (BatchType, MarketPeriodField, MarketScoreField,
                    MIN_BACKTEST_LEN, PREDICT_PERIODS, TaskLimitCode)
 from utils import extend_working_dates, CatchableTread, ThreadController
 
-#from func._tp import
+# from func._tp import
 
 from _core import Pattern
 from _db import get_dao, set_dao, MimosaDBManager
 
 batch_lock = Lock()
 
+
 def get_db():
     """Get Mimosa DB accessing object"""
     return get_dao()
 
+
 def set_db(_db):
     """Set Mimosa DB accessing object"""
     set_dao(_db)
+
 
 def clean_db_cache():
     """Clean Minosa DB cache"""
     db = get_db()
     db.clean_db_cache()
 
+
 def clone_db_cache(batch_type):
     """Clone Mimosa DB to cache"""
     db = get_db()
     db.clone_db_cache(batch_type)
+
 
 def get_markets():
     db = get_db()
@@ -71,6 +75,7 @@ def get_markets():
         mcate = cinfo.get(code)
         ret.append(MarketInfo.make(mid, mtype, mcate))
     return ret
+
 
 def save_mkt_score(recv: Dict[str, pd.DataFrame]):
     """save mkt score to DB."""
@@ -103,6 +108,7 @@ def save_mkt_score(recv: Dict[str, pd.DataFrame]):
             db = get_db()
             db.save_mkt_score(pd.concat(records, axis=0))
 
+
 def save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
     """save latest mkt period to DB."""
     def gen_records(recv):
@@ -114,7 +120,8 @@ def save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
                 continue
             cur = pd.DataFrame()
             offsets = list(map(lambda p: -(p+1), periods))
-            dates = cps.index.values[offsets + [-1]].astype('datetime64[D]').tolist()
+            dates = cps.index.values[offsets + [-1]
+                                     ].astype('datetime64[D]').tolist()
             bps = cps.values[offsets]
             changes = cps.values[-1] - bps
             cur[MarketPeriodField.DATE_PERIOD.value] = periods
@@ -132,7 +139,8 @@ def save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
             db = get_db()
             db.save_latest_mkt_period(pd.concat(records, axis=0))
 
-def save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update:bool=False):
+
+def save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = False):
     """Save latest pattern results to DB."""
     def trans2dbformat(recv):
         ret_buffer = []
@@ -156,6 +164,7 @@ def save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update:bool=False
         else:
             db.save_latest_pattern_results(trans2dbformat(recv))
 
+
 def _evaluate_hit_sum(market, results, freturns):
     ret = pd.DataFrame()
     ret[ModelMarketHitSumField.DATE_PERIOD.value] = PREDICT_PERIODS
@@ -166,7 +175,8 @@ def _evaluate_hit_sum(market, results, freturns):
         return ret
 
     results = results.set_index(PredictResultField.DATE.value)
-    result_group = {p: d for p, d in results.groupby(PredictResultField.PERIOD.value)}
+    result_group = {p: d for p, d in results.groupby(
+        PredictResultField.PERIOD.value)}
     cnts = []
     hits = []
     for period in PREDICT_PERIODS:
@@ -187,6 +197,7 @@ def _evaluate_hit_sum(market, results, freturns):
     ret[ModelMarketHitSumField.FCST_CNT.value] = cnts
     return ret
 
+
 def get_model_hit_sum(model_id: str, batch_type: BatchType):
     """Get model Hit-sum."""
     if batch_type == BatchType.INIT_BATCH:
@@ -202,6 +213,7 @@ def get_model_hit_sum(model_id: str, batch_type: BatchType):
         ret['MODEL_ID'] = model_id
         return ret
 
+
 def save_model_hit_sum(model_id: str, batch_type: BatchType):
     """Save model hit sum to DB."""
     recv = get_model_hit_sum(model_id, batch_type)
@@ -211,6 +223,7 @@ def save_model_hit_sum(model_id: str, batch_type: BatchType):
             db.update_model_hit_sum(recv)
         else:
             db.save_model_hit_sum(recv)
+
 
 def _get_backtest_length(market: str, earlist_date: datetime.date):
     db = get_db()
@@ -310,10 +323,12 @@ MT_MANAGER = ModelThreadManager()
 
 def _update_model(model_id: str, controller):
     latest_dates = get_db().get_latest_dates(model_id)
-    recv = view_update(get_db().get_model_info(model_id), latest_dates, controller)
+    recv = view_update(get_db().get_model_info(
+        model_id), latest_dates, controller)
     if recv is None:
         return recv
     return recv.dropna()
+
 
 def add_model(model_id: str):
     """新增模型
@@ -350,6 +365,7 @@ def add_model(model_id: str):
         logging.error(traceback.format_exc())
     finally:
         MT_MANAGER.release(model_id)
+
 
 def model_recover(model_id: str, status: ModelStatus):
     """重啟模型
@@ -389,6 +405,7 @@ def model_recover(model_id: str, status: ModelStatus):
     finally:
         MT_MANAGER.release(model_id)
 
+
 def remove_model(model_id):
     """移除模型
 
@@ -412,6 +429,7 @@ def remove_model(model_id):
     del_model_data(model_id)
     logging.info('End model remove')
 
+
 def del_model_execution(model_id: str):
     MT_MANAGER.acquire(model_id).switch_off()
     MT_MANAGER.release(model_id)
@@ -419,6 +437,7 @@ def del_model_execution(model_id: str):
         time.sleep(1)
     logging.info("Start model execution deletion")
     get_db().del_model_execution(model_id)
+
 
 def del_model_data(model_id: str):
     get_db().del_model_data(model_id)
@@ -441,6 +460,7 @@ def _create_model(model: ModelInfo, controller: ThreadController):
     if controller.isactive:
         get_db().set_model_execution_complete(exection_id)
         get_db().stamp_model_execution([exection_id])
+
 
 def _backtest_model(model: ModelInfo, controller: ThreadController):
     logging.info('Start model backtest')
@@ -477,9 +497,10 @@ def _backtest_model(model: ModelInfo, controller: ThreadController):
     get_db().set_model_execution_complete(exection_id)
     get_db().stamp_model_execution([exection_id])
 
+
 class ExecQueue:
 
-    def __init__(self, name:str):
+    def __init__(self, name: str):
 
         self.occupants = 0
         self._queue = []
@@ -526,12 +547,12 @@ class ExecQueue:
         self._lock.release()
         return item
 
-    def push(self, func:Callable, task_limit, *, args:tuple=None):
+    def push(self, func: Callable, task_limit, *, args: tuple = None):
         self._lock.acquire()
         self._queue.append((func, task_limit, args))
         self._lock.release()
 
-    def cut_line(self, func:Callable, task_limit, *, args:tuple=None):
+    def cut_line(self, func: Callable, task_limit, *, args: tuple = None):
         self._lock.acquire()
         self._queue.insert(0, (func, task_limit, args))
         self._lock.release()
@@ -541,15 +562,16 @@ class ExecQueue:
         self.tasks.append(self._thread)
         return self.tasks
 
+
 class QueueManager:
 
-    def __init__(self, queues:Dict[TaskLimitCode, ExecQueue]):
+    def __init__(self, queues: Dict[TaskLimitCode, ExecQueue]):
         self._queues = queues
 
-    def push(self, func:Callable, task_limit:int, *, args:Optional[tuple]=None):
+    def push(self, func: Callable, task_limit: int, *, args: Optional[tuple] = None):
         self._queues[task_limit].push(func, task_limit, args=args)
 
-    def do_prioritized_task(self, func:Callable, args:Optional[tuple]=None):
+    def do_prioritized_task(self, func: Callable, args: Optional[tuple] = None):
         def _task():
             for each in self._queues.values():
                 each.is_paused = True
@@ -573,12 +595,14 @@ class QueueManager:
         for each in self._queues.values():
             each.start()
 
-task_queue = QueueManager({
-    TaskLimitCode.PATTERN:ExecQueue('pattern_queue'),
-    TaskLimitCode.MODEL:ExecQueue('model_queue')
-     })
 
-def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
+task_queue = QueueManager({
+    TaskLimitCode.PATTERN: ExecQueue('pattern_queue'),
+    TaskLimitCode.MODEL: ExecQueue('model_queue')
+})
+
+
+def _db_update(batch_type: BatchType = BatchType.SERVICE_BATCH):
     markets = get_markets()
     patterns = get_db().get_patterns()
     if batch_type == BatchType.SERVICE_BATCH:
@@ -607,7 +631,7 @@ def _db_update(batch_type:BatchType=BatchType.SERVICE_BATCH):
     return ret
 
 
-def model_execution_recover(batch_type:BatchType):
+def model_execution_recover(batch_type: BatchType):
     logging.info('Start model execution recover')
     for model, etype in get_db().get_recover_model_execution():
         if etype == ModelExecution.ADD_PREDICT:
@@ -617,6 +641,7 @@ def model_execution_recover(batch_type:BatchType):
 
     logging.info('End model execution recover')
 
+
 def init_db():
     try:
         logging.info('Start batch init')
@@ -625,6 +650,7 @@ def init_db():
     except Exception:
         logging.error("Batch init failed")
         logging.error(traceback.format_exc())
+
 
 def batch(batch_type=BatchType.SERVICE_BATCH):
     batch_lock.acquire()
@@ -638,9 +664,11 @@ def batch(batch_type=BatchType.SERVICE_BATCH):
         _batch(batch_type)
         MT_MANAGER.release('Batch executing')
 
+
 def _model_update():
     ModelUpdateMoniter = namedtuple('_ModelUpdateMoniter',
                                     ['controller', 'exec_id', 'thread'])
+
     def save_result(data, model_id, exec_id, controller):
         if controller.isactive:
             if data is not None:
@@ -666,7 +694,8 @@ def _model_update():
             thread = CatchableTread(target=save_result,
                                     args=(recv, model_id, exec_id, controller))
             thread.start()
-            moniters[model_id] = ModelUpdateMoniter(controller, exec_id, thread)
+            moniters[model_id] = ModelUpdateMoniter(
+                controller, exec_id, thread)
 
     exec_ids = []
     for model_id, (controller, exec_id, thread) in moniters.items():
@@ -681,6 +710,7 @@ def _model_update():
         MT_MANAGER.release(model_id)
     logging.info("End model update")
     return exec_ids
+
 
 def _batch(batch_type):
     try:
@@ -715,8 +745,9 @@ def _batch(batch_type):
         logging.error("Batch failed")
         logging.error(traceback.format_exc())
 
-def get_mix_pattern_occur(market_id: str, patterns: List, start_date:str=None,
-                          end_date:str=None):
+
+def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None,
+                          end_date: str = None):
     _db = MimosaDBManager().current_db
     if not _db.is_initialized():
         return []
@@ -725,22 +756,25 @@ def get_mix_pattern_occur(market_id: str, patterns: List, start_date:str=None,
 
     values = pdata.values
     dates = pdata.index.values.astype('datetime64[D]')
-    ret = dates[(values==1).all(axis=1)]
+    ret = dates[(values == 1).all(axis=1)]
 
     if start_date is not None:
-        ret = ret[-(ret>=start_date).sum():]
-        if (ret>=start_date).sum() == 0:
+        ret = ret[-(ret >= start_date).sum():]
+        if (ret >= start_date).sum() == 0:
             ret = ret[:0]
     if end_date is not None:
-        ret = ret[:(ret<=end_date).sum()]
+        ret = ret[:(ret <= end_date).sum()]
     return ret.tolist()
+
 
 def get_pattern_occur(market_id: str, pattern_id):
     return get_mix_pattern_occur(market_id, [pattern_id])
 
+
 def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     def func(vs):
-        recv = np.array([((v>=0).all(axis=1).sum(), (v==1).all(axis=1).sum()) for v in vs])
+        recv = np.array(
+            [((v >= 0).all(axis=1).sum(), (v == 1).all(axis=1).sum()) for v in vs])
         if len(vs) <= 0:
             return 0, 0
         cnts, occurs = recv.sum(axis=0).tolist()
@@ -754,31 +788,36 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
     return func(pvalues)
 
+
 def get_pattern_occur_cnt(pattern_id, market_type=None, category_code=None):
     return get_mix_pattern_occur_cnt([pattern_id], market_type, category_code)
 
+
 def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=None):
     def func(v, r):
-        ret = r[(v==1).all(axis=1) & (r==r)]
-        return len(ret), (ret>0).sum().tolist()
+        ret = r[(v == 1).all(axis=1) & (r == r)]
+        return len(ret), (ret > 0).sum().tolist()
 
     _db = MimosaDBManager().current_db
     markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return 0
 
-    returns = [_db.get_future_returns(mid, [period]).values[:,0] for mid in markets]
+    returns = [_db.get_future_returns(
+        mid, [period]).values[:, 0] for mid in markets]
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
     stats = np.array([func(v, r) for v, r in zip(pvalues, returns)])
     cnts, ups = stats.sum(axis=0).tolist()
     return (ups / cnts) * 100 if cnts > 0 else 0
 
+
 def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
 
+
 def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
     def func(v, r):
-        ret = r[(v==1).all(axis=1) & (r==r)]
+        ret = r[(v == 1).all(axis=1) & (r == r)]
         if len(ret) == 0:
             return 0, 0, 0
         return ret.mean() * 100, ret.std() * 100, len(ret)
@@ -788,7 +827,8 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     if not markets or not _db.is_initialized():
         return {}
 
-    returns = [_db.get_future_returns(mid, [period]).values[:,0] for mid in markets]
+    returns = [_db.get_future_returns(
+        mid, [period]).values[:, 0] for mid in markets]
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
     stats = np.array([func(v, r) for v, r in zip(pvalues, returns)])
     drops = ~np.isnan(stats).any(axis=1)
@@ -796,8 +836,10 @@ def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_c
     stats = stats[drops]
     return {m: (v, r, int(c)) for m, (v, r, c) in zip(markets, stats)}
 
+
 def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_mkt_dist_info([pattern_id], period, market_type, category_code)
+
 
 def add_pattern(pid):
     pattern = get_db().get_pattern_info(pid)
@@ -816,28 +858,32 @@ def add_pattern(pid):
     th2.join()
     get_db().set_pattern_execution_complete(sid)
 
-def del_pattern_data(pattern_id:str):
+
+def del_pattern_data(pattern_id: str):
     logging.info('Start delete Pattern model')
     get_db().del_pattern_data(pattern_id)
 
+
 def get_market_rise_prob(period, market_type=None, category_code=None):
     def func(r):
-        ret = r[(r==r)]
-        return len(ret), (ret>0).sum().tolist()
+        ret = r[(r == r)]
+        return len(ret), (ret > 0).sum().tolist()
 
     _db = MimosaDBManager().current_db
     markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return 0
 
-    returns = [_db.get_future_returns(mid, [period]).values[:,0] for mid in markets]
+    returns = [_db.get_future_returns(
+        mid, [period]).values[:, 0] for mid in markets]
     stats = np.array([func(r) for r in returns])
     cnts, ups = stats.sum(axis=0).tolist()
     return (ups / cnts) * 100 if cnts > 0 else 0
 
+
 def get_mkt_dist_info(period, market_type=None, category_code=None):
     def func(r):
-        ret = r[(r==r)]
+        ret = r[(r == r)]
         if len(ret) == 0:
             return 0, 0, 0
         return ret.mean() * 100, ret.std() * 100, len(ret)
@@ -847,12 +893,14 @@ def get_mkt_dist_info(period, market_type=None, category_code=None):
     if not markets or not _db.is_initialized():
         return {}
 
-    returns = [_db.get_future_returns(mid, [period]).values[:,0] for mid in markets]
+    returns = [_db.get_future_returns(
+        mid, [period]).values[:, 0] for mid in markets]
     stats = np.array([func(r) for r in returns])
     drops = ~np.isnan(stats).any(axis=1)
     markets = np.array(markets)[drops].tolist()
     stats = stats[drops]
     return {m: (v, r, int(c)) for m, (v, r, c) in zip(markets, stats)}
+
 
 def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] = None):
     ret = []
@@ -874,9 +922,11 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
                                    mdates[period:eidx+period])]
     return ret
 
+
 def get_macro_params(func_code):
     db = get_db()
     return db.get_macro_param_type(func_code)
+
 
 def check_macro_info(func):
     """Check mismatch of definitions between code and db."""
@@ -884,7 +934,7 @@ def check_macro_info(func):
     if 'market_id' in macro_info:
         del macro_info['market_id']
 
-    params = eval(f'{func}.params')
+    params = MacroManager.get(func).parameters
     invalids = 0
     for each in params:
         # senario 1: definition cannot be found in db
@@ -895,6 +945,7 @@ def check_macro_info(func):
             invalids += 1
 
     return invalids
+
 
 def cast_macro_kwargs(func, macro_kwargs):
     """Check if exist invalid or missing arguments,
@@ -910,7 +961,7 @@ def cast_macro_kwargs(func, macro_kwargs):
                 raise KeyError(f'keyword argument {key} not in macro info')
             macro_type = macro_info[key]
             if MacroParaEnumManager.get(macro_type, value) is not None:
-                valid_param =  MacroParaEnumManager.get(macro_type, value)
+                valid_param = MacroParaEnumManager.get(macro_type, value)
             elif ParamType.get(macro_type) is not None:
                 try:
                     valid_param = ParamType.get(macro_type).value.type(value)
@@ -927,13 +978,16 @@ def cast_macro_kwargs(func, macro_kwargs):
     except Exception as esp:
         raise esp
 
+
 def verify_pattern(func, kwargs):
     pattern = PatternInfo.make(pid="", code=func, params=kwargs)
     return pattern.check()
 
+
 def get_plot(func, kwargs):
     pattern = PatternInfo.make(pid="", code=func, params=kwargs)
     return pattern.plot()
+
 
 def get_frame(func, kwargs):
     pattern = PatternInfo.make(pid="", code=func, params=kwargs)
