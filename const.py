@@ -170,6 +170,7 @@ class StoredProcedule(Enum):
     GET_SERIAL_NO = "SP_GET_SERIAL_NO"
     UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP = "SP_UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP"
     SWAP_FCST = "SP_SWAP_FCST"
+    BROADCAST_INVALID_MACRO_EFFECT = "SP_INVALID_FCST_PAT"
 
 class PredictResultField(Enum):
     """Fields of predict result table on DB.

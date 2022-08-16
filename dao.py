@@ -2707,6 +2707,29 @@ class MimosaDB:
         logging.info(f"Get SERIAL_NO: {exec_id}")
         return exec_id
 
+    @_do_if_not_read_only
+    def broadcast_invalid_macro(self, macro_id: str, effect_msg: str):
+        """當 Macro 發生異動後, 將異動造成的影響擴散至整個DB
+
+        Parameters
+        ----------
+        macro_id: str
+            被異動的 Macro ID
+        effect_msg: str
+            異動訊息
+        
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        # 取得 EXEC_ID
+        logging.info(f'Call {StoredProcedule.BROADCAST_INVALID_MACRO_EFFECT.value}')
+        sql = f"CALL {StoredProcedule.BROADCAST_INVALID_MACRO_EFFECT.value}('{macro_id}', '{effect_msg}')"
+        with engine.begin() as db_conn:
+            db_conn.execute(sql)
+        logging.info(f"Call {StoredProcedule.BROADCAST_INVALID_MACRO_EFFECT.value} finished")
+
 # 更新本地 Model 狀態
     @_do_if_not_read_only
     def set_model_execution_complete(self, exec_id: str):

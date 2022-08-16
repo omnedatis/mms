@@ -370,8 +370,7 @@ if __name__ == '__main__':
     
     # 發布 Macro 異動資訊
     for macro_id, msg in msgs.items():
-        # CALL SP
-        pass
+        db.broadcast_invalid_macro(macro_id, msg)
 
     # 更新 Macro Enum
     logging.info('更新 Macro 參數 Enum 型態資料')
