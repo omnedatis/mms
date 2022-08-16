@@ -1327,6 +1327,9 @@ class MimosaDB:
                     param_val = MacroParaEnumManager.get(
                         param_type, 
                         param_record[PatternParamField.PARAM_VALUE.value])
+                else:
+                    raise RuntimeError(
+                        f'Unknown type {param_type} in {TableName.MACRO_PARAM.value}, check database')
                 params[param_record[PatternParamField.PARAM_CODE.value]] = param_val
             result[pid] = PatternInfo.make(pid, func, params)
         if pattern_id not in result:
