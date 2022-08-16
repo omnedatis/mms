@@ -1301,6 +1301,7 @@ class MimosaDB:
         """
         data = pd.read_sql_query(sql, engine)
         result = {}
+        enum_types = set(MacroParaEnumManager.dump()[MacroParamEnumField.ENUM_CODE.value].values)
         for i in range(len(data)):
             record = data.iloc[i]
             pid = record[PatternInfoField.PATTERN_ID.value]
@@ -1321,6 +1322,10 @@ class MimosaDB:
                         param_record[PatternParamField.PARAM_VALUE.value])
                 elif param_type == "string":
                     param_val = str(
+                        param_record[PatternParamField.PARAM_VALUE.value])
+                elif param_type in enum_types:
+                    param_val = MacroParaEnumManager.get(
+                        param_type, 
                         param_record[PatternParamField.PARAM_VALUE.value])
                 params[param_record[PatternParamField.PARAM_CODE.value]] = param_val
             result[pid] = PatternInfo.make(pid, func, params)
