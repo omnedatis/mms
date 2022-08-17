@@ -2208,9 +2208,14 @@ class MimosaDB:
     def _update(self, table_name: str,
                 set_value: List[Tuple[str, Union[str, int, float]]],
                 whereby: List[Tuple[str, Union[str, int, float]]]):
-        set_str = [
-            f"{col}={val}" if (isinstance(val, int) or isinstance(val, float))
-            else f"{col}='{val}'" for col, val in set_value]
+        set_str = []
+        for col, val in set_value:
+            if isinstance(val, int) or isinstance(val, float):
+                sql = f"{col}={val}"
+            else:
+                new_val = val.replace("'", "''")
+                sql = f"{col}='{new_val}'"
+            set_str.append(sql)
         whereby = [
             f"{col}={val}" if (isinstance(val, int) or isinstance(val, float))
             else f"{col}='{val}'" for col, val in whereby]
@@ -2385,6 +2390,29 @@ class MimosaDB:
         now = datetime.datetime.now()
         now = np.datetime64(now).astype('datetime64[s]').tolist()
         
+        macro_ids = data[MacroParamField.MACRO_ID.value].values
+        depre_params = []
+        macro_param = self.get_macro_param_info()
+        for macro_id in macro_ids:
+            db_cond = (macro_param[MacroParamField.MACRO_ID.value].values == macro_id)
+            data_cond = (data[MacroParamField.MACRO_ID.value].values == macro_id)
+            macro_param = macro_param[db_cond]
+            data_param = data[data_cond]
+            depre_param: pd.DataFrame = pd.concat([macro_param, data_param], axis=0)
+            depre_param = depre_param.drop_duplicates(subset=[
+                MacroParamField.MACRO_ID.value,
+                MacroParamField.PARAM_CODE.value
+            ], keep=False)
+            depre_params.append(depre_param)
+        depre_params = pd.concat(depre_params, axis=0)
+        for i in range(len(depre_params)):
+            param = depre_params.iloc[i]
+            remove_where = [
+                (MacroParamField.MACRO_ID.value, param[MacroParamField.MACRO_ID.value]),
+                (MacroParamField.PARAM_CODE.value, param[MacroParamField.PARAM_CODE.value])
+            ]
+            self._delete(TableName.MACRO_PARAM.value, whereby=remove_where)
+
         for i in range(len(data)):
             row = data.iloc[i]
             macro_id = row[MacroParamField.MACRO_ID.value]
@@ -2434,7 +2462,7 @@ class MimosaDB:
                 (MacroInfoField.MACRO_ID.value, macro_id)
             ]
             self._update(
-                table_name=TableName.MACRO_INFO.value,
+                table_name=TableName.MACRO_VERSION.value,
                 set_value=[
                     (MacroVersionInfoField.CODE_VERSION.value, code_version),
                     (MacroVersionInfoField.INFO_VERSION.value, info_version),

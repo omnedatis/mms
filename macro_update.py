@@ -280,7 +280,7 @@ def convert_macro_to_df(macro, macro_id: str):
 if __name__ == '__main__':
     # 外部帶入參數值
     parser = argparse.ArgumentParser(prog="db_update_batch")
-    parser.add_argument("--mode", "-md", action='store', default='uat')
+    parser.add_argument("--mode", "-md", action='store', default='dev')
     args = parser.parse_args()
     mode = args.mode
     exec_mode = ExecMode.get(mode)
