@@ -997,7 +997,7 @@ class MacroInfo(NamedTuple):
     def _sample(self, period_type: _PeriodTypes,
                 leading_trend: _LeadingTrends):
         tunit = period_type.value.data
-        ret = [PlotInfo(Ptype.CANDLE, 'K', self.samples[leading_trend][tunit])]
+        ret = [PlotInfo(Ptype.CANDLE, 'K線', self.samples[leading_trend][tunit])]
         return ret
 
     def _interval(self, period_type: _PeriodTypes,

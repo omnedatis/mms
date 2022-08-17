@@ -171,7 +171,7 @@ def plot(**kwargs) -> List[PlotInfo]:
     data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
-        title=f"長腳十字_{kwargs['period_type']}",
+        title=f"K線",
         data=data.T)]
     return result
 
