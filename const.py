@@ -237,7 +237,7 @@ class PatternExecution(str, Enum):
     """
     BATCH_SERVICE = 'BS'
     ADD_PATTERN = 'AP'
-    BATCH_SERVICE_FINISHED = 'BSF'
+    BATCH_SERVICE_FINISHED = 'APF'
     ADD_PATTERN_FINISHED = 'APF'
 
 class PatternExecutionField(Enum):
