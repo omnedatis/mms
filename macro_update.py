@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 from typing import List
 import warnings
-from const import LOG_LOC, ExecMode, MacroInfoField, MacroParamField, MacroVersionInfoField
+from const import SYS_LOG_LOC, ExecMode, MacroInfoField, MacroParamField, MacroVersionInfoField
 from dao import MimosaDB
 from _core._macro import MacroManager, MacroParaEnumManager
 
@@ -288,8 +288,8 @@ if __name__ == '__main__':
         raise RuntimeError(f'invalid execution mode {mode}')
     if exec_mode == ExecMode.PROD.value or exec_mode == ExecMode.UAT.value:
         warnings.filterwarnings("ignore")
-    if not os.path.exists(LOG_LOC):
-        os.mkdir(LOG_LOC)
+    if not os.path.exists(SYS_LOG_LOC):
+        os.mkdir(SYS_LOG_LOC)
     
     # 設定 Log
     err_hdlr = logging.StreamHandler(stream=sys.stderr)
@@ -297,7 +297,7 @@ if __name__ == '__main__':
     info_hdlr = logging.StreamHandler(stream=sys.stdout)
     info_hdlr.setLevel(logging.INFO)
     file_hdlr = handlers.TimedRotatingFileHandler(
-        filename=f'{LOG_LOC}/update_db_data_batch.log', when='D', backupCount=7)
+        filename=f'{SYS_LOG_LOC}/update_db_data_batch.log', when='D', backupCount=7)
     fmt = '%(asctime)s.%(msecs)03d - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
     level = {ExecMode.DEV.value: logging.DEBUG,
                 ExecMode.UAT.value: logging.INFO,

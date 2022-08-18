@@ -15,6 +15,7 @@ MIN_BACKTEST_LEN = 180
 LOCAL_DB = '../_local_db'
 DATA_LOC = f'{LOCAL_DB}/_data'
 LOG_LOC = './log'
+SYS_LOG_LOC = '../logs'
 EXCEPT_DATA_LOC = '_except'
 Y_LABELS = 5
 MIN_Y_SAMPLES = max([30, Y_LABELS * 5])
