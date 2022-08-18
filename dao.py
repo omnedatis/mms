@@ -129,7 +129,9 @@ class MimosaDBCacheManager:
         TableName.MACRO_PARAM_ENUM.value:[
             MacroParamEnumField.ENUM_CODE.value,
             MacroParamEnumField.ENUM_VALUE_CODE.value,
-            MacroParamEnumField.ENUM_VALUE_NAME.value
+            MacroParamEnumField.ENUM_VALUE_NAME.value,
+            'CREATE_BY',
+            'CREATE_DT'
         ],
         TableName.MACRO_VERSION.value: [
             MacroVersionInfoField.MACRO_ID.value,
@@ -2047,10 +2049,6 @@ class MimosaDB:
         """
         def get_new_enum(old, new):
             now_time = datetime.datetime.now()
-            new['CREATE_DT'] = now_time
-            new['MODIFY_DT'] = now_time
-            new['CREATE_BY'] = self.CREATE_BY
-            new['MODIFY_BY'] = self.MODIFY_BY
             old = {f'{a}.{b}': old[idx: idx+1]
                 for idx, (a, b) in enumerate(
                     zip(old[MacroParamEnumField.ENUM_CODE.value].values,
@@ -2068,8 +2066,13 @@ class MimosaDB:
                     else:
                         new[key]['CREATE_BY'] = old[key]['CREATE_BY']
                         new[key]['CREATE_DT'] = old[key]['CREATE_DT']
+                        new[key]['MODIFY_BY'] = self.MODIFY_BY
+                        new[key]['MODIFY_DT'] = now_time
                         ret.append(new[key])
                     del new[key]
+            for key in new:
+                new[key]['CREATE_BY'] = self.CREATE_BY
+                new[key]['CREATE_DT'] = now_time
             ret += list(new.values())
             return pd.concat(ret, axis=0)
         self.cache_manager.refresh(tables=[TableName.MACRO_PARAM_ENUM.value])

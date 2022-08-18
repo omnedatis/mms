@@ -326,16 +326,16 @@ if __name__ == '__main__':
         infos.append(info)
         versions.append(version)
         params.append(param)
+    logging.info('新增 Macro 資料')
     if len(infos) > 0:
         infos = pd.concat(infos, axis=0)
+        db.save_macro_info(infos)
     if len(versions) > 0:
         versions = pd.concat(versions, axis=0)
+        db.save_macro_version_info(versions)
     if len(params) > 0:
         params = pd.concat(params, axis=0)
-    logging.info('新增 Macro 資料')
-    db.save_macro_info(infos)
-    db.save_macro_version_info(versions)
-    db.save_macro_param_info(params)
+        db.save_macro_param_info(params)
     logging.info('新增 Macro 資料完成')
 
     # 更新 Macro
@@ -348,16 +348,16 @@ if __name__ == '__main__':
         infos.append(info)
         versions.append(version)
         params.append(param)
+    logging.info('更新 Macro 資料')
     if len(infos) > 0:
         infos = pd.concat(infos, axis=0)
+        db.update_macro_info(infos)
     if len(versions) > 0:
         versions = pd.concat(versions, axis=0)
+        db.update_macro_version_info(versions)
     if len(params) > 0:
         params = pd.concat(params, axis=0)
-    logging.info('更新 Macro 資料')
-    db.update_macro_info(infos)
-    db.update_macro_version_info(versions)
-    db.update_macro_param_info(params)
+        db.update_macro_param_info(params)
     logging.info('更新 Macro 資料完成')
 
     # 刪除 Macro
