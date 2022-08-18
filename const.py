@@ -236,7 +236,7 @@ class PatternExecution(str, Enum):
     跑批時計算完成 BATCH_SERVICE_FINISHED = 'APF'
     新增現象時計算完成 ADD_PATTERN_FINISHED = 'BPF'
     """
-    BATCH_SERVICE = 'BS'
+    BATCH_SERVICE = 'AP'
     ADD_PATTERN = 'AP'
     BATCH_SERVICE_FINISHED = 'APF'
     ADD_PATTERN_FINISHED = 'APF'
