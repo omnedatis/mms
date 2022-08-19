@@ -15,6 +15,7 @@ MIN_BACKTEST_LEN = 180
 LOCAL_DB = '../_local_db'
 DATA_LOC = f'{LOCAL_DB}/_data'
 LOG_LOC = './log'
+SYS_LOG_LOC = '../logs'
 EXCEPT_DATA_LOC = '_except'
 Y_LABELS = 5
 MIN_Y_SAMPLES = max([30, Y_LABELS * 5])
@@ -119,6 +120,8 @@ class TableName(Enum):
     PAT_MKT_OCCUR: 現象最新發生次數統計表
     MACRO_INFO: Macro資訊表
     MACRO_PARAM: Macro參數資訊表
+    MACRO_PARAM_ENUM: Macro名目參數資訊表
+    MACRO_VERSION: Macro版本資訊表
     MODEL_INFO: 觀點資訊表
     MODEL_EXECUTION: 觀點執行狀態資訊表
     MODEL_MKT_MAP: 觀點使用市場資訊表
@@ -142,6 +145,8 @@ class TableName(Enum):
     PAT_MKT_OCCUR = "FCST_PAT_MKT_OCCUR"
     MACRO_INFO = "FCST_MACRO"
     MACRO_PARAM = "FCST_MACRO_PARAM"
+    MACRO_PARAM_ENUM = "FCST_MACRO_PARAM_ENUM"
+    MACRO_VERSION = "FCST_MACRO_VERSION"
     MODEL_INFO = "FCST_MODEL"
     MODEL_EXECUTION = "FCST_MODEL_EXECUTION"
     MODEL_MKT_MAP = "FCST_MODEL_MKT_MAP"
@@ -166,6 +171,7 @@ class StoredProcedule(Enum):
     GET_SERIAL_NO = "SP_GET_SERIAL_NO"
     UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP = "SP_UPDATE_FCST_MODEL_MKT_HIT_SUM_SWAP"
     SWAP_FCST = "SP_SWAP_FCST"
+    BROADCAST_INVALID_MACRO_EFFECT = "SP_INVALID_FCST_PAT"
 
 class PredictResultField(Enum):
     """Fields of predict result table on DB.
@@ -230,9 +236,9 @@ class PatternExecution(str, Enum):
     跑批時計算完成 BATCH_SERVICE_FINISHED = 'APF'
     新增現象時計算完成 ADD_PATTERN_FINISHED = 'BPF'
     """
-    BATCH_SERVICE = 'BS'
+    BATCH_SERVICE = 'AP'
     ADD_PATTERN = 'AP'
-    BATCH_SERVICE_FINISHED = 'BSF'
+    BATCH_SERVICE_FINISHED = 'APF'
     ADD_PATTERN_FINISHED = 'APF'
 
 class PatternExecutionField(Enum):
@@ -617,6 +623,69 @@ class ModelMarketHitSumField(Enum):
     FCST_CNT = "FCST_CNT"
 
 
+class MacroInfoField(Enum):
+    """Macro 基本資訊欄位
+
+    Members
+    -------
+    MACRO_ID: MACRO ID
+    MACRO_NAME: MACRO 名稱
+    MACRO_DESC: MACRO 描述
+    FUNC_CODE: MACRO 使用的 function 名稱
+    """
+    MACRO_ID = "MACRO_ID"
+    MACRO_NAME = "MACRO_NAME"
+    MACRO_DESC = "MACRO_DESC"
+    FUNC_CODE = "FUNC_CODE"
+
+
+class MacroParamInfoField(Enum):
+    """Macro 參數基本資訊欄位
+
+    Members
+    -------
+    MACRO_ID: MACRO ID
+    PARAM_CODE: MACRO 參數代碼
+    PARAM_NAME: MACRO 參數名稱
+    PARAM_DESC: MACRO 參數描述
+    PARAM_DEFAULT: MACRO 參數預設值
+    PARAM_TYPE: MACRO 參數型態
+    """
+    MACRO_ID = "MACRO_ID"
+    PARAM_CODE = "PARAM_CODE"
+    PARAM_NAME = "PARAM_NAME"
+    PARAM_DESC = "PARAM_DESC"
+    PARAM_DEFAULT = "PARAM_DEFAULT"
+    PARAM_TYPE = "PARAM_TYPE"
+
+
+class MacroVersionInfoField(Enum):
+    """Macro 版本資訊欄位
+
+    Members
+    -------
+    MACRO_ID: MACRO ID
+    CODE_VERSION: 對應 py_ver, 為程式碼版本
+    INFO_VERSION: 對應 db_ver, 為資料庫資料版本
+    """
+    MACRO_ID = "MACRO_ID"
+    CODE_VERSION = "CODE_VERSION"
+    INFO_VERSION = "INFO_VERSION"
+
+
+class MacroParamEnumField(Enum):
+    """Macro 參數的名目群組欄位
+
+    Members
+    -------
+    ENUM_CODE: 名目群組代碼
+    ENUM_VALUE_CODE: 名目資料代碼
+    ENUM_VALUE_NAME: 名目資料名稱
+    """
+    ENUM_CODE="ENUM_CODE"
+    ENUM_VALUE_CODE="ENUM_VALUE_CODE"
+    ENUM_VALUE_NAME="ENUM_VALUE_NAME"
+
 class SerialNoType(Enum):
     """呼叫取得序列號時需要使用的參數
 
@@ -651,6 +720,8 @@ class CacheName(Enum):
     PAT_PARAM = TableName.PAT_PARAM.value
     MACRO_INFO = TableName.MACRO_INFO.value
     MACRO_PARAM = TableName.MACRO_PARAM.value
+    MACRO_VERSION = TableName.MACRO_VERSION.value
+    MACRO_PARAM_ENUM = TableName.MACRO_PARAM_ENUM.value
     MODEL_INFO = TableName.MODEL_INFO.value
     MODEL_EXECUTION = TableName.MODEL_EXECUTION.value
     MODEL_MKT_MAP = TableName.MODEL_MKT_MAP.value

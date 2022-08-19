@@ -30,7 +30,8 @@ params = [
                desc='判斷過去幾天內連續發生的天數(n)', 
                dtype=ParamType.INT, default=10)
 ]
-
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:
     """參數正確性檢查式, 用於判斷參數是否正常, 檢查項目為
@@ -212,4 +213,5 @@ def frame(**kwargs) -> int:
     return result
 
 stone_pp002 = Macro(code=code, name=name, desc=description, params=params,
-                    run=func, check=check, plot=plot, frame=frame)
+                    run=func, check=check, plot=plot, frame=frame,
+                    db_ver=db_ver, py_ver=py_ver)

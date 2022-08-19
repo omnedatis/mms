@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" 
+"""
 Created on Thur Jun  2 10:30:29 2022
 
 @author: Jeff
@@ -8,14 +8,15 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from .common import MAX_PRICE_LEN
 from .._context import TimeUnit, get_cp, ts_any
 from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
-
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def _get_ma(data, period) -> np.ndarray:
     new_shape = (period, data.shape[0]-period+1)
@@ -53,7 +54,7 @@ params = [
     MacroParam(code='period_9', name='MA均線天數(第九小)', desc='MA均線天數(第九小)',
                dtype=ParamType.get('int'), default=120),
     MacroParam(code='period_type', name='K線週期', desc='K線週期',
-               dtype=ParamType.get('string'), default='day'),
+               dtype=PeriodType, default=PeriodType.type.DAY)
 ]
 
 __doc__ = """
@@ -89,7 +90,7 @@ period_8 : int
     MA均線天數(第八小).
 period_9 : int
     MA均線天數(第九小).
-    
+
 """
 
 
@@ -217,7 +218,7 @@ def _jack_ma_through_price_down(market_id: str, **kwargs) -> pd.Series:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
         periods = [kwargs[f'period_{idx}'] for idx in range(1, 10)]
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
@@ -236,4 +237,4 @@ def _jack_ma_through_price_down(market_id: str, **kwargs) -> pd.Series:
 
 jack_ma_through_price_down = Macro(code='jack_ma_through_price_down', name='收盤價向下穿越MA', desc=__doc__,
                                    params=params, run=_jack_ma_through_price_down, check=_checker, plot=_plotter,
-                                   frame=_framer)
+                                   frame=_framer, db_ver=db_ver, py_ver=py_ver)

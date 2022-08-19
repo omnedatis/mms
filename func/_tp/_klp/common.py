@@ -5,8 +5,10 @@ Created on Wed Jun  1 16:49:39 2022
 @author: WaNiNi
 """
 
+from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from func.common import (Macro, MacroParam, ParamType, PlotInfo, Ptype,
+                         ParamEnumBase, ParamEnumElement)
 
 _Number = Union[int, float]
 
@@ -65,7 +67,7 @@ class LimitedVariable(NamedTuple):
             else:
                 ret = f"{ret}且{msg}"
         return ret
-    
+
 class RawMacro(NamedTuple):
     code: str
     name: str
@@ -75,6 +77,8 @@ class RawMacro(NamedTuple):
     sample_generator: Callable
     interval_evaluator: Callable
     arg_checker: Callable
+    db_ver: str = ""
+    py_ver: str = ""
 
     def filter_arguments(self, **kwargs):
         ret = {}
@@ -128,5 +132,7 @@ def gen_macro(recv: RawMacro) -> Macro:
     ret = Macro(code=recv.code, name=recv.name, desc=recv.description,
                 params=recv.parameters, run=recv.execute,
                 check=recv.check_arguments, plot=recv.get_sample,
-                frame=recv.get_interval)
+                frame=recv.get_interval,
+                db_ver=recv.db_ver,
+                py_ver=recv.py_ver)
     return ret

@@ -7,4 +7,4 @@ Created on Wed Jul 27 10:36:00 2022
 
 from .._context import (MD_CACHE, get_market_data, BooleanTimeSeries,
                         MarketData, NumericTimeSeries, TimeIndex, TimeUnit,
-                        MarketDataProvider, set_market_data_provider)
+                        MarketDataProvider, set_market_data_provider, PeriodType)

@@ -9,8 +9,8 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 import pandas as pd
-
-from func.common import MacroParam, PlotInfo
+from const import MacroInfoField, MacroParamEnumField, MacroVersionInfoField
+from func.common import Dtype, MacroParam, PlotInfo, ParamEnumBase
 from func.common import Macro as _Macro
 
 class Macro(NamedTuple):
@@ -22,6 +22,8 @@ class Macro(NamedTuple):
     sample_generator: Callable
     interval_evaluator: Callable
     arg_checker: Callable
+    db_version: str = ""
+    py_version: str = ""
 
     def filter_arguments(self, **kwargs) -> Dict[str, Any]:
         ret = {}
@@ -60,14 +62,17 @@ class Macro(NamedTuple):
         return self.arg_checker(**kwargs)
 
     def to_dict(self):
-        ret = {'MACRO_NAME': self.name,
-               'MACRO_DESC': self.description,
-               'FUNC_CODE': self.code,
-               'PARAM': [each.to_dict() for each in self.parameters]}
+        ret = {MacroInfoField.MACRO_NAME.value: self.name,
+               MacroInfoField.MACRO_DESC.value: self.description,
+               MacroInfoField.FUNC_CODE.value: self.code,
+               'PARAM': [each.to_dict() for each in self.parameters],
+               MacroVersionInfoField.CODE_VERSION.value: self.py_version,
+               MacroVersionInfoField.INFO_VERSION.value: self.db_version}
         return ret
 
 def gen_macro(recv: _Macro) -> Macro:
     ret = Macro(code=recv.code, name=recv.name, description=recv.desc,
+                db_version=recv.db_ver, py_version=recv.py_ver,
                 parameters=recv.params, macro=recv.run,
                 arg_checker=recv.check,
                 sample_generator=recv.plot,
@@ -85,4 +90,23 @@ class MacroManagerBase(Macro, Enum):
     @classmethod
     def dump(cls):
         ret = [each.to_dict() for each in cls]
+        return ret
+
+class MacroParaEnumManagerBase(Dtype, Enum):
+    @classmethod
+    def get(cls, dtype: str, value: str) -> Any:
+        for each in cls:
+            if each.value.code == dtype:
+                return each.value.type.get(value)
+        return None
+
+    @classmethod
+    def dump(cls):
+        values = []
+        for each in cls:
+            values += [[each.code, element.value.code, element.value.name] for element in each.value.type]
+        ret = pd.DataFrame(values, columns=[
+            MacroParamEnumField.ENUM_CODE.value, 
+            MacroParamEnumField.ENUM_VALUE_CODE.value, 
+            MacroParamEnumField.ENUM_VALUE_NAME.value])
         return ret

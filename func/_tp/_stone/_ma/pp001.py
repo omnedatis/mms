@@ -21,7 +21,8 @@ params = [
                desc='在指定的統計天數中發生次數的臨界值(o)', 
                dtype=ParamType.INT, default=5)
 ]
-
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:
     """參數正確性檢查式, 用於判斷參數是否正常, 檢查項目為
@@ -255,4 +256,5 @@ def frame(**kwargs) -> int:
     return result
 
 stone_pp001 = Macro(code=code, name=name, desc=description, params=params,
-                    run=func, check=check, plot=plot, frame=frame)
+                    run=func, check=check, plot=plot, frame=frame,
+                    db_ver=db_ver, py_ver=py_ver)

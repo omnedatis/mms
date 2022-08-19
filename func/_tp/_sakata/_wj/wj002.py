@@ -1,3 +1,4 @@
+import random
 import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
@@ -8,69 +9,58 @@ from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj001'
-name = '商智酒田戰法指標(WJ版)-吊人線'
+code = 'wj002'
+name = '商智酒田戰法指標(WJ版)-高浪線'
 description = """
 
-> 先漲後跌，由多轉空的反轉型態
+> 趨勢的盤整
 
 ## 型態說明
-1. 型態發生前會有上升區段，或處於市場頂部
-2. 開盤價在當天價格高點
-3. 當日形成一個短實體黑 K 棒
-4. 下影線很長，至少要有實體長度的兩倍以上
-5. 沒有上影線
+
+1. 型態發生前會有上升或下降區段，或處於市場頂部或底部
+2. 實體線很短
+3. 上下影線很長
 
 ## 未來趨勢
-反轉向下
+
+進入盤整階段
 
 ## 現象解釋
+
 ### 傳統解釋
-繼原先的上漲趨勢，開盤時持續向上開高，盤中面對大量的賣出壓力，使得價格大幅下降，即使
-買氣仍持續，但仍敵不過賣壓，最後雖收在開盤價附近的價位，但仍為黑線。
+
+市場依照原先趨勢上漲或下跌，不論盤中如何劇烈震盪，於盤後還是會回到開盤價附近。這代表
+市場當前已失去方向感，不論受到哪方向的刺激仍無法使其持續，處於多空不明的階段。
 
 ### 心理面解釋
-認為當前價格已達最高的投資人比例開始占多數，因此有急著趁高價脫手的現象發生，使得開高
-後遇到大幅賣壓。當這些想脫手的投資人賣完後，仍有認為會續漲的投資人買進，但由於這些投
-資人的人數沒有多到將先前的跌幅補足（但仍足夠多到可以將盤面拉回開盤價附近），因此最終
-收在開盤價附近。
 
-酒田戰法認為，價格已達最高價的投資人會在該價位中保持一定比例，這會使得價格無法向上繼
-續提升，進一步的讓更多原本不認為已達最高價的投資人開始認為真的已達最高價，並開始使得
-認為這個價位為最高價的投資人比例持續提升，進一步造成盤面開始下跌，因此該現象將會是一
-個高點反轉訊號。
+原本市場投資人已經對於趨勢有一個共識，因此使得價格持續上漲或下跌，該趨勢可能中途受到
+了某個劇烈的影響，使得持有大量資金的投資人改變對市場的看法，導致趨勢持續時受到劇烈阻
+擋，在大量的交易中產生了盤中價格劇烈震盪，最終由於市場看法打平，停留在開盤價附近。
 
 ### 備註
-這邊認為吊人線所造成的反轉現象會根據公司的股性不同而有所改變，反轉後的跌幅也會有所改
-變。
 
-股性價格本身就易受影響的股票，當現象發生後會發生反轉的時間點會較快，下跌的幅度也較高
-；而價格本身不易受影響的股票則是會需要更多的時間來讓投資人相信價位已達高點，並且使其
-緩慢下跌。
-
-期間內越多次的吊人線應該會使得反轉現象更有機會發生
+這個現象暗示了某個持有市場大量資金的投資人的看法轉變，並不一定是針對市場做出了反向看
+法，只能說明當前市場有大量資金的轉換發生。
 """
 params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測吊人線',
+        desc='希望以哪種 K 線週期來偵測高浪線',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
 db_ver = '2022081001'
 py_ver = '2022081001'
 
-
 def func(market_id:str, **kwargs) -> pd.Series:
     """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生吊人線的序列
 
     判斷規則:
-    1. 型態發生前會有上升區段，或處於市場頂部
-    2. 開盤價在當天價格高點
-    3. 當日形成一個短實體黑 K 棒
-    4. 下影線很長，至少要有實體長度的兩倍以上
-    5. 沒有上影線
+    1. 型態發生前會有上升或下降區段
+    2. 實體線很短
+    3. 上下影線很長
 
     Parameters
     ----------
@@ -83,14 +73,14 @@ def func(market_id:str, **kwargs) -> pd.Series:
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生吊人線序列
+        市場各歷史時間點是否有發生高浪線序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj001'")
+                           "'wj002'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 10,
@@ -98,25 +88,19 @@ def func(market_id:str, **kwargs) -> pd.Series:
         TimeUnit.MONTH: 3
     }
     period = period_type_to_period[period_type]
-    # 1. 型態發生前會出現上升區段，或處於市場頂部
+    # 1. 型態發生前會有上升或下降區段
     ma_5 = TI.MA(market_id, 5, period_type)
     ma_10 = TI.MA(market_id, 10, period_type)
-    ma_diff = (ma_5 - ma_10).rolling(period, period_type).min()
-    cond_1 = (ma_diff > 0)
-    # 2. 開盤價位於當天價格的高點
-    # avg_ampt = (candle.amplitude).rolling(period, period_type).mean()
-    oh_diff_ratio = (candle.high - candle.open)/candle.amplitude
-    cond_2 = oh_diff_ratio < 0.1
-    # 3. 當日形成短實體黑 K 棒
+    ma_diff = (ma_5 - ma_10).rolling(period, period_type)
+    cond_1 = (ma_diff.min() > 0) | ((ma_diff.max() < 0))
+    # 2. 實體線很短
     ba_ratio = candle.body/candle.amplitude
-    cond_3 = (ba_ratio < 0.2) & (candle.close < candle.open)
-    # 4. 下影線超過實體線長度 2 倍以上
+    cond_2 = (ba_ratio < 0.2)
+    # 3. 上下影線很長
     lsb_ratio = candle.lower_shadow/candle.body
-    cond_4 = lsb_ratio >= 2
-    # 5. 沒有上影線
-    usa_ratio = candle.upper_shadow/candle.amplitude
-    cond_5 = usa_ratio < 0.1
-    cond = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
+    usb_ratio = candle.upper_shadow/candle.body
+    cond_3 = (lsb_ratio >= 1.6) & (usb_ratio >= 1.6)
+    cond = cond_1 & cond_2 & cond_3
     result = cond.to_pandas()
     return result
 
@@ -139,7 +123,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj001'")
+                           "'wj002'")
 
     results = {}
     try:
@@ -149,14 +133,12 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj001 的範例圖製作函式
+    """wj002 的範例圖製作函式
 
     判斷規則:
-    1. 型態發生前會有上升區段，或處於市場頂部
-    2. 開盤價在當天價格高點
-    3. 當日形成一個短實體黑 K 棒
-    4. 下影線很長，至少要有實體長度的兩倍以上
-    5. 沒有上影線
+    1. 型態發生前會有上升或下降區段，或處於市場頂部或底部
+    2. 實體線很短
+    3. 上下影線很長
 
     Parameters
     ----------
@@ -173,18 +155,22 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj001'")
+                           "'wj002'")
     period_type_to_period = {
         TimeUnit.DAY: 10,
         TimeUnit.WEEK: 3,
         TimeUnit.MONTH: 3
     }
     period = period_type_to_period[period_type]
-    rand_size = np.cumsum(np.abs(np.random.normal(5, 1, period+1)))
-    rand_size[-1] = rand_size[-1]-10
+    pos_neg_rand = np.random.randint(0,2)*2 - 1
+    candles = [
+        MokeCandle.make(KType.WHITE_TINY_LONG_EQUAL_SHADOW),
+        MokeCandle.make(KType.BLACK_TINY_LONG_EQUAL_SHADOW)
+    ]
+    rand_size = pos_neg_rand * np.cumsum(np.abs(np.random.normal(5, 1, period+1)))
     data = [
         MokeCandle.make(KType.DOJI_FOUR_PRICE) for _ in range(period)
-    ]+[MokeCandle.make(KType.BLACK_HAMMER)]
+    ]+[random.choice(candles)]
     data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
@@ -210,7 +196,7 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj001'")
+                           "'wj002'")
     period_type_to_period = {
         TimeUnit.DAY: 10,
         TimeUnit.WEEK: 3,
@@ -219,7 +205,6 @@ def frame(**kwargs) -> int:
     period = period_type_to_period[period_type]
     return period
 
-
-wj001 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame, 
+wj002 = Macro(code=code, name=name, desc=description, params=params,
+        run=func, check=check, plot=plot, frame=frame,
         db_ver=db_ver, py_ver=py_ver)

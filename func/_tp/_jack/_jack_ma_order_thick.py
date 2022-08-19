@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" 
+"""
 Created on Thur Jun  2 10:30:29 2022
 
 @author: Jeff
@@ -8,14 +8,15 @@ from collections import defaultdict
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import pandas as pd
-from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype
+from ...common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from .common import MAX_PRICE_LEN
 from .._context import TimeUnit
 from .._context import TechnicalIndicator as TI
 import const
 
 MA_GRAPH_SAMPLE_NUM = const.MA_GRAPH_SAMPLE_NUM
-
+db_ver = '2022081001'
+py_ver = '2022081001'
 
 def _get_ma(data, period) -> np.ndarray:
     new_shape = (period, data.shape[0]-period+1)
@@ -41,7 +42,7 @@ params = [
     MacroParam(code='ma_short_period', name='短期均線天數', desc='短期均線天數',
                dtype=ParamType.get('int'), default=1),
     MacroParam(code='period_type', name='K線週期', desc='K線週期',
-               dtype=ParamType.get('string'), default='day')
+               dtype=PeriodType, default=PeriodType.type.DAY)
 ]
 
 __doc__ = """
@@ -142,7 +143,7 @@ def _jack_ma_order_thick(market_id: str, **kwargs) -> pd.Series:
 
     """
     try:
-        period_type = TimeUnit.get(kwargs['period_type'])
+        period_type = kwargs['period_type'].data
         ma_short_period = kwargs['ma_short_period']
         ma_mid_period = kwargs['ma_mid_period']
         ma_long_period = kwargs['ma_long_period']
@@ -163,4 +164,4 @@ def _jack_ma_order_thick(market_id: str, **kwargs) -> pd.Series:
 
 jack_ma_order_thick = Macro(code='jack_ma_order_thick', name='MA中長期包夾短期排列', desc=__doc__,
                             params=params, run=_jack_ma_order_thick, check=_checker, plot=_plotter,
-                            frame=_framer)
+                            frame=_framer, db_ver=db_ver, py_ver=py_ver)
