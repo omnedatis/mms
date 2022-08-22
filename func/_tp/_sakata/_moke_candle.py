@@ -15,6 +15,7 @@ class TCandle(NamedTuple):
 
 class KType(Enum):
     WHITE_LONG = TCandle.make(name="大陽線", ud=1, ampt=10.0, body=1.0, t_offset=0.0)
+    WHITE_LONG_TINY_EQUAL_SHADOW = TCandle.make(name="上下影線都短的大陽線", ud=1, ampt=10.0, body=0.9, t_offset=0.05)
     WHITE_CLOSING_MARUBOZU = TCandle.make(name="光頭陽線", ud=1, ampt=10.0, body=0.7, t_offset=0.0)
     WHITE_HAMMER = TCandle.make(name="陽線槌子線", ud=1, ampt=10.0, body=0.3, t_offset=0.0)
     WHITE_OPENING_MARUBOZU = TCandle.make(name="光腳陽線", ud=1, ampt=10.0, body=0.7, t_offset=0.3)
