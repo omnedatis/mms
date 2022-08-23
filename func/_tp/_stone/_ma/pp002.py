@@ -5,7 +5,7 @@ from func._tp._klp._ma._stone.common import get_ma, MacroParam, ParamType, gen_c
 from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 code = 'stone_pp002'
-name = '商智MA指標-PP002'
+name = 'MA指標-PP002'
 func = tp.stone_pp002
 description = func.__doc__
 params = [
@@ -30,7 +30,7 @@ params = [
                desc='判斷過去幾天內連續發生的天數(n)', 
                dtype=ParamType.INT, default=10)
 ]
-db_ver = '2022081001'
+db_ver = '2022082301'
 py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:

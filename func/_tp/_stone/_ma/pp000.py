@@ -4,7 +4,7 @@ from func._tp._ma import _stone as tp
 from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 code = 'stone_pp000'
-name = '商智MA指標-PP000'
+name = 'MA指標-PP000'
 func = tp.stone_pp000
 description = func.__doc__
 params = [
@@ -15,7 +15,7 @@ params = [
                desc='用於當作比較基準的 MA 計算時所使用的天期',
                dtype=ParamType.INT, default=10)
 ]
-db_ver = '2022081001'
+db_ver = '2022082301'
 py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:
