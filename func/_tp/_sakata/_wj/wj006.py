@@ -9,7 +9,7 @@ from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
 code = 'wj006'
-name = '商智酒田戰法指標(WJ版)-槌子'
+name = '酒田戰法指標(WJ版)-槌子'
 description = """
 
 > 趨勢反轉向上

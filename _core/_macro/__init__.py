@@ -8,7 +8,8 @@ from func._tp import (
     stone_pp000, stone_pp001, stone_pp002, stone_pp003,
     stone_pp004, stone_pp005, stone_pp006, stone_pp007,
     stone_pp008, stone_pp009,
-    wj001, wj002, wj003, wj004, wj005, wj006, wj007,
+    wj001, wj002, wj003, wj004, wj005, wj006, wj007, wj008,
+    wj009, wj010,
     PeriodType)
 
 class MacroManager(MacroManagerBase):
@@ -36,6 +37,9 @@ class MacroManager(MacroManagerBase):
     wj005 = gen_macro(wj005)
     wj006 = gen_macro(wj006)
     wj007 = gen_macro(wj007)
+    wj008 = gen_macro(wj008)
+    wj009 = gen_macro(wj009)
+    wj010 = gen_macro(wj010)
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
 

@@ -9,7 +9,7 @@ from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
 code = 'wj001'
-name = '商智酒田戰法指標(WJ版)-吊人線'
+name = '酒田戰法指標(WJ版)-吊人線'
 description = """
 
 > 先漲後跌，由多轉空的反轉型態
@@ -58,7 +58,7 @@ params = [
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022081001'
+db_ver = '2022082301'
 py_ver = '2022081001'
 
 

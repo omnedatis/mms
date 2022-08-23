@@ -9,7 +9,7 @@ from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
 code = 'wj004'
-name = '商智酒田戰法指標(WJ版)-傘型線'
+name = '酒田戰法指標(WJ版)-傘型線'
 description = """
 
 > 趨勢的鏡像反轉
@@ -56,7 +56,7 @@ params = [
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022081001'
+db_ver = '2022082301'
 py_ver = '2022081001'
 
 def func(market_id:str, **kwargs) -> pd.Series:

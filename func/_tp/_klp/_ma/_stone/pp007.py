@@ -7,7 +7,7 @@ from .common import (gen_cps4arranged_mas, gen_cps4arranged_mas_by_random,
 from .common import MAX_MA_PERIOD, MAX_SMAPLES, LimitedVariable
 
 code = 'stone_pp007'
-name = '商智MA指標-PP007'
+name = 'MA指標-PP007'
 macro = tp.stone_pp007
 description = macro.__doc__
 parameters = [
@@ -99,4 +99,4 @@ def interval_evaluator(statistical_duration, **kwargs):
 
 stone_pp007 = RawMacro(code, name, description, parameters, macro,
                        sample_generator, interval_evaluator,
-                       arg_checker, '2022081001', '2022081001')
+                       arg_checker, '2022082301', '2022081001')

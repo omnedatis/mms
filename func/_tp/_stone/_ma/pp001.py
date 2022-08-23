@@ -4,7 +4,7 @@ from func._tp._ma import _stone as tp
 from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype
 
 code = 'stone_pp001'
-name = '商智MA指標-PP001'
+name = 'MA指標-PP001'
 func = tp.stone_pp001
 description = func.__doc__
 params = [
@@ -21,7 +21,7 @@ params = [
                desc='在指定的統計天數中發生次數的臨界值(o)', 
                dtype=ParamType.INT, default=5)
 ]
-db_ver = '2022081001'
+db_ver = '2022082301'
 py_ver = '2022081001'
 
 def check(**kwargs) -> Dict[str, str]:

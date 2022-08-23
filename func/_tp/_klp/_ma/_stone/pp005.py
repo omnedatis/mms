@@ -5,7 +5,7 @@ from .common import get_ma, RawMacro, MacroParam, ParamType, PlotInfo, Ptype
 from .common import MAX_MA_PERIOD, MAX_SMAPLES, LimitedVariable
 
 code = 'stone_pp005'
-name = '商智MA指標-PP005(盤整指標)'
+name = 'MA指標-PP005(盤整指標)'
 macro = tp.stone_pp005
 description = macro.__doc__
 parameters = [
@@ -167,4 +167,4 @@ def interval_evaluator(long_statistical_duration, **kwargs):
 
 stone_pp005 = RawMacro(code, name, description, parameters, macro,
                        sample_generator, interval_evaluator,
-                       arg_checker, '2022081001', '2022081001')
+                       arg_checker, '2022082301', '2022081001')
