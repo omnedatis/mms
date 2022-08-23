@@ -106,7 +106,7 @@ class MacroParaEnumManagerBase(Dtype, Enum):
         for each in cls:
             values += [[each.code, element.value.code, element.value.name] for element in each.value.type]
         ret = pd.DataFrame(values, columns=[
-            MacroParamEnumField.ENUM_CODE.value, 
-            MacroParamEnumField.ENUM_VALUE_CODE.value, 
+            MacroParamEnumField.ENUM_CODE.value,
+            MacroParamEnumField.ENUM_VALUE_CODE.value,
             MacroParamEnumField.ENUM_VALUE_NAME.value])
         return ret

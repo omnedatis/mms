@@ -27,7 +27,7 @@ from func.common import (Dtype, MacroParam, ParamEnumBase, ParamEnumElement,
 from ...common import Macro
 
 _PY_VERSION = '2201'
-_DB_VERSION = '2201'
+_DB_VERSION = '2202'
 _PeriodTypes = PeriodType.type
 
 class _LeadingTrends(ParamEnumBase):
@@ -845,6 +845,23 @@ class Candlestick(_CandleStickBase):
             self._patterns[pkey] = ret
         return self._patterns[pkey]
 
+    def is_close_to(self, target: NumericTimeSeries,
+                    reference: NumericTimeSeries) -> BooleanTimeSeries:
+        ret = abs(target - reference) <= self.near_tolerance
+        ret.rename(f'{target.name} is Near / Close to {reference.name}')
+        return ret
+
+    def is_less_or_near(self, target: NumericTimeSeries,
+                        reference: NumericTimeSeries) -> BooleanTimeSeries:
+        ret = target <= reference + self.near_tolerance
+        ret.rename(f'{target.name} is Less-or-Near {reference.name}')
+        return ret
+
+    def is_greater_or_near(self, target: NumericTimeSeries,
+                           reference: NumericTimeSeries) -> BooleanTimeSeries:
+        ret = target >= reference - self.near_tolerance
+        ret.rename(f'{target.name} is Greater-or-Near {reference.name}')
+        return ret
 
 def _get_candlestick(market_id: str, tunit: TimeUnit) -> Candlestick:
     data = get_market_data(market_id)
@@ -975,6 +992,55 @@ def get_sample(macro: Callable, period_type: _PeriodTypes,
                 return cct.values[idx-interval+1: idx+1]
     raise TimeoutError()
 
+_DAILY_BULLISH = np.array([[ 85.,  86.,  83.,  84.],
+                           [ 84.,  87.,  83.,  86.],
+                           [ 86.,  86.,  84.,  85.],
+                           [ 86.,  88.,  86.,  87.],
+                           [ 88.,  89.,  87.,  88.],
+                           [ 89.,  91.,  89.,  90.],
+                           [ 90.,  93.,  89.,  93.],
+                           [ 92.,  95.,  92.,  95.],
+                           [ 95.,  98.,  95.,  97.],
+                           [ 97., 100.,  96., 100.]]).T
+_WEEKLY_BULLISH = np.array([[ 74.,  77.,  72.,  77.],
+                            [ 78.,  83.,  76.,  81.],
+                            [ 83.,  92.,  82.,  91.],
+                            [ 90.,  98.,  87.,  98.],
+                            [ 96., 101.,  95., 100.]]).T
+_MONTHLY_BULLISH = np.array([[ 60.,  77.,  60.,  76.],
+                             [ 75.,  87.,  75.,  85.],
+                             [ 86., 102.,  83., 100.]]).T
+_DAILY_BEARISH = np.array([[115., 117., 114., 116.],
+                           [116., 117., 113., 114.],
+                           [114., 116., 114., 115.],
+                           [114., 114., 112., 113.],
+                           [112., 113., 111., 112.],
+                           [111., 111., 109., 110.],
+                           [110., 111., 107., 107.],
+                           [108., 108., 105., 105.],
+                           [105., 105., 102., 104.],
+                           [103., 104., 100., 100.]]).T
+_WEEKLY_BEARISH = np.array([[126., 128., 123., 123.],
+                            [122., 124., 117., 119.],
+                            [117., 118., 108., 109.],
+                            [110., 113., 102., 102.],
+                            [104., 105.,  99., 100.]]).T
+_MONTHLY_BEARISH = np.array([[140., 140., 123., 124.],
+                             [125., 125., 113., 115.],
+                             [114., 117.,  98., 100.]]).T
+
+_BULLISH_SAMPLES = {TimeUnit.DAY: _DAILY_BULLISH,
+                    TimeUnit.WEEK: _WEEKLY_BULLISH,
+                    TimeUnit.MONTH: _MONTHLY_BULLISH}
+_BEARISH_SAMPLES = {TimeUnit.DAY: _DAILY_BEARISH,
+                    TimeUnit.WEEK: _WEEKLY_BEARISH,
+                    TimeUnit.MONTH: _MONTHLY_BEARISH}
+_LEADING_SAMPLES = {_LeadingTrends.BULLISH: _BULLISH_SAMPLES,
+                    _LeadingTrends.STRICTLY_BULLISH: _BULLISH_SAMPLES,
+                    _LeadingTrends.BEARISH: _BEARISH_SAMPLES,
+                    _LeadingTrends.STRICTLY_BEARISH: _BEARISH_SAMPLES,
+                    }
+
 class MacroInfo(NamedTuple):
     symbol: str
     name: str
@@ -997,7 +1063,13 @@ class MacroInfo(NamedTuple):
     def _sample(self, period_type: _PeriodTypes,
                 leading_trend: _LeadingTrends):
         tunit = period_type.value.data
-        ret = [PlotInfo(Ptype.CANDLE, 'K線', self.samples[leading_trend][tunit])]
+        psample = self.samples[tunit]
+        if leading_trend == _LeadingTrends.NONE:
+            ret = [PlotInfo(Ptype.CANDLE, 'K線', psample)]
+        else:
+            lsample = _LEADING_SAMPLES[leading_trend][tunit]
+            ret = [PlotInfo(Ptype.CANDLE, 'K線',
+                            np.concatenate([lsample, psample], axis=1))]
         return ret
 
     def _interval(self, period_type: _PeriodTypes,
@@ -1008,7 +1080,7 @@ class MacroInfo(NamedTuple):
         return self.interval + LEADING_TREND_PERIODS[tunit][-1]
 
     def to_macro(self, code: str) -> Macro:
-        name = f'商智K線指標(KLP版)-{self.name}({self.symbol})'
+        name = f'Mimosa K線指標(KLP版)-{self.name}({self.symbol})'
         ret = Macro(code, name, self.description,
                     COMMON_PARAS, self._macro,
                     self._sample, self._interval, arg_checker,

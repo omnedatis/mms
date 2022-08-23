@@ -1,5 +1,7 @@
 from .common import gen_macro, Macro, MacroManagerBase, MacroParaEnumManagerBase
-from ._klp import KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji
+from ._klp import (KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji,
+                   klp_cc_gravestone_doji, klp_cc_takuri,
+                   klp_cc_longlegged_doji, klp_cc_rickshaw_man)
 
 from func._tp import (
     jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
@@ -35,6 +37,10 @@ class MacroManager(MacroManagerBase):
     wj004 = gen_macro(wj004)
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
+    klp_cc_gravestone_doji = klp_cc_gravestone_doji
+    klp_cc_takuri = klp_cc_takuri
+    klp_cc_longlegged_doji = klp_cc_longlegged_doji
+    klp_cc_rickshaw_man =  klp_cc_rickshaw_man
 
 class MacroParaEnumManager(MacroParaEnumManagerBase):
     PERIOD_TYPE = PeriodType
