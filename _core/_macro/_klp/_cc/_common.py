@@ -27,7 +27,7 @@ from func.common import (Dtype, MacroParam, ParamEnumBase, ParamEnumElement,
 from ...common import Macro
 
 _PY_VERSION = '2201'
-_DB_VERSION = '2202'
+_DB_VERSION = '2203'
 _PeriodTypes = PeriodType.type
 
 class _LeadingTrends(ParamEnumBase):
@@ -1080,10 +1080,10 @@ class MacroInfo(NamedTuple):
         return self.interval + LEADING_TREND_PERIODS[tunit][-1]
 
     def to_macro(self, code: str) -> Macro:
-        name = f'Mimosa K線指標(KLP版)-{self.name}({self.symbol})'
+        name = f'K線指標(KLP版)-{self.name}({self.symbol})'
         ret = Macro(code, name, self.description,
                     COMMON_PARAS, self._macro,
                     self._sample, self._interval, arg_checker,
-                    f'v{_PY_VERSION}_{self.py_version}',
-                    f'v{_DB_VERSION}_{self.db_version}', )
+                    py_version=f'v{_PY_VERSION}_{self.py_version}',
+                    db_version=f'v{_DB_VERSION}_{self.db_version}', )
         return ret
