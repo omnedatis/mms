@@ -711,7 +711,8 @@ def api_pattern_get_frame():
             raise InternalServerError(f'found inconsistent data type on {func_code}')
         kwargs, msg = cast_macro_kwargs(func_code, kwargs)
         if msg:
-          raise BadRequest('Arguments type incorrect')
+            ret = {"patternInterval": -1}
+            return HttpResponseCode.OK.format(ret)
     except KeyError:
         raise BadRequest
     except ValueError:
@@ -788,7 +789,7 @@ def api_pattern_get_plot():
             raise InternalServerError(f'found inconsistent data type on {func_code}')
         kwargs, msg = cast_macro_kwargs(func_code, kwargs)
         if msg:
-          raise BadRequest('Arguments type incorrect')
+            return HttpResponseCode.OK.format([])
     except KeyError:
         raise BadRequest
     except ValueError:

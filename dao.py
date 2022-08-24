@@ -2378,6 +2378,63 @@ class MimosaDB:
                 whereby=whereby
             )
     
+    def _gen_update_macro_param_info(self, data: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+        """產生所有有異動的參數 DataFrame
+        """ 
+        _para_columns = [MacroParamField.MACRO_ID.value,
+                         MacroParamField.PARAM_CODE.value,
+                         MacroParamField.PARAM_NAME.value,
+                         MacroParamField.PARAM_DESC.value,
+                         MacroParamField.PARAM_DEFAULT.value,
+                         MacroParamField.PARAM_TYPE.value]
+        _db_columns = ['CREATE_BY', 'CREATE_DT', 'MODIFY_BY', 'MODIFY_DT']
+        
+        def get_macro_para_table():
+            engine = self._engine()
+            sql = ("SELECT "
+                   f"{', '.join([s for s in _db_columns + _para_columns])} "
+                   f"FROM {TableName.MACRO_PARAM.value}")
+            ret = {mid: pinfo for mid, pinfo in 
+                   pd.read_sql_query(sql, engine
+                                     ).groupby(MacroParamField.MACRO_ID.value)}
+            return ret
+        
+        def update_pinfo(new, old, now):
+            ret = []
+            old = {pid: pinfo for pid, pinfo in 
+                   old.groupby(MacroParamField.PARAM_CODE.value)}
+            for pid, pinfo in new.groupby(MacroParamField.PARAM_CODE.value):
+                if pid in old:
+                    cur = old[pid]
+                    if (pinfo[_para_columns].values != old[pid][_para_columns].values).any():
+                        for each in _para_columns:
+                            cur[each] = pinfo[each].values
+                        cur['MODIFY_DT'] = now
+                        cur['MODIFY_BY'] = self.CREATE_BY
+                    ret.append(cur)
+                else:
+                    pinfo['CREATE_DT'] = now
+                    pinfo['CREATE_BY'] = self.CREATE_BY
+                    pinfo['MODIFY_DT'] = None
+                    pinfo['MODIFY_BY'] = None
+                    ret.append(pinfo)
+            return pd.concat(ret, axis=0)
+                    
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        pinfo_from_db = get_macro_para_table()
+        ret = {}
+        for mid, pinfo in data.groupby(MacroParamField.MACRO_ID.value):
+            if mid not in pinfo_from_db:
+                pinfo['CREATE_DT'] = now
+                pinfo['CREATE_BY'] = self.CREATE_BY
+                pinfo['MODIFY_DT'] = None
+                pinfo['MODIFY_BY'] = None
+                ret[mid] = pinfo
+                continue
+            ret[mid] = update_pinfo(pinfo, pinfo_from_db[mid], now) 
+        return ret
+
     def update_macro_param_info(self, data: pd.DataFrame):
         """更新 Macro 參數資訊
 
@@ -2390,56 +2447,14 @@ class MimosaDB:
         -------
         None.
         """
-        now = datetime.datetime.now()
-        now = np.datetime64(now).astype('datetime64[s]').tolist()
-        
-        macro_ids = data[MacroParamField.MACRO_ID.value].values
-        depre_params = []
-        macro_param = self.get_macro_param_info()
-        for macro_id in macro_ids:
-            db_cond = (macro_param[MacroParamField.MACRO_ID.value].values == macro_id)
-            data_cond = (data[MacroParamField.MACRO_ID.value].values == macro_id)
-            macro_param = macro_param[db_cond]
-            data_param = data[data_cond]
-            depre_param: pd.DataFrame = pd.concat([macro_param, data_param], axis=0)
-            depre_param = depre_param.drop_duplicates(subset=[
-                MacroParamField.MACRO_ID.value,
-                MacroParamField.PARAM_CODE.value
-            ], keep=False)
-            depre_params.append(depre_param)
-        depre_params = pd.concat(depre_params, axis=0)
-        for i in range(len(depre_params)):
-            param = depre_params.iloc[i]
+        update_data = self._gen_update_macro_param_info(data)
+        for macro_id in update_data:
             remove_where = [
-                (MacroParamField.MACRO_ID.value, param[MacroParamField.MACRO_ID.value]),
-                (MacroParamField.PARAM_CODE.value, param[MacroParamField.PARAM_CODE.value])
+                (MacroParamField.MACRO_ID.value, macro_id)
             ]
             self._delete(TableName.MACRO_PARAM.value, whereby=remove_where)
-
-        for i in range(len(data)):
-            row = data.iloc[i]
-            macro_id = row[MacroParamField.MACRO_ID.value]
-            param_code = row[MacroParamField.PARAM_CODE.value]
-            param_name = row[MacroParamField.PARAM_NAME.value]
-            param_desc = row[MacroParamField.PARAM_DESC.value]
-            param_default = row[MacroParamField.PARAM_DEFAULT.value]
-            param_type = row[MacroParamField.PARAM_TYPE.value]
-            whereby = [
-                (MacroParamField.MACRO_ID.value, macro_id),
-                (MacroParamField.PARAM_CODE.value, param_code)
-            ]
-            self._update(
-                table_name=TableName.MACRO_PARAM.value,
-                set_value=[
-                    (MacroParamField.PARAM_NAME.value, param_name),
-                    (MacroParamField.PARAM_DESC.value, param_desc),
-                    (MacroParamField.PARAM_DEFAULT.value, param_default),
-                    (MacroParamField.PARAM_TYPE.value, param_type),
-                    ('MODIFY_DT', str(now)),
-                    ('MODIFY_BY', self.MODIFY_BY)
-                ],
-                whereby=whereby
-            )
+        update_data = pd.concat(list(update_data.values()), axis=0)
+        self._insert(TableName.MACRO_PARAM.value, update_data)
 
     def update_macro_version_info(self, data: pd.DataFrame):
         """更新 Macro 版本資訊
