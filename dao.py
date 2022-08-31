@@ -2690,9 +2690,12 @@ class MimosaDB:
                      ])
 
     def _get_macro_tags(self) -> Dict[MacroTags, str]:
-        #ids = self._get_serial_no(SerialNoType.TAG, len(MacroTags))
-        ids = [f'JKJKSMD0000000{each}' for each in range(len(MacroTags))]
-        ret = {tag: id_  for tag, id_ in zip(MacroTags, ids)}
+        tags = []
+        for macro in MacroManager:
+            tags += macro.tags
+        tags = list(set(tags))
+        ids = self._get_serial_no(SerialNoType.TAG, len(tags))
+        ret = {tag: id_  for tag, id_ in zip(tags, ids)}
         return ret
 
     def _get_macro_tag_info(self):
