@@ -122,6 +122,8 @@ class TableName(Enum):
     MACRO_PARAM: Macro參數資訊表
     MACRO_PARAM_ENUM: Macro名目參數資訊表
     MACRO_VERSION: Macro版本資訊表
+    MACRO_TAG: Macro-Tag列表
+    MACRO_TAG_MAP: Macro-Tag對應表
     MODEL_INFO: 觀點資訊表
     MODEL_EXECUTION: 觀點執行狀態資訊表
     MODEL_MKT_MAP: 觀點使用市場資訊表
@@ -147,6 +149,8 @@ class TableName(Enum):
     MACRO_PARAM = "FCST_MACRO_PARAM"
     MACRO_PARAM_ENUM = "FCST_MACRO_PARAM_ENUM"
     MACRO_VERSION = "FCST_MACRO_VERSION"
+    MACRO_TAG = 'FCST_TAG'
+    MACRO_TAG_MAP = 'FCST_MACRO_TAG_MAP'
     MODEL_INFO = "FCST_MODEL"
     MODEL_EXECUTION = "FCST_MODEL_EXECUTION"
     MODEL_MKT_MAP = "FCST_MODEL_MKT_MAP"
@@ -685,6 +689,20 @@ class MacroParamEnumField(Enum):
     ENUM_CODE="ENUM_CODE"
     ENUM_VALUE_CODE="ENUM_VALUE_CODE"
     ENUM_VALUE_NAME="ENUM_VALUE_NAME"
+
+
+class MacroTagField(str, Enum):
+    """Macro-Tag 欄位"""
+    TAG_ID = 'TAG_ID'
+    TAG_NAME = 'TAG_NAME'
+    TAG_DESC = 'TAG_DESC'
+
+
+class MacroTagMapField(str, Enum):
+    """Macro-Tag 對應表欄位"""
+    MACRO_ID = 'MACRO_ID'
+    TAG_ID = 'TAG_ID'
+
 
 class SerialNoType(Enum):
     """呼叫取得序列號時需要使用的參數

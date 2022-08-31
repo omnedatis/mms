@@ -24,7 +24,7 @@ from func._td import (# global variables and consts
 from func.common import (Dtype, MacroParam, ParamEnumBase, ParamEnumElement,
                          PeriodType, PlotInfo, Ptype)
 
-from ...common import Macro
+from ...common import Macro, MacroTags
 
 _PY_VERSION = '2201'
 _DB_VERSION = '2203'
@@ -1085,5 +1085,6 @@ class MacroInfo(NamedTuple):
                     COMMON_PARAS, self._macro,
                     self._sample, self._interval, arg_checker,
                     py_version=f'v{_PY_VERSION}_{self.py_version}',
-                    db_version=f'v{_DB_VERSION}_{self.db_version}', )
+                    db_version=f'v{_DB_VERSION}_{self.db_version}',
+                    tags=[MacroTags.PRICE])
         return ret
