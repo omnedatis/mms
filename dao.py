@@ -2084,6 +2084,40 @@ class MimosaDB:
         self._delete(TableName.MACRO_PARAM_ENUM.value, [])
         self._insert(TableName.MACRO_PARAM_ENUM.value, new_data)
 
+    def update_macro_tag(self):
+        """更新 Macro 對應 Tag ID 資料表
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        # 刪除舊版 Tag 資訊
+        sql = f"""
+            SELECT
+                {MacroTagMapField.TAG_ID.value} 
+            FROM
+                {TableName.MACRO_TAG_MAP.value}
+        """
+        data = pd.read_sql_query(sql, engine).drop_duplicates(keep=False)
+        deprecated_tag_ids = data[MacroTagMapField.TAG_ID.value].values
+        for tag_id in deprecated_tag_ids:
+            self._delete(TableName.MACRO_TAG.value,
+                whereby=[
+                    (MacroTagField.TAG_ID.value, tag_id)
+                ])
+        # 刪除舊版 TAG 對應表資訊
+        self._delete(TableName.MACRO_TAG_MAP.value, [])
+
+        # 新增新版 Macro TAG 資訊
+        macro_tag, macro_tag_map = self._get_macro_tag_info()
+        self._insert(TableName.MACRO_TAG.value, macro_tag)
+        self._insert(TableName.MACRO_TAG_MAP.value, macro_tag_map)
+
     @_do_if_not_read_only
     def set_model_execution_start(self, model_id: str, exection: str) -> str:
         """ create model exec
@@ -2690,23 +2724,61 @@ class MimosaDB:
                      ])
 
     def _get_macro_tags(self) -> Dict[MacroTags, str]:
-        #ids = self._get_serial_no(SerialNoType.TAG, len(MacroTags))
-        ids = [f'JKJKSMD0000000{each}' for each in range(len(MacroTags))]
+        """取得 Macro Tag 與對應的 Tag ID
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        ids = self._get_serial_no(SerialNoType.TAG, len(MacroTags))
         ret = {tag: id_  for tag, id_ in zip(MacroTags, ids)}
         return ret
 
-    def _get_macro_tag_info(self):
+    def _get_macro_tag_info(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """取得 Macro Tag 資訊以及 Macro Tag 對應表資訊
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        result: Tuple[pd.DataFrame, pd.DataFrame]
+            結構為: (Macro Tag 資訊, Macro Tag 對應表資訊)
+        """
         tags = self._get_macro_tags()
         info = pd.DataFrame([[i, t.value.name, t.value.desc]
                              for t, i in tags.items()],
                             columns=[MacroTagField.TAG_ID.value,
                                      MacroTagField.TAG_NAME.value,
                                      MacroTagField.TAG_DESC.value])
+        info[MacroTagField.AUTHOR.value] = self.CREATE_BY
+        
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                {MacroInfoField.MACRO_ID.value},
+                {MacroInfoField.FUNC_CODE.value} 
+            FROM
+                {TableName.MACRO_INFO.value}
+        """
+        data = pd.read_sql_query(sql, engine)
+        func_to_macro_id = {
+            data.iloc[i][MacroInfoField.FUNC_CODE.value] : data.iloc[i][MacroInfoField.MACRO_ID.value] 
+            for i in range(len(data))
+        }
         values = []
         for macro in MacroManager:
-            values += [[macro.code, tags[tag]] for tag in macro.tags]
+            values += [[func_to_macro_id[macro.code], tags[tag]] for tag in macro.tags]
         maps = pd.DataFrame(values, columns=[MacroTagMapField.MACRO_ID.value,
                                              MacroTagMapField.TAG_ID.value])
+        
+        info = self._extend_basic_cols(info)
+        maps = self._extend_basic_cols(maps)
         return info, maps
 
 # 呼叫 Stored Procedule
@@ -2767,16 +2839,26 @@ class MimosaDB:
             db_conn.execute(sql)
         logging.info('Start truncate swap tables finished')
 
-    def _get_serial_no(self, code: SerialNoType) -> str:
+    def _get_serial_no(self, code: SerialNoType, size: Optional[int]=None) -> Union[str, List[str]]:
+        """利用 SP 取得指定的 SerialNo 序列
+
+        Parameters
+        ----------
+        code: SerialNo
+        """
         engine = self._engine()
         # 取得 EXEC_ID
         logging.info(f'Call {StoredProcedule.GET_SERIAL_NO.value}')
-        sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('{code.value}', null)"
+        sp_arg = 'null' if size is None else str(size)
+        sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('{code.value}', {sp_arg})"
         with engine.begin() as db_conn:
-            results = db_conn.execute(sql).fetchone()
-            exec_id = results[0]
-        logging.info(f"Get SERIAL_NO: {exec_id}")
-        return exec_id
+            if size is None:
+                result = db_conn.execute(sql).fetchone()[0]
+            else:
+                results = db_conn.execute(sql).fetchall()
+                result = [r[0] for r in results]
+        logging.info(f"Get SERIAL_NO: {result}")
+        return result
 
     @_do_if_not_read_only
     def broadcast_invalid_macro(self, macro_id: str, effect_msg: str):

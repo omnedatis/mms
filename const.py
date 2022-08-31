@@ -696,7 +696,7 @@ class MacroTagField(str, Enum):
     TAG_ID = 'TAG_ID'
     TAG_NAME = 'TAG_NAME'
     TAG_DESC = 'TAG_DESC'
-
+    AUTHOR = 'USER_ID'
 
 class MacroTagMapField(str, Enum):
     """Macro-Tag 對應表欄位"""
@@ -710,6 +710,7 @@ class SerialNoType(Enum):
     EXECUTION: 執行狀態的序列號
     """
     EXECUTION = 'EXEC_ID'
+    TAG='TAG_ID'
 
 
 class DataType(Enum):
