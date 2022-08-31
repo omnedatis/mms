@@ -2103,7 +2103,7 @@ class MimosaDB:
             FROM
                 {TableName.MACRO_TAG_MAP.value}
         """
-        data = pd.read_sql_query(sql, engine).drop_duplicates(keep=False)
+        data = pd.read_sql_query(sql, engine).drop_duplicates(keep='first')
         deprecated_tag_ids = data[MacroTagMapField.TAG_ID.value].values
         for tag_id in deprecated_tag_ids:
             self._delete(TableName.MACRO_TAG.value,
