@@ -11,9 +11,11 @@ import pandas as pd
 from pymysql import IntegrityError
 
 from sqlalchemy import create_engine, exc
-from _core._macro import MacroParaEnumManager
+from _core._macro import MacroManager, MacroParaEnumManager, MacroTags
 from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
-                   DSStockInfoField, ExecMode, MacroInfoField, MacroParamEnumField, MacroParamField, MacroVersionInfoField,
+                   DSStockInfoField, ExecMode, MacroInfoField,
+                   MacroParamEnumField, MacroParamField, MacroTagField,
+                   MacroTagMapField, MacroVersionInfoField,
                    MarketHistoryPriceField, MarketInfoField,
                    MarketPeriodField, MarketScoreField, ModelExecution,
                    ModelExecutionField, ModelInfoField, ModelMarketHitSumField,
@@ -891,7 +893,7 @@ class MimosaDB:
 
     def get_market_info(self) -> pd.DataFrame:
         """取得 MIMOSA 市場基本資訊
-        
+
         Parameters
         ----------
         None.
@@ -1297,9 +1299,9 @@ class MimosaDB:
                 ) AS mp
             ON ptn.{PatternInfoField.MACRO_ID.value}=mp.{MacroParamField.MACRO_ID.value} AND
             para.{PatternParamField.PARAM_CODE.value}=mp.{MacroParamField.PARAM_CODE.value}
-            WHERE 
-                ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PRIVATE_AND_VALID.value} OR 
-                ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PUBLIC_AND_VALID.value} 
+            WHERE
+                ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PRIVATE_AND_VALID.value} OR
+                ptn.{PatternInfoField.PATTERN_STATUS.value}={DBPatternStatus.PUBLIC_AND_VALID.value}
             ORDER BY
                 ptn.{PatternInfoField.PATTERN_ID.value},
                 mcr.{MacroInfoField.FUNC_CODE.value} ASC;
@@ -1330,7 +1332,7 @@ class MimosaDB:
                         param_record[PatternParamField.PARAM_VALUE.value])
                 elif param_type in enum_types:
                     param_val = MacroParaEnumManager.get(
-                        param_type, 
+                        param_type,
                         param_record[PatternParamField.PARAM_VALUE.value])
                 else:
                     raise RuntimeError(
@@ -1422,7 +1424,7 @@ class MimosaDB:
         ])
         macro_info = self.cache_manager.get_data(CacheName.MACRO_INFO.value)
         return macro_info
-    
+
     def get_macro_param_info(self) -> pd.DataFrame:
         """取得資料庫中的 Macro 參數資訊
 
@@ -1997,14 +1999,14 @@ class MimosaDB:
         ----------
         data: pd.DataFrame
             要新增的 Macro 資訊
-        
+
         Returns
         -------
         None.
         """
         data = self._extend_basic_cols(data)
         self._insert(table_name=TableName.MACRO_INFO.value, data=data)
-    
+
     def save_macro_param_info(self, data: pd.DataFrame):
         """新增 Macro 參數資訊
 
@@ -2012,7 +2014,7 @@ class MimosaDB:
         ----------
         data: pd.DataFrame
             要新增的 Macro 參數資訊
-        
+
         Returns
         -------
         None.
@@ -2027,7 +2029,7 @@ class MimosaDB:
         ----------
         data: pd.DataFrame
             要新增的 Macro 資訊
-        
+
         Returns
         -------
         None.
@@ -2042,7 +2044,7 @@ class MimosaDB:
         ----------
         data: pd.DataFrame
             要儲存的名目資料
-        
+
         Returns
         -------
         None.
@@ -2060,7 +2062,7 @@ class MimosaDB:
             ret = []
             for key in old:
                 if key in new:
-                    if (new[key][MacroParamEnumField.ENUM_VALUE_NAME.value].values == 
+                    if (new[key][MacroParamEnumField.ENUM_VALUE_NAME.value].values ==
                         old[key][MacroParamEnumField.ENUM_VALUE_NAME.value].values):
                         ret.append(old[key])
                     else:
@@ -2078,9 +2080,43 @@ class MimosaDB:
         self.cache_manager.refresh(tables=[TableName.MACRO_PARAM_ENUM.value])
         db_enum = self.cache_manager.get_data(CacheName.MACRO_PARAM_ENUM.value)
         new_data = get_new_enum(db_enum, data)
-        
+
         self._delete(TableName.MACRO_PARAM_ENUM.value, [])
         self._insert(TableName.MACRO_PARAM_ENUM.value, new_data)
+
+    def update_macro_tag(self):
+        """更新 Macro 對應 Tag ID 資料表
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        engine = self._engine()
+        # 刪除舊版 Tag 資訊
+        sql = f"""
+            SELECT
+                {MacroTagMapField.TAG_ID.value} 
+            FROM
+                {TableName.MACRO_TAG_MAP.value}
+        """
+        data = pd.read_sql_query(sql, engine).drop_duplicates(keep='first')
+        deprecated_tag_ids = data[MacroTagMapField.TAG_ID.value].values
+        for tag_id in deprecated_tag_ids:
+            self._delete(TableName.MACRO_TAG.value,
+                whereby=[
+                    (MacroTagField.TAG_ID.value, tag_id)
+                ])
+        # 刪除舊版 TAG 對應表資訊
+        self._delete(TableName.MACRO_TAG_MAP.value, [])
+
+        # 新增新版 Macro TAG 資訊
+        macro_tag, macro_tag_map = self._get_macro_tag_info()
+        self._insert(TableName.MACRO_TAG.value, macro_tag)
+        self._insert(TableName.MACRO_TAG_MAP.value, macro_tag_map)
 
     @_do_if_not_read_only
     def set_model_execution_start(self, model_id: str, exection: str) -> str:
@@ -2349,14 +2385,14 @@ class MimosaDB:
         ----------
         data: pd.DataFrame
             要進行儲存的 Macro 資訊
-        
+
         Returns
         -------
         None.
         """
         now = datetime.datetime.now()
         now = np.datetime64(now).astype('datetime64[s]').tolist()
-        
+
         for i in range(len(data)):
             row = data.iloc[i]
             macro_id = row[MacroInfoField.MACRO_ID.value]
@@ -2377,7 +2413,64 @@ class MimosaDB:
                 ],
                 whereby=whereby
             )
-    
+
+    def _gen_update_macro_param_info(self, data: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+        """產生所有有異動的參數 DataFrame
+        """
+        _para_columns = [MacroParamField.MACRO_ID.value,
+                         MacroParamField.PARAM_CODE.value,
+                         MacroParamField.PARAM_NAME.value,
+                         MacroParamField.PARAM_DESC.value,
+                         MacroParamField.PARAM_DEFAULT.value,
+                         MacroParamField.PARAM_TYPE.value]
+        _db_columns = ['CREATE_BY', 'CREATE_DT', 'MODIFY_BY', 'MODIFY_DT']
+
+        def get_macro_para_table():
+            engine = self._engine()
+            sql = ("SELECT "
+                   f"{', '.join([s for s in _db_columns + _para_columns])} "
+                   f"FROM {TableName.MACRO_PARAM.value}")
+            ret = {mid: pinfo for mid, pinfo in
+                   pd.read_sql_query(sql, engine
+                                     ).groupby(MacroParamField.MACRO_ID.value)}
+            return ret
+
+        def update_pinfo(new, old, now):
+            ret = []
+            old = {pid: pinfo for pid, pinfo in
+                   old.groupby(MacroParamField.PARAM_CODE.value)}
+            for pid, pinfo in new.groupby(MacroParamField.PARAM_CODE.value):
+                if pid in old:
+                    cur = old[pid]
+                    if (pinfo[_para_columns].values != old[pid][_para_columns].values).any():
+                        for each in _para_columns:
+                            cur[each] = pinfo[each].values
+                        cur['MODIFY_DT'] = now
+                        cur['MODIFY_BY'] = self.CREATE_BY
+                    ret.append(cur)
+                else:
+                    pinfo['CREATE_DT'] = now
+                    pinfo['CREATE_BY'] = self.CREATE_BY
+                    pinfo['MODIFY_DT'] = None
+                    pinfo['MODIFY_BY'] = None
+                    ret.append(pinfo)
+            return pd.concat(ret, axis=0)
+
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        pinfo_from_db = get_macro_para_table()
+        ret = {}
+        for mid, pinfo in data.groupby(MacroParamField.MACRO_ID.value):
+            if mid not in pinfo_from_db:
+                pinfo['CREATE_DT'] = now
+                pinfo['CREATE_BY'] = self.CREATE_BY
+                pinfo['MODIFY_DT'] = None
+                pinfo['MODIFY_BY'] = None
+                ret[mid] = pinfo
+                continue
+            ret[mid] = update_pinfo(pinfo, pinfo_from_db[mid], now)
+        return ret
+
     def update_macro_param_info(self, data: pd.DataFrame):
         """更新 Macro 參數資訊
 
@@ -2385,61 +2478,19 @@ class MimosaDB:
         ----------
         data: pd.DataFrame
             要進行儲存的 Macro 參數資訊
-        
+
         Returns
         -------
         None.
         """
-        now = datetime.datetime.now()
-        now = np.datetime64(now).astype('datetime64[s]').tolist()
-        
-        macro_ids = data[MacroParamField.MACRO_ID.value].values
-        depre_params = []
-        macro_param = self.get_macro_param_info()
-        for macro_id in macro_ids:
-            db_cond = (macro_param[MacroParamField.MACRO_ID.value].values == macro_id)
-            data_cond = (data[MacroParamField.MACRO_ID.value].values == macro_id)
-            macro_param = macro_param[db_cond]
-            data_param = data[data_cond]
-            depre_param: pd.DataFrame = pd.concat([macro_param, data_param], axis=0)
-            depre_param = depre_param.drop_duplicates(subset=[
-                MacroParamField.MACRO_ID.value,
-                MacroParamField.PARAM_CODE.value
-            ], keep=False)
-            depre_params.append(depre_param)
-        depre_params = pd.concat(depre_params, axis=0)
-        for i in range(len(depre_params)):
-            param = depre_params.iloc[i]
+        update_data = self._gen_update_macro_param_info(data)
+        for macro_id in update_data:
             remove_where = [
-                (MacroParamField.MACRO_ID.value, param[MacroParamField.MACRO_ID.value]),
-                (MacroParamField.PARAM_CODE.value, param[MacroParamField.PARAM_CODE.value])
+                (MacroParamField.MACRO_ID.value, macro_id)
             ]
             self._delete(TableName.MACRO_PARAM.value, whereby=remove_where)
-
-        for i in range(len(data)):
-            row = data.iloc[i]
-            macro_id = row[MacroParamField.MACRO_ID.value]
-            param_code = row[MacroParamField.PARAM_CODE.value]
-            param_name = row[MacroParamField.PARAM_NAME.value]
-            param_desc = row[MacroParamField.PARAM_DESC.value]
-            param_default = row[MacroParamField.PARAM_DEFAULT.value]
-            param_type = row[MacroParamField.PARAM_TYPE.value]
-            whereby = [
-                (MacroParamField.MACRO_ID.value, macro_id),
-                (MacroParamField.PARAM_CODE.value, param_code)
-            ]
-            self._update(
-                table_name=TableName.MACRO_PARAM.value,
-                set_value=[
-                    (MacroParamField.PARAM_NAME.value, param_name),
-                    (MacroParamField.PARAM_DESC.value, param_desc),
-                    (MacroParamField.PARAM_DEFAULT.value, param_default),
-                    (MacroParamField.PARAM_TYPE.value, param_type),
-                    ('MODIFY_DT', str(now)),
-                    ('MODIFY_BY', self.MODIFY_BY)
-                ],
-                whereby=whereby
-            )
+        update_data = pd.concat(list(update_data.values()), axis=0)
+        self._insert(TableName.MACRO_PARAM.value, update_data)
 
     def update_macro_version_info(self, data: pd.DataFrame):
         """更新 Macro 版本資訊
@@ -2455,7 +2506,7 @@ class MimosaDB:
         """
         now = datetime.datetime.now()
         now = np.datetime64(now).astype('datetime64[s]').tolist()
-        
+
         for i in range(len(data)):
             row = data.iloc[i]
             macro_id = row[MacroVersionInfoField.MACRO_ID.value]
@@ -2635,7 +2686,7 @@ class MimosaDB:
                      whereby=[
                          (MacroInfoField.MACRO_ID.value, macro_id)
                      ])
-    
+
     def del_macro_param_info(self, macro_id: str):
         """移除資料庫中指定 Macro 參數資訊
 
@@ -2653,7 +2704,7 @@ class MimosaDB:
                      whereby=[
                          (MacroParamField.MACRO_ID.value, macro_id)
                      ])
-    
+
     def del_macro_version_info(self, macro_id: str):
         """移除資料庫中指定 Macro 版本資訊
 
@@ -2671,6 +2722,68 @@ class MimosaDB:
                      whereby=[
                          (MacroVersionInfoField.MACRO_ID.value, macro_id)
                      ])
+
+    def _get_macro_tags(self) -> Dict[MacroTags, str]:
+        """取得 Macro Tag 與對應的 Tag ID
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        None.
+        """
+        tags = []
+        for macro in MacroManager:
+            tags += macro.tags
+        tags = list(set(tags))
+        ids = self._get_serial_no(SerialNoType.TAG, len(tags))
+        ret = {tag: id_  for tag, id_ in zip(tags, ids)}
+        return ret
+
+    def _get_macro_tag_info(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """取得 Macro Tag 資訊以及 Macro Tag 對應表資訊
+
+        Parameters
+        ----------
+        None.
+
+        Returns
+        -------
+        result: Tuple[pd.DataFrame, pd.DataFrame]
+            結構為: (Macro Tag 資訊, Macro Tag 對應表資訊)
+        """
+        tags = self._get_macro_tags()
+        info = pd.DataFrame([[i, t.value.name, t.value.desc]
+                             for t, i in tags.items()],
+                            columns=[MacroTagField.TAG_ID.value,
+                                     MacroTagField.TAG_NAME.value,
+                                     MacroTagField.TAG_DESC.value])
+        info[MacroTagField.AUTHOR.value] = self.CREATE_BY
+        
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                {MacroInfoField.MACRO_ID.value},
+                {MacroInfoField.FUNC_CODE.value} 
+            FROM
+                {TableName.MACRO_INFO.value}
+        """
+        data = pd.read_sql_query(sql, engine)
+        func_to_macro_id = {
+            data.iloc[i][MacroInfoField.FUNC_CODE.value] : data.iloc[i][MacroInfoField.MACRO_ID.value] 
+            for i in range(len(data))
+        }
+        values = []
+        for macro in MacroManager:
+            values += [[func_to_macro_id[macro.code], tags[tag]] for tag in macro.tags]
+        maps = pd.DataFrame(values, columns=[MacroTagMapField.MACRO_ID.value,
+                                             MacroTagMapField.TAG_ID.value])
+        
+        info = self._extend_basic_cols(info)
+        maps = self._extend_basic_cols(maps)
+        return info, maps
 
 # 呼叫 Stored Procedule
     @_do_if_not_read_only
@@ -2730,16 +2843,26 @@ class MimosaDB:
             db_conn.execute(sql)
         logging.info('Start truncate swap tables finished')
 
-    def _get_serial_no(self, code: SerialNoType) -> str:
+    def _get_serial_no(self, code: SerialNoType, size: Optional[int]=None) -> Union[str, List[str]]:
+        """利用 SP 取得指定的 SerialNo 序列
+
+        Parameters
+        ----------
+        code: SerialNo
+        """
         engine = self._engine()
         # 取得 EXEC_ID
         logging.info(f'Call {StoredProcedule.GET_SERIAL_NO.value}')
-        sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('{code.value}', null)"
+        sp_arg = 'null' if size is None else str(size)
+        sql = f"CALL {StoredProcedule.GET_SERIAL_NO.value}('{code.value}', {sp_arg})"
         with engine.begin() as db_conn:
-            results = db_conn.execute(sql).fetchone()
-            exec_id = results[0]
-        logging.info(f"Get SERIAL_NO: {exec_id}")
-        return exec_id
+            if size is None:
+                result = db_conn.execute(sql).fetchone()[0]
+            else:
+                results = db_conn.execute(sql).fetchall()
+                result = [r[0] for r in results]
+        logging.info(f"Get SERIAL_NO: {result}")
+        return result
 
     @_do_if_not_read_only
     def broadcast_invalid_macro(self, macro_id: str, effect_msg: str):
@@ -2751,7 +2874,7 @@ class MimosaDB:
             被異動的 Macro ID
         effect_msg: str
             異動訊息
-        
+
         Returns
         -------
         None.

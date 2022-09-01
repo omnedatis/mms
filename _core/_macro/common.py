@@ -9,9 +9,32 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional
 
 import pandas as pd
-from const import MacroInfoField, MacroParamEnumField, MacroVersionInfoField
+from const import (MacroInfoField, MacroParamEnumField, MacroVersionInfoField,
+                   MacroTagField)
 from func.common import Dtype, MacroParam, PlotInfo, ParamEnumBase
 from func.common import Macro as _Macro
+
+class _MacroTag(NamedTuple):
+    name: str
+    desc: str
+
+class MacroTags(_MacroTag, Enum):
+    PRICE = _MacroTag('價格線型', "價格線型")
+    VOLUME = _MacroTag('交易量', "交易量")
+    TI = _MacroTag('技術指標', "技術指標")
+
+    @classmethod
+    def _check(cls):
+        names = [each.value.name for each in cls]
+        if len(names) != len(set(names)):
+            raise RuntimeError("duplicate Macro-Tag")
+
+    @classmethod
+    def dump(cls):
+        cls._check()
+        columns = [MacroTagField.TAG_NAME.value, MacroTagField.TAG_DESC.value]
+        values = [[each.name, each.desc] for each in cls]
+        return pd.DataFrame(values, columns=columns)
 
 class Macro(NamedTuple):
     code: str
@@ -22,8 +45,9 @@ class Macro(NamedTuple):
     sample_generator: Callable
     interval_evaluator: Callable
     arg_checker: Callable
-    db_version: str = ""
-    py_version: str = ""
+    db_version: str
+    py_version: str
+    tags: List[MacroTags]
 
     def filter_arguments(self, **kwargs) -> Dict[str, Any]:
         ret = {}
@@ -70,13 +94,14 @@ class Macro(NamedTuple):
                MacroVersionInfoField.INFO_VERSION.value: self.db_version}
         return ret
 
-def gen_macro(recv: _Macro) -> Macro:
+def gen_macro(recv: _Macro, tags: List[MacroTags]) -> Macro:
     ret = Macro(code=recv.code, name=recv.name, description=recv.desc,
                 db_version=recv.db_ver, py_version=recv.py_ver,
                 parameters=recv.params, macro=recv.run,
                 arg_checker=recv.check,
                 sample_generator=recv.plot,
-                interval_evaluator=recv.frame)
+                interval_evaluator=recv.frame,
+                tags=tags)
     return ret
 
 
@@ -92,6 +117,7 @@ class MacroManagerBase(Macro, Enum):
         ret = [each.to_dict() for each in cls]
         return ret
 
+
 class MacroParaEnumManagerBase(Dtype, Enum):
     @classmethod
     def get(cls, dtype: str, value: str) -> Any:
@@ -106,7 +132,7 @@ class MacroParaEnumManagerBase(Dtype, Enum):
         for each in cls:
             values += [[each.code, element.value.code, element.value.name] for element in each.value.type]
         ret = pd.DataFrame(values, columns=[
-            MacroParamEnumField.ENUM_CODE.value, 
-            MacroParamEnumField.ENUM_VALUE_CODE.value, 
+            MacroParamEnumField.ENUM_CODE.value,
+            MacroParamEnumField.ENUM_VALUE_CODE.value,
             MacroParamEnumField.ENUM_VALUE_NAME.value])
         return ret

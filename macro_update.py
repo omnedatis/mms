@@ -377,4 +377,9 @@ if __name__ == '__main__':
     enum_info = MacroParaEnumManager.dump()
     db.save_macro_param_enum(enum_info)
     logging.info('更新 Macro 參數 Enum 型態資料完成')
+
+    # 更新 Macro Tag
+    logging.info('更新 Macro Tag 資料')
+    db.update_macro_tag()
+    logging.info('更新 Macro Tag 資料完成')
     logging.info('Macro 版本更新程式執行結束')
