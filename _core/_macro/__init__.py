@@ -6,7 +6,7 @@ from ._klp import (KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji,
                    klp_cc_black_marubozu, klp_cc_white_marubozu,
                    klp_cc_black_opening_marubozu, klp_cc_white_opening_marubozu,
                    klp_cc_black_closing_marubozu, klp_cc_white_closing_marubozu)
-
+from ._sakata._wj import (wj011, wj012, wj013, wj014, wj015)
 from func._tp import (
     jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
     jack_ma_through_price_down, jack_ma_through_price_up,
@@ -15,7 +15,7 @@ from func._tp import (
     stone_pp004, stone_pp005, stone_pp006, stone_pp007,
     stone_pp008, stone_pp009,
     wj001, wj002, wj003, wj004, wj005, wj006, wj007, wj008,
-    wj009, wj010,
+    wj009, wj010, 
     PeriodType)
 
 class MacroManager(MacroManagerBase):
@@ -50,6 +50,11 @@ class MacroManager(MacroManagerBase):
     wj008 = gen_macro(wj008, [MacroTags.PRICE])
     wj009 = gen_macro(wj009, [MacroTags.PRICE])
     wj010 = gen_macro(wj010, [MacroTags.PRICE])
+    wj011 = wj011
+    wj012 = wj012
+    wj013 = wj013
+    wj014 = wj014
+    wj015 = wj015
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
     klp_cc_gravestone_doji = klp_cc_gravestone_doji
