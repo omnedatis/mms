@@ -2,7 +2,10 @@ from .common import (gen_macro, Macro, MacroManagerBase,
                      MacroParaEnumManagerBase, MacroTags)
 from ._klp import (KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji,
                    klp_cc_gravestone_doji, klp_cc_takuri,
-                   klp_cc_longlegged_doji, klp_cc_rickshaw_man)
+                   klp_cc_longlegged_doji, klp_cc_rickshaw_man,
+                   klp_cc_black_marubozu, klp_cc_white_marubozu,
+                   klp_cc_black_opening_marubozu, klp_cc_white_opening_marubozu,
+                   klp_cc_black_closing_marubozu, klp_cc_white_closing_marubozu)
 
 from func._tp import (
     jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
@@ -53,6 +56,12 @@ class MacroManager(MacroManagerBase):
     klp_cc_takuri = klp_cc_takuri
     klp_cc_longlegged_doji = klp_cc_longlegged_doji
     klp_cc_rickshaw_man =  klp_cc_rickshaw_man
+    klp_cc_black_marubozu = klp_cc_black_marubozu
+    klp_cc_white_marubozu = klp_cc_white_marubozu
+    klp_cc_black_opening_marubozu = klp_cc_black_opening_marubozu
+    #klp_cc_white_opening_marubozu = klp_cc_white_opening_marubozu
+    #klp_cc_black_closing_marubozu = klp_cc_black_closing_marubozu
+    #klp_cc_white_closing_marubozu = klp_cc_white_closing_marubozu
 
 class MacroParaEnumManager(MacroParaEnumManagerBase):
     PERIOD_TYPE = PeriodType

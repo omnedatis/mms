@@ -10,7 +10,7 @@ import numpy as np
 
 from func._td import NumericTimeSeries, TimeUnit
 
-from .._common import Candlestick, LeadingTrend, MacroInfo
+from ..._common import Candlestick, LeadingTrend, MacroInfo
 
 LeadingTrends = LeadingTrend.type
 _ENG_NAME = 'GraveStoneDoji'
@@ -45,11 +45,6 @@ def _func(cct: Candlestick) -> NumericTimeSeries:
            cct.is_long_uppershadow)
     return ret
 
-gravestone_doji = MacroInfo(symbol=_ENG_NAME,
-                           name=_CHT_NAME,
-                           description=description,
-                           func=_func,
-                           interval=1,
-                           samples=_DEFAULT_SAMPLES,
-                           py_version="2201",
-                           db_version="2201")
+macro = MacroInfo(symbol=_ENG_NAME, name=_CHT_NAME, description=description,
+                  func=_func, interval=1, samples=_DEFAULT_SAMPLES,
+                  py_version="2201", db_version="2201")
