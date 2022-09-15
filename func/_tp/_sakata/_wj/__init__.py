@@ -10,6 +10,6 @@ from .wj009 import wj009
 from .wj010 import wj010
 
 __all__ = [
-    'wj001', 'wj002', 'wj003' 'wj004', 'wj005', 'wj006', 'wj007', 'wj008', 
+    'wj001', 'wj002', 'wj003', 'wj004', 'wj005', 'wj006', 'wj007', 'wj008', 
     'wj009', 'wj010'
 ]

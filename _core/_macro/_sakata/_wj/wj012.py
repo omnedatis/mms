@@ -2,39 +2,39 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
-from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
+from _core._macro.common import Macro, MacroTags
+from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj008'
-name = '酒田戰法指標(WJ版)-紅色光頭光腳'
+code = 'wj012'
+name = '酒田戰法指標(WJ版)-黑色光頭光腳'
 description = """
 
-> 趨勢向上
+> 趨勢向下
 
 ## 型態說明
 
-1. 實體陽線
+1. 實體陰線
 2. 實體長度相對於線圖上其他 K 線較長
 3. 沒有上下影線
 
 ## 未來趨勢
 
-若是於上漲趨勢發生，那麼會持續向上；若是於下跌趨勢發生，則是反轉向上訊號。
+若是於下跌趨勢發生，那麼會持續向下；若是於上漲趨勢發生，則是反轉向下訊號。
 
 ## 現象解釋
 
 ### 傳統解釋
 
-股價開低走高，收盤價遠高於開盤價，代表買氣強盛，買盤在強力主導行情。
+股價開高走低，收盤價遠低於開盤價，代表賣氣強盛，賣盤在強力主導行情。
 
 ### 心理面解釋
 
-強力的買氣使得股價上揚，該買氣開盤時就非常強盛，直到收盤時仍一直上揚，並且上揚幅度巨
-大。這代表著大部分資金的投資人強烈看好，並且帶動多數投資人引發強烈買氣，若在下跌區段
-時將會是反轉訊號，上漲區段時則是使股價持續上揚。
+強力的賣氣使得股價下跌，該賣氣開盤時就非常強盛，直到收盤時仍一直下跌，並且下跌幅度巨
+大。這代表著大部分資金的投資人強烈看跌，並且帶動多數投資人引發強烈賣氣，若在上漲區段
+時將會是反轉訊號，下跌區段時則是使股價持續下跌。
 
 ### 備註
 
@@ -44,18 +44,19 @@ params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測紅色光頭光腳',
+        desc='希望以哪種 K 線週期來偵測黑色光頭光腳',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022082301'
-py_ver = '2022082301'
+db_ver = '2022090501'
+py_ver = '2022090501'
+tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
-    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生紅色光頭光腳的序列
+    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生黑色光頭光腳的序列
 
     判斷規則:
-    1. 實體陽線
+    1. 實體陰線
     2. 實體長度相對於線圖上其他 K 線較長
     3. 沒有上下影線
 
@@ -70,14 +71,14 @@ def func(market_id:str, **kwargs) -> pd.Series:
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生紅色光頭光腳序列
+        市場各歷史時間點是否有發生黑色光頭光腳序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
+                           "'wj012'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 50,
@@ -85,9 +86,9 @@ def func(market_id:str, **kwargs) -> pd.Series:
         TimeUnit.MONTH: 3
     }
     period = period_type_to_period[period_type]
-    # 1. 實體陽線
-    is_white = candle.close > candle.open
-    cond_1 = is_white
+    # 1. 實體陰線
+    is_black = candle.close < candle.open
+    cond_1 = is_black
     # 2. 實體長度相對於線圖上其他 K 線較長
     b_roll = candle.body.rolling(period, period_type)
     b_mean = b_roll.mean()
@@ -122,7 +123,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
+                           "'wj012'")
 
     results = {}
     try:
@@ -132,10 +133,10 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj008 的範例圖製作函式
+    """wj012 的範例圖製作函式
 
     判斷規則:
-    1. 實體陽線
+    1. 實體陰線
     2. 實體長度相對於線圖上其他 K 線較長
     3. 沒有上下影線
 
@@ -154,8 +155,8 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
-    data = [MokeCandle.make(KType.WHITE_LONG)]
+                           "'wj012'")
+    data = [MokeCandle.make(KType.BLACK_LONG)]
     data = np.array(data)
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
@@ -181,10 +182,10 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
+                           "'wj012'")
     return 1
 
 
-wj008 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame,
-        db_ver=db_ver, py_ver=py_ver)
+wj012 = Macro(code=code, name=name, description=description, parameters=params,
+        macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
+        db_version=db_ver, py_version=py_ver, tags=tags)

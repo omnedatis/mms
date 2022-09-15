@@ -155,7 +155,7 @@ def plot(**kwargs) -> List[PlotInfo]:
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
                            "'wj009'")
-    data = [MokeCandle.make(KType.WHITE_LONG_TINY_EQUAL_SHADOW)]
+    data = [MokeCandle.make(KType.WHITE_LONG_TINY_LOWER_SHADOW)]
     data = np.array(data)
     result = [PlotInfo(
         ptype=Ptype.CANDLE,

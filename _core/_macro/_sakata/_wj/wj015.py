@@ -2,62 +2,63 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
-from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
+from _core._macro.common import Macro, MacroTags
+from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj008'
-name = '酒田戰法指標(WJ版)-紅色光頭光腳'
+code = 'wj015'
+name = '酒田戰法指標(WJ版)-紅色紡錘線'
 description = """
 
-> 趨勢向上
+> 趨勢不明
 
 ## 型態說明
 
 1. 實體陽線
-2. 實體長度相對於線圖上其他 K 線較長
-3. 沒有上下影線
+2. 實體較短
+3. 有上下影線
+4. 上下影線皆比實體長
 
 ## 未來趨勢
 
-若是於上漲趨勢發生，那麼會持續向上；若是於下跌趨勢發生，則是反轉向上訊號。
+發生後，市場趨勢處於不明的階段，任何情況都有可能會發生。
 
 ## 現象解釋
 
 ### 傳統解釋
 
-股價開低走高，收盤價遠高於開盤價，代表買氣強盛，買盤在強力主導行情。
+股價有可能是開低走高，也有可能是開高走低，最終收在高於開盤價相對較近的位置。
 
 ### 心理面解釋
 
-強力的買氣使得股價上揚，該買氣開盤時就非常強盛，直到收盤時仍一直上揚，並且上揚幅度巨
-大。這代表著大部分資金的投資人強烈看好，並且帶動多數投資人引發強烈買氣，若在下跌區段
-時將會是反轉訊號，上漲區段時則是使股價持續上揚。
+買氣稍高於賣氣，但不足以形成強烈趨勢，使得發生賣氣隨時可以超越買氣的不明趨勢狀態。
 
 ### 備註
 
-是否帶動多數投資人仍需要看成交量的關係較為準確。
+需根據市場性質進一步判斷其他現象。
 """
 params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測紅色光頭光腳',
+        desc='希望以哪種 K 線週期來偵測紅色紡錘線',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022082301'
-py_ver = '2022082301'
+db_ver = '2022090501'
+py_ver = '2022090501'
+tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
-    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生紅色光頭光腳的序列
+    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生紅色紡錘線的序列
 
     判斷規則:
     1. 實體陽線
-    2. 實體長度相對於線圖上其他 K 線較長
-    3. 沒有上下影線
+    2. 實體較短
+    3. 有上下影線
+    4. 上下影線皆比實體長
 
     Parameters
     ----------
@@ -70,14 +71,14 @@ def func(market_id:str, **kwargs) -> pd.Series:
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生紅色光頭光腳序列
+        市場各歷史時間點是否有發生紅色紡錘線序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
+                           "'wj015'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 50,
@@ -88,16 +89,16 @@ def func(market_id:str, **kwargs) -> pd.Series:
     # 1. 實體陽線
     is_white = candle.close > candle.open
     cond_1 = is_white
-    # 2. 實體長度相對於線圖上其他 K 線較長
+    # 2. 實體較短
     b_roll = candle.body.rolling(period, period_type)
     b_mean = b_roll.mean()
     b_std = b_roll.std()
-    b_threshold = b_mean + b_std * 2
-    cond_2 = (candle.body >= b_threshold)
-    # 3. 沒有上下影線
-    usa_ratio = candle.upper_shadow/candle.amplitude
-    lsa_ratio = candle.lower_shadow/candle.amplitude
-    cond_3 = (usa_ratio == 0) & (lsa_ratio == 0)
+    b_threshold = b_mean - b_std * 1
+    cond_2 = (candle.body <= b_threshold)
+    # 3. 上下影線皆比實體長
+    ugtb = candle.upper_shadow > candle.body
+    lgtb = candle.lower_shadow > candle.body
+    cond_3 = ugtb & lgtb
 
     cond = cond_1 & cond_2 & cond_3
     result = cond.to_pandas()
@@ -122,7 +123,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
+                           "'wj015'")
 
     results = {}
     try:
@@ -132,12 +133,13 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj008 的範例圖製作函式
+    """wj015 的範例圖製作函式
 
     判斷規則:
     1. 實體陽線
-    2. 實體長度相對於線圖上其他 K 線較長
-    3. 沒有上下影線
+    2. 實體較短
+    3. 有上下影線
+    4. 上下影線皆比實體長
 
     Parameters
     ----------
@@ -154,8 +156,8 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
-    data = [MokeCandle.make(KType.WHITE_LONG)]
+                           "'wj015'")
+    data = [MokeCandle.make(KType.WHITE_TINY_LONG_EQUAL_SHADOW)]
     data = np.array(data)
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
@@ -181,10 +183,10 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj008'")
+                           "'wj015'")
     return 1
 
 
-wj008 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame,
-        db_ver=db_ver, py_ver=py_ver)
+wj015 = Macro(code=code, name=name, description=description, parameters=params,
+        macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
+        db_version=db_ver, py_version=py_ver, tags=tags)
