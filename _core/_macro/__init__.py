@@ -10,7 +10,8 @@ from ._klp import (KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji,
                    klp_cc_black_longline, klp_cc_white_longline,
                    klp_cc_black_shortline, klp_cc_white_shortline,
                    klp_cc_black_spinning_top, klp_cc_white_spinning_top)
-from ._sakata._wj import (wj011, wj012, wj013, wj014, wj015)
+from ._sakata._wj import (wj011, wj012, wj013, wj014, wj015, wj016, wj017, wj018,
+                    wj019, wj020)
 from func._tp import (
     jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
     jack_ma_through_price_down, jack_ma_through_price_up,
@@ -59,6 +60,11 @@ class MacroManager(MacroManagerBase):
     wj013 = wj013
     wj014 = wj014
     wj015 = wj015
+    wj016 = wj016
+    wj017 = wj017
+    wj018 = wj018
+    wj019 = wj019
+    wj020 = wj020
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
     klp_cc_gravestone_doji = klp_cc_gravestone_doji
