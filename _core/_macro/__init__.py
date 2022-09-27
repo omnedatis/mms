@@ -5,8 +5,13 @@ from ._klp import (KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji,
                    klp_cc_longlegged_doji, klp_cc_rickshaw_man,
                    klp_cc_black_marubozu, klp_cc_white_marubozu,
                    klp_cc_black_opening_marubozu, klp_cc_white_opening_marubozu,
-                   klp_cc_black_closing_marubozu, klp_cc_white_closing_marubozu)
-from ._sakata._wj import (wj011, wj012, wj013, wj014, wj015)
+                   klp_cc_black_closing_marubozu, klp_cc_white_closing_marubozu,
+                   klp_cc_black_highwave, klp_cc_white_highwave,
+                   klp_cc_black_longline, klp_cc_white_longline,
+                   klp_cc_black_shortline, klp_cc_white_shortline,
+                   klp_cc_black_spinning_top, klp_cc_white_spinning_top)
+from ._sakata._wj import (wj011, wj012, wj013, wj014, wj015, wj016, wj017, wj018,
+                    wj019, wj020)
 from func._tp import (
     jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
     jack_ma_through_price_down, jack_ma_through_price_up,
@@ -15,7 +20,7 @@ from func._tp import (
     stone_pp004, stone_pp005, stone_pp006, stone_pp007,
     stone_pp008, stone_pp009,
     wj001, wj002, wj003, wj004, wj005, wj006, wj007, wj008,
-    wj009, wj010, 
+    wj009, wj010,
     PeriodType)
 
 class MacroManager(MacroManagerBase):
@@ -55,6 +60,11 @@ class MacroManager(MacroManagerBase):
     wj013 = wj013
     wj014 = wj014
     wj015 = wj015
+    wj016 = wj016
+    wj017 = wj017
+    wj018 = wj018
+    wj019 = wj019
+    wj020 = wj020
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
     klp_cc_gravestone_doji = klp_cc_gravestone_doji
@@ -64,9 +74,17 @@ class MacroManager(MacroManagerBase):
     klp_cc_black_marubozu = klp_cc_black_marubozu
     klp_cc_white_marubozu = klp_cc_white_marubozu
     klp_cc_black_opening_marubozu = klp_cc_black_opening_marubozu
-    #klp_cc_white_opening_marubozu = klp_cc_white_opening_marubozu
-    #klp_cc_black_closing_marubozu = klp_cc_black_closing_marubozu
-    #klp_cc_white_closing_marubozu = klp_cc_white_closing_marubozu
+    klp_cc_white_opening_marubozu = klp_cc_white_opening_marubozu
+    klp_cc_black_closing_marubozu = klp_cc_black_closing_marubozu
+    klp_cc_white_closing_marubozu = klp_cc_white_closing_marubozu
+    #klp_cc_black_highwave = klp_cc_black_highwave
+    #klp_cc_white_highwave = klp_cc_white_highwave
+    #klp_cc_black_longline = klp_cc_black_longline
+    #klp_cc_white_longline = klp_cc_white_longline
+    #klp_cc_black_shortline =  klp_cc_black_shortline
+    #klp_cc_white_shortline = klp_cc_white_shortline
+    #klp_cc_black_spinning_top = klp_cc_black_spinning_top
+    #klp_cc_white_spinning_top = klp_cc_white_spinning_top
 
 class MacroParaEnumManager(MacroParaEnumManagerBase):
     PERIOD_TYPE = PeriodType
