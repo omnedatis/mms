@@ -463,9 +463,9 @@ def api_get_pattern_distribution():
                 properties:
                   type:
                     type: string
-                  range_up:
+                  rangeUp:
                     type: float
-                  range_down:
+                  rangeDown:
                     type: float
                   name:
                     type: number
@@ -630,9 +630,9 @@ def api_market_distribution():
                 properties:
                   type:
                     type: string
-                  range_up:
+                  rangeUp:
                     type: float
-                  range_down:
+                  rangeDown:
                     type: float
                   name:
                     type: number

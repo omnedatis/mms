@@ -935,8 +935,8 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
             (market_occured_future_rets<max)]
         segs.append({
             'type': "pattern",
-            'range_up': max,
-            'range_down': min,
+            'rangeUp': max,
+            'rangeDown': min,
             'name': np.round(min, 1),
             'value': np.round(len(seg)/len(market_occured_future_rets) * 100, 2)
         })
@@ -1016,8 +1016,8 @@ def get_mkt_dist_info(period, markets: List[str]) -> List[Dict[str, Any]]:
         seg = future_rets[(future_rets>=min) & (future_rets<max)]
         segs.append({
             'type': "market",
-            'range_up': max,
-            'range_down': min,
+            'rangeUp': max,
+            'rangeDown': min,
             'name': np.round(min, 1),
             'value': np.round(len(seg)/len(future_rets) * 100, 2)
         })
