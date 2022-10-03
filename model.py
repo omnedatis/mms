@@ -836,6 +836,22 @@ def get_mix_pattern_rise_prob(markets, patterns):
                                                 'probability': pdown / pcnt * 100 if pcnt > 0 else 0})
     return [market_rise, market_fall, pattern_rise, pattern_fall]
 
+def get_occurred_patterns(date, patterns):
+    _db = MimosaDBManager().current_db
+    markets = _db.get_markets()
+    if not markets or not _db.is_initialized():
+        return []
+    date = np.datetime64(date)
+    pvalues = []
+    for mid in markets:
+        try:
+           pvalues.append( _db.get_pattern_values(mid, patterns).loc[date])
+        except KeyError:
+            continue
+    pvalues = pd.concat(pvalues, axis=1).T
+    ret = pvalues.columns.values[pvalues.values.any(axis=0)].tolist()
+    return ret
+
 def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
     def func(v, r):
         ret = r[(v == 1).all(axis=1) & (r == r)]

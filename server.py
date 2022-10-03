@@ -16,7 +16,8 @@ from model import (
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
-    cast_macro_kwargs, del_model_execution, check_macro_info, CatchableTread)
+    cast_macro_kwargs, del_model_execution, check_macro_info, CatchableTread,
+    get_occurred_patterns)
 from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
                    MarketPeriodField, HttpResponseCode, TaskLimitCode)
 from func.common import Ptype
@@ -255,6 +256,46 @@ def api_get_pattern_count():
         patterns, market_type, category_code)
     ret = {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}
     return HttpResponseCode.OK.format(ret)
+
+
+@app.route("/patterns/occurred", methods=["POST"])
+def api_get_occurred_patterns():
+    """
+    取得指定日期有發生的現象
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          date:
+            type: string
+            format: date
+          patterns:
+            type: array
+            items:
+              type: string
+    responses:
+      202:
+        description: 請求已接收，等待執行
+        schema:
+            type: array
+            items:
+              type: string
+    """
+    try:
+        logging.info(
+            f"api_get_occurred_patterns receiving: {request.json}")
+        data = request.json
+        date = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
+        patterns = data['patterns']
+    except Exception:
+        raise BadRequest
+    ret = get_occurred_patterns(date, patterns)
+    return HttpResponseCode.OK.format(ret)
+
 
 @app.route("/pattern/updwonprob", methods=["POST"])
 def api_get_pattern_updownprob():
