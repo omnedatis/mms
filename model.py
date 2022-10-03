@@ -848,6 +848,8 @@ def get_occurred_patterns(date, patterns):
            pvalues.append( _db.get_pattern_values(mid, patterns).loc[date])
         except KeyError:
             continue
+    if len(pvalues) == 0:
+        return []
     pvalues = pd.concat(pvalues, axis=1).T
     ret = pvalues.columns.values[pvalues.values.any(axis=0)].tolist()
     return ret

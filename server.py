@@ -281,9 +281,19 @@ def api_get_occurred_patterns():
       202:
         description: 請求已接收，等待執行
         schema:
-            type: array
-            items:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
               type: string
+            data:
+                type: object
+                properties:
+                  occurPatterns:
+                    type: array
+                    items:
+                      type: string
     """
     try:
         logging.info(
@@ -293,7 +303,7 @@ def api_get_occurred_patterns():
         patterns = data['patterns']
     except Exception:
         raise BadRequest
-    ret = get_occurred_patterns(date, patterns)
+    ret = {'occurPatterns': get_occurred_patterns(date, patterns)}
     return HttpResponseCode.OK.format(ret)
 
 
