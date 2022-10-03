@@ -12,7 +12,7 @@ import traceback
 import threading as mt
 import sys
 from model import (
-    set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
+    get_patterns_occur_dates, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
@@ -146,7 +146,7 @@ def api_edit_model(modelId):
     return HttpResponseCode.ACCEPTED.format()
 
 
-@app.route("/pattern/dates", methods=["POST"])
+@app.route("/pattern/mixoccurdates", methods=["POST"])
 def api_get_pattern_dates():
     """
     取得複合現象歷史發生日期
@@ -201,6 +201,62 @@ def api_get_pattern_dates():
     ret = get_mix_pattern_occur(market_id, patterns, start_date, end_date)
     ret = {"occurDates": [each.strftime('%Y-%m-%d') for each in ret]}
 
+    return HttpResponseCode.OK.format(ret)
+
+
+@app.route("/pattern/occurdates", methods=["POST"])
+def api_get_patterns_dates():
+    """
+    取得多個現象的指定市場, 指定期間歷史發生日期
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          patterns:
+            type: array
+            items:
+              type: string
+          marketCode:
+            type: string
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: object
+              properties:
+                occurDates:
+                  type: array
+                  items:
+                    type: string
+                    format: date
+    """
+    try:
+        logging.info(f"api_get_patterns_dates receiving: {request.json}")
+        data = request.json
+        patterns = data['patterns']
+        market_id = data['marketCode']
+        start_date = data.get('startDate')
+        end_date = data.get('endDate')
+    except Exception as esp:
+        raise BadRequest
+    ret = get_patterns_occur_dates(market_id, patterns, start_date, end_date)
     return HttpResponseCode.OK.format(ret)
 
 
@@ -386,10 +442,10 @@ def api_get_pattern_distribution():
               type: string
           datePeriod:
             type: integer
-          marketType:
-            type: string
-          categoryCode:
-            type: string
+          marketCodes:
+            type: array
+            items:
+              type: string
     responses:
       200:
         description: 成功取得
@@ -405,14 +461,16 @@ def api_get_pattern_distribution():
               items:
                 type: object
                 properties:
-                  marketCode:
+                  type:
                     type: string
-                  returnMean:
+                  range_up:
+                    type: float
+                  range_down:
+                    type: float
+                  name:
                     type: number
-                  returnStd:
+                  value:
                     type: number
-                  samples:
-                    type: integer
     """
     try:
         logging.info(
@@ -420,15 +478,11 @@ def api_get_pattern_distribution():
         data = request.json
         patterns = data['patterns']
         date_period = data['datePeriod']
-        market_type = data.get('marketType')
-        category_code = data.get('categoryCode')
+        markets = data['marketCodes']
     except Exception as esp:
         raise BadRequest
     ret = get_mix_pattern_mkt_dist_info(
-        patterns, date_period, market_type, category_code)
-    ret = [{"marketCode": key, "returnMean": float(mean), "returnStd": float(
-        std), "samples": int(counts)} for key, (mean, std, counts) in ret.items()]
-
+        patterns, date_period, markets)
     return HttpResponseCode.OK.format(ret)
 
 
@@ -494,10 +548,10 @@ def api_edit_pattern(patternId):
     return HttpResponseCode.ACCEPTED.format()
 
 
-@app.route("/markets/distribution", methods=["GET"])
-def api_market_distribution():
+@app.route("/markets/upprob", methods=["GET"])
+def api_market_upprob():
     """
-    取得指定市場集分布資訊
+    取得指定市場集上漲機率
     ---
     tags:
       - 前台
@@ -523,30 +577,76 @@ def api_market_distribution():
             message:
               type: string
             data:
-              type: array
-              items:
-                type: object
-                properties:
-                  marketCode:
-                    type: string
-                  returnMean:
-                    type: number
-                  returnStd:
-                    type: number
-                  samples:
-                    type: integer
+              type: object
+              properties:
+                positiveWeight:
+                  type: number
     """
     try:
-        logging.info(f"api_market_distribution receiving: {request.args}")
+        logging.info(f"api_market_upprob receiving: {request.args}")
         data = request.args
         date_period = data["datePeriod"]
         market_type = data.get("marketType") or None
         category_code = data.get("categoryCode") or None
     except Exception as esp:
         raise BadRequest
-    ret = get_mkt_dist_info(int(date_period), market_type, category_code)
-    ret = [{"marketCode": key, "returnMean": float(mean), "returnStd": float(
-        std), "samples": int(counts)} for key, (mean, std, counts) in ret.items()]
+    ret = get_market_rise_prob(int(date_period), market_type, category_code)
+    ret =  {"positiveWeight": float(ret)}
+    return HttpResponseCode.OK.format(ret)
+
+
+@app.route("/markets/distribution", methods=["POST"])
+def api_market_distribution():
+    """
+    取得指定市場集分布資訊
+    ---
+    tags:
+      - 前台
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          datePeriod:
+            type: integer
+          marketCodes:
+            type: array
+            items:
+              type: string
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  range_up:
+                    type: float
+                  range_down:
+                    type: float
+                  name:
+                    type: number
+                  value:
+                    type: number
+    """
+    try:
+        logging.info(f"api_market_distribution receiving: {request.args}")
+        data = request.json
+        date_period = data["datePeriod"]
+        markets = data['marketCodes']
+    except Exception as esp:
+        raise BadRequest
+    ret = get_mkt_dist_info(int(date_period), markets)
     return HttpResponseCode.OK.format(ret)
 
 
