@@ -767,6 +767,52 @@ def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None
     return ret.tolist()
 
 
+def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: str=None, 
+                             end_date: str=None) -> List[Dict[str, str]]:
+    """取得指定市場, 指定時間區段複數現象的發生時間
+
+    Parameters
+    ----------
+    market_id: str
+        指定市場的市場ID
+    patterns: List[str]
+        要查看發生時間點的現象 ID 清單
+    start_date: str
+        查看時間起始日
+    end_date: str
+        查看時間終止日
+    
+    Returns
+    -------
+    results: List[Dict[str, str]]
+        各現象發生時間點
+    """
+    _db = MimosaDBManager().current_db
+    if not _db.is_initialized():
+        return []
+
+    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+    results = []
+    for pattern in patterns:
+        pdata = _db.get_pattern_values(market_id, [pattern])
+
+        values = pdata.values
+        dates = pdata.index.values.astype('datetime64[D]')
+        ret = dates[(values == 1).all(axis=1)]
+
+        if start_date is not None:
+            ret = ret[-(ret >= start_date).sum():]
+            if (ret >= start_date).sum() == 0:
+                ret = ret[:0]
+        if end_date is not None:
+            ret = ret[:(ret <= end_date).sum()]
+        dates: List[datetime.date] = ret.tolist()
+        result = [{'patternId': pattern, "occurDates": date.strftime('%Y-%m-%d')} for date in dates]
+        results += result
+    return results
+
+
 def get_pattern_occur(market_id: str, pattern_id):
     return get_mix_pattern_occur(market_id, [pattern_id])
 
@@ -815,26 +861,47 @@ def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=No
     return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
 
 
-def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
+def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[Dict[str, Any]]:
     def func(v, r):
         ret = r[(v == 1).all(axis=1) & (r == r)]
-        if len(ret) == 0:
-            return 0, 0, 0
-        return ret.mean() * 100, ret.std() * 100, len(ret)
+        return ret
 
     _db = MimosaDBManager().current_db
-    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return {}
 
     returns = [_db.get_future_returns(
         mid, [period]).values[:, 0] for mid in markets]
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
-    stats = np.array([func(v, r) for v, r in zip(pvalues, returns)])
-    drops = ~np.isnan(stats).any(axis=1)
-    markets = np.array(markets)[drops].tolist()
-    stats = stats[drops]
-    return {m: (v, r, int(c)) for m, (v, r, c) in zip(markets, stats)}
+    market_occured_future_rets = np.concatenate([func(v, r) for v, r in zip(pvalues, returns)], axis=0)
+    drops = ~np.isnan(market_occured_future_rets)
+    market_occured_future_rets: np.ndarray = market_occured_future_rets[drops]
+    market_occured_future_rets.sort()
+
+    size = 100
+    diff = (market_occured_future_rets[-1] - market_occured_future_rets[0])/size
+    segments = []
+    for i in range(1, size+1):
+        if len(segments) == 0:
+            segments.append(market_occured_future_rets[0])
+        else:
+            segments.append(segments[-1]+diff)
+    
+    segs = []
+    for i in range(1, len(segments)):
+        min = segments[i-1]
+        max = segments[i]
+        seg = market_occured_future_rets[
+            (market_occured_future_rets>=min) & 
+            (market_occured_future_rets<max)]
+        segs.append({
+            'type': "pattern",
+            'range_up': max,
+            'range_down': min,
+            'name': np.round(min, 1),
+            'value': np.round(len(seg)/len(market_occured_future_rets) * 100, 2)
+        })
+    return segs
 
 
 def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_code=None):
@@ -881,25 +948,42 @@ def get_market_rise_prob(period, market_type=None, category_code=None):
     return (ups / cnts) * 100 if cnts > 0 else 0
 
 
-def get_mkt_dist_info(period, market_type=None, category_code=None):
-    def func(r):
-        ret = r[(r == r)]
-        if len(ret) == 0:
-            return 0, 0, 0
-        return ret.mean() * 100, ret.std() * 100, len(ret)
+def get_mkt_dist_info(period, markets: List[str]) -> List[Dict[str, Any]]:
 
     _db = MimosaDBManager().current_db
-    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return {}
 
     returns = [_db.get_future_returns(
         mid, [period]).values[:, 0] for mid in markets]
-    stats = np.array([func(r) for r in returns])
-    drops = ~np.isnan(stats).any(axis=1)
-    markets = np.array(markets)[drops].tolist()
-    stats = stats[drops]
-    return {m: (v, r, int(c)) for m, (v, r, c) in zip(markets, stats)}
+    future_rets = np.concatenate(returns, axis=0)
+    drops = ~np.isnan(future_rets)
+    future_rets: np.ndarray = future_rets[drops]
+    future_rets.sort()
+
+    size = 100
+    diff = (future_rets[-1] - future_rets[0])/size
+    segments = []
+    for i in range(1, size+1):
+        if len(segments) == 0:
+            segments.append(future_rets[0])
+        else:
+            segments.append(segments[-1]+diff)
+    
+    segs = []
+    for i in range(1, len(segments)):
+        min = segments[i-1]
+        max = segments[i]
+        seg = future_rets[(future_rets>=min) & (future_rets<max)]
+        segs.append({
+            'type': "market",
+            'range_up': max,
+            'range_down': min,
+            'name': np.round(min, 1),
+            'value': np.round(len(seg)/len(future_rets) * 100, 2)
+        })
+
+    return segs
 
 
 def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] = None):
