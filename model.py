@@ -793,27 +793,48 @@ def get_pattern_occur_cnt(pattern_id, market_type=None, category_code=None):
     return get_mix_pattern_occur_cnt([pattern_id], market_type, category_code)
 
 
-def get_mix_pattern_rise_prob(patterns, period, market_type=None, category_code=None):
+def _get_mix_pattern_rise_prob(markets, patterns, period):
     def func(v, r):
         ret = r[(v == 1).all(axis=1) & (r == r)]
-        return len(ret), (ret > 0).sum().tolist()
+        return (len(r), (r > 0).sum().tolist(), (r < 0).sum().tolist(),
+                len(ret), (ret > 0).sum().tolist(), (ret < 0).sum().tolist())
 
     _db = MimosaDBManager().current_db
-    markets = _db.get_markets(market_type, category_code)
-    if not markets or not _db.is_initialized():
-        return 0
-
+    if not _db.is_initialized():
+        return 0, 0, 0, 0, 0, 0
     returns = [_db.get_future_returns(
         mid, [period]).values[:, 0] for mid in markets]
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
     stats = np.array([func(v, r) for v, r in zip(pvalues, returns)])
-    cnts, ups = stats.sum(axis=0).tolist()
-    return (ups / cnts) * 100 if cnts > 0 else 0
+    mcnt, mup, mdown, pcnt, pup, pdown = stats.sum(axis=0).tolist()
+    return mcnt, mup, mdown, pcnt, pup, pdown
 
 
-def get_pattern_rise_prob(pattern_id, period, market_type=None, category_code=None):
-    return get_mix_pattern_rise_prob([pattern_id], period, market_type, category_code)
-
+def get_mix_pattern_rise_prob(markets, patterns):
+    market_rise = {'statisticsCategory': 'marketAverage',
+                   'upAndDownCategories': 'rise',
+                   'probabilityValue': []}
+    market_fall = {'statisticsCategory': 'marketAverage',
+                   'upAndDownCategories': 'fall',
+                   'probabilityValue': []}
+    pattern_rise = {'statisticsCategory': 'patternOccur',
+                   'upAndDownCategories': 'rise',
+                   'probabilityValue': []}
+    pattern_fall = {'statisticsCategory': 'patternOccur',
+                   'upAndDownCategories': 'fall',
+                   'probabilityValue': []}
+    for period in PREDICT_PERIODS:
+        (mcnt, mup, mdown, pcnt, pup, pdown
+         ) = _get_mix_pattern_rise_prob(markets, patterns, period)
+        market_rise['probabilityValue'].append({'days': period,
+                                                'probability': mup / mcnt * 100 if mcnt > 0 else 0})
+        market_fall['probabilityValue'].append({'days': period,
+                                                'probability': mdown / mcnt * 100 if mcnt > 0 else 0})
+        pattern_rise['probabilityValue'].append({'days': period,
+                                                'probability': pup / pcnt * 100 if pcnt > 0 else 0})
+        pattern_fall['probabilityValue'].append({'days': period,
+                                                'probability': pdown / pcnt * 100 if pcnt > 0 else 0})
+    return [market_rise, market_fall, pattern_rise, pattern_fall]
 
 def get_mix_pattern_mkt_dist_info(patterns, period, market_type=None, category_code=None):
     def func(v, r):

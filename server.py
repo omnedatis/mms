@@ -256,10 +256,10 @@ def api_get_pattern_count():
     ret = {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}
     return HttpResponseCode.OK.format(ret)
 
-@app.route("/pattern/upprob", methods=["POST"])
-def api_get_pattern_upprob():
+@app.route("/pattern/updwonprob", methods=["POST"])
+def api_get_pattern_updownprob():
     """
-    取得複合現象上漲機率
+    取得複合現象上漲/下跌機率
     ---
     tags:
       - Studio
@@ -268,16 +268,14 @@ def api_get_pattern_upprob():
         in: body
         type: object
         properties:
+          markets:
+            type: array
+            items:
+              type: string
           patterns:
             type: array
             items:
               type: string
-          datePeriod:
-            type: integer
-          marketType:
-            type: string
-          categoryCode:
-            type: string
     responses:
       200:
         description: 成功取得
@@ -289,24 +287,33 @@ def api_get_pattern_upprob():
             message:
               type: string
             data:
-              type: object
-              properties:
-                positiveWeight:
-                  type: number
+              type: array
+              items:
+                type: object
+                properties:
+                  statisticsCategory:
+                    type: string
+                  upAndDownCategories:
+                    type: string
+                  probabilityValue:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          days:
+                            type: integer
+                          probability:
+                            type: number
     """
     try:
         logging.info(
             f"api_get_pattern_upprob receiving: {request.json}")
         data = request.json
+        markets = data['markets']
         patterns = data['patterns']
-        date_period = data['datePeriod']
-        market_type = data.get('marketType')
-        category_code = data.get('categoryCode')
-    except Exception as esp:
+    except Exception:
         raise BadRequest
-    ret = get_mix_pattern_rise_prob(
-        patterns, date_period, market_type, category_code)
-    ret = {"positiveWeight": float(ret)}
+    ret = get_mix_pattern_rise_prob(markets, patterns)
     return HttpResponseCode.OK.format(ret)
 
 
@@ -434,53 +441,6 @@ def api_edit_pattern(patternId):
     del_pattern_data(patternId)
     task_queue.push(add_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
     return HttpResponseCode.ACCEPTED.format()
-
-
-@app.route("/markets/upprob", methods=["GET"])
-def api_market_upprob():
-    """
-    取得指定市場集上漲機率
-    ---
-    tags:
-      - 前台
-    parameters:
-      - name: datePeriod
-        in: query
-        type: integer
-        required: true
-      - name: marketType
-        in: query
-        type: string
-      - name: categoryCode
-        in: query
-        type: string
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: object
-              properties:
-                positiveWeight:
-                  type: number
-    """
-    try:
-        logging.info(f"api_market_upprob receiving: {request.args}")
-        data = request.args
-        date_period = data["datePeriod"]
-        market_type = data.get("marketType") or None
-        category_code = data.get("categoryCode") or None
-    except Exception as esp:
-        raise BadRequest
-    ret = get_market_rise_prob(int(date_period), market_type, category_code)
-    ret =  {"positiveWeight": float(ret)}
-    return HttpResponseCode.OK.format(ret)
 
 
 @app.route("/markets/distribution", methods=["GET"])
