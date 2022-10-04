@@ -767,7 +767,7 @@ def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None
     return ret.tolist()
 
 
-def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: str=None, 
+def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: str=None,
                              end_date: str=None) -> List[Dict[str, str]]:
     """取得指定市場, 指定時間區段複數現象的發生時間
 
@@ -781,7 +781,7 @@ def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: st
         查看時間起始日
     end_date: str
         查看時間終止日
-    
+
     Returns
     -------
     results: List[Dict[str, str]]
@@ -817,7 +817,7 @@ def get_pattern_occur(market_id: str, pattern_id):
     return get_mix_pattern_occur(market_id, [pattern_id])
 
 
-def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
+def get_mix_pattern_occur_cnt(pattern_id, markets, begin_date=None, end_date=None):
     def func(vs):
         recv = np.array(
             [((v >= 0).all(axis=1).sum(), (v == 1).all(axis=1).sum()) for v in vs])
@@ -827,16 +827,21 @@ def get_mix_pattern_occur_cnt(patterns, market_type=None, category_code=None):
         return occurs, cnts - occurs
 
     _db = MimosaDBManager().current_db
-    markets = _db.get_markets(market_type, category_code)
     if not markets or not _db.is_initialized():
         return 0, 0
-
-    pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
-    return func(pvalues)
-
-
-def get_pattern_occur_cnt(pattern_id, market_type=None, category_code=None):
-    return get_mix_pattern_occur_cnt([pattern_id], market_type, category_code)
+    pvalues = [_db.get_pattern_values(mid, [pattern_id]) for mid in markets]
+    pdata = []
+    for each_p in pvalues:
+        dates = each_p.index.values.astype('datetime64[D]')
+        ret = each_p.values
+        if begin_date is not None:
+            ret = ret[-(dates >= begin_date).sum():]
+            if (dates >= begin_date).sum() == 0:
+                ret = ret[:0]
+        if end_date is not None:
+            ret = ret[:(dates <= end_date).sum()]
+        pdata.append(ret)
+    return func(pdata)
 
 
 def _get_mix_pattern_rise_prob(markets, patterns, period):
@@ -925,13 +930,13 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
             segments.append(market_occured_future_rets[0])
         else:
             segments.append(segments[-1]+diff)
-    
+
     segs = []
     for i in range(1, len(segments)):
         min = segments[i-1]
         max = segments[i]
         seg = market_occured_future_rets[
-            (market_occured_future_rets>=min) & 
+            (market_occured_future_rets>=min) &
             (market_occured_future_rets<max)]
         segs.append({
             'type': "pattern",
@@ -1008,7 +1013,7 @@ def get_mkt_dist_info(period, markets: List[str]) -> List[Dict[str, Any]]:
             segments.append(future_rets[0])
         else:
             segments.append(segments[-1]+diff)
-    
+
     segs = []
     for i in range(1, len(segments)):
         min = segments[i-1]

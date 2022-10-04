@@ -272,14 +272,18 @@ def api_get_pattern_count():
         in: body
         type: object
         properties:
-          patterns:
+          patternId:
+            type: string
+          markets:
             type: array
             items:
-              type: string
-          marketType:
+             type: string
+          beginDate:
             type: string
-          categoryCode:
+            format: date
+          endDate:
             type: string
+            format: date
     responses:
       200:
         description: 成功取得
@@ -302,14 +306,16 @@ def api_get_pattern_count():
         logging.info(
             f"api_get_pattern_count receiving: {request.json}")
         data = request.json
-        patterns = data['patterns']
-        market_type = data.get('marketType')
-        category_code = data.get('categoryCode')
+
+        pattern_id = data['patternId']
+        markets =  data['markets']
+        begin_date = data.get('beginDate') and datetime.datetime.strptime(data.get('beginDate'), '%Y-%m-%d').date()
+        end_date = data.get('endDate') and datetime.datetime.strptime(data.get('endDate'), '%Y-%m-%d').date()
     except Exception as esp:
         raise BadRequest
 
     occur, non_occur = get_mix_pattern_occur_cnt(
-        patterns, market_type, category_code)
+        pattern_id, markets, begin_date, end_date)
     ret = {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}
     return HttpResponseCode.OK.format(ret)
 
