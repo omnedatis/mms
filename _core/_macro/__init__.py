@@ -77,14 +77,14 @@ class MacroManager(MacroManagerBase):
     klp_cc_white_opening_marubozu = klp_cc_white_opening_marubozu
     klp_cc_black_closing_marubozu = klp_cc_black_closing_marubozu
     klp_cc_white_closing_marubozu = klp_cc_white_closing_marubozu
-    #klp_cc_black_highwave = klp_cc_black_highwave
-    #klp_cc_white_highwave = klp_cc_white_highwave
-    #klp_cc_black_longline = klp_cc_black_longline
-    #klp_cc_white_longline = klp_cc_white_longline
-    #klp_cc_black_shortline =  klp_cc_black_shortline
-    #klp_cc_white_shortline = klp_cc_white_shortline
-    #klp_cc_black_spinning_top = klp_cc_black_spinning_top
-    #klp_cc_white_spinning_top = klp_cc_white_spinning_top
+    klp_cc_black_highwave = klp_cc_black_highwave
+    klp_cc_white_highwave = klp_cc_white_highwave
+    klp_cc_black_longline = klp_cc_black_longline
+    klp_cc_white_longline = klp_cc_white_longline
+    klp_cc_black_shortline =  klp_cc_black_shortline
+    klp_cc_white_shortline = klp_cc_white_shortline
+    klp_cc_black_spinning_top = klp_cc_black_spinning_top
+    klp_cc_white_spinning_top = klp_cc_white_spinning_top
 
 class MacroParaEnumManager(MacroParaEnumManagerBase):
     PERIOD_TYPE = PeriodType
