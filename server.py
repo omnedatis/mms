@@ -17,7 +17,7 @@ from model import (
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
     cast_macro_kwargs, del_model_execution, check_macro_info, CatchableTread,
-    get_occurred_patterns)
+    get_occurred_patterns, get_draft_date)
 from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
                    MarketPeriodField, HttpResponseCode, TaskLimitCode)
 from func.common import Ptype
@@ -146,7 +146,7 @@ def api_edit_model(modelId):
     return HttpResponseCode.ACCEPTED.format()
 
 
-@app.route("/pattern/mixoccurdates", methods=["POST"])
+@app.route("/pattern/compound/occurdates", methods=["POST"])
 def api_get_pattern_dates():
     """
     取得複合現象歷史發生日期
@@ -278,7 +278,7 @@ def api_get_pattern_count():
             type: array
             items:
              type: string
-          beginDate:
+          startDate:
             type: string
             format: date
           endDate:
@@ -309,18 +309,18 @@ def api_get_pattern_count():
 
         pattern_id = data['patternId']
         markets =  data['markets']
-        begin_date = data.get('beginDate') and datetime.datetime.strptime(data.get('beginDate'), '%Y-%m-%d').date()
+        start_date = data.get('startDate') and datetime.datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()
         end_date = data.get('endDate') and datetime.datetime.strptime(data.get('endDate'), '%Y-%m-%d').date()
     except Exception as esp:
         raise BadRequest
 
     occur, non_occur = get_mix_pattern_occur_cnt(
-        pattern_id, markets, begin_date, end_date)
+        pattern_id, markets, start_date, end_date)
     ret = {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/patterns/occurred", methods=["POST"])
+@app.route("/pattern/occurred", methods=["POST"])
 def api_get_occurred_patterns():
     """
     取得指定日期有發生的現象
@@ -369,7 +369,7 @@ def api_get_occurred_patterns():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/updwonprob", methods=["POST"])
+@app.route("/pattern/updownprob", methods=["POST"])
 def api_get_pattern_updownprob():
     """
     取得複合現象上漲/下跌機率
@@ -944,6 +944,87 @@ def api_pattern_get_plot():
                 } for idx, value in enumerate(pinfo.data.tolist())]
             })
     return HttpResponseCode.OK.format(ret)
+
+@app.route('/pattern/draft/occurdates', methods=['POST'])
+def api_get_pattern_draft_date():
+    """
+    取得 pattern 草稿發生日期
+    ---
+    tags:
+      - Studio
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          funcCode:
+            type: string
+          paramCodes:
+            type: array
+            items:
+              type: object
+              properties:
+                paramCode:
+                  type: string
+                paramValue:
+                  type: string
+          marketCode:
+            type: string
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: object
+              properties:
+                occurDates:
+                  type: array
+                  items:
+                    type: string
+                    format: date
+    """
+    logging.info(f"api_pattern_get_frame receiving: {request.json}")
+    try:
+        data = request.json
+        func_code = data['funcCode']
+        params_codes = data['paramCodes']
+        market_code = data['marketCode']
+        kwargs = {each["paramCode"]: each["paramValue"]
+                  for each in params_codes}
+        start_date = data.get('startDate')
+        end_date = data.get('endDate')
+        if start_date is not None:
+            start_date = datetime.datetime.strptime(
+                start_date, "%Y-%m-%d").date()
+        if end_date is not None:
+            end_date = datetime.datetime.strptime(
+                end_date, "%Y-%m-%d").date()
+        if check_macro_info(func_code):
+            raise InternalServerError(f'found inconsistent data type on {func_code}')
+        print(kwargs)
+        kwargs, msg = cast_macro_kwargs(func_code, kwargs)
+        if msg:
+            return HttpResponseCode.BAD_REQUEST.format(msg)
+    except KeyError:
+        raise BadRequest
+    except ValueError:
+        raise InternalServerError
+    ret = get_draft_date(func_code, kwargs, market_code, start_date, end_date)
+    ret = {'occurDates':[datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]}
+    return HttpResponseCode.OK.format(ret)
+
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):

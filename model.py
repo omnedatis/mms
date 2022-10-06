@@ -1068,7 +1068,7 @@ def check_macro_info(func):
         # senario 1: definition cannot be found in db
         if each.code not in macro_info:
             invalids += 1
-        # senario 1: definition type_code does not match what found in db
+        # senario 2: definition type_code does not match what found in db
         if each.dtype.code != macro_info[each.code]:
             invalids += 1
 
@@ -1120,3 +1120,21 @@ def get_plot(func, kwargs):
 def get_frame(func, kwargs):
     pattern = PatternInfo.make(pid="", code=func, params=kwargs)
     return pattern.frame()
+
+
+def get_draft_date(func_code:str, kwargs:Dict[str, Any], market_id:str,
+                   start_date:Optional[datetime.date]=None,
+                   end_date:Optional[datetime.date]=None):
+    _db = MimosaDBManager().current_db
+    if not _db.is_initialized():
+        return []
+
+    pattern = PatternInfo.make('draft_ptn', func_code, kwargs)
+    pdata= _db.gen_pattern_data(market_id, pattern)
+    index = pdata.index.values.astype('datetime64[D]')
+    ret = index[pdata.values==True]
+    if start_date is not None:
+        ret = ret[ret >= start_date]
+    if end_date is not None:
+        ret = ret[ret <= end_date]
+    return ret.tolist()

@@ -293,6 +293,10 @@ class MimosaDB:
         recv = [each.run(market_id).rename(each.pid).values for each in patterns]
         return market_id, PatternValueCoder.encode(np.array(recv).T)
 
+    def gen_pattern_data(self, market_id, pattern):
+        set_market_data_provider(LocalMarketDataProvider(self._dbid))
+        return pattern.run(market_id).rename(pattern.pid)
+
     def add_pattern(self, pattern):
         set_market_data_provider(self._market_data_provider)
         pidx = self._pattern_ids.get(pattern.pid)
