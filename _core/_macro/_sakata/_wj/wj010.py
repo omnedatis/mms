@@ -2,14 +2,14 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
-from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
+from _core._macro.common import Macro, MacroTags
+from _core._macro._sakata._moke_candle import MokeCandle, KType
+from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
-from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj007'
-name = '酒田戰法指標(WJ版)-實體長陽線'
+code = 'wj010'
+name = '酒田戰法指標(WJ版)-紅色開盤無影線'
 description = """
 
 > 趨勢向上
@@ -18,7 +18,7 @@ description = """
 
 1. 實體陽線
 2. 實體長度相對於線圖上其他 K 線較長
-3. 有短的上下影線
+3. 沒有下影線，有短上影線
 
 ## 未來趨勢
 
@@ -32,9 +32,9 @@ description = """
 
 ### 心理面解釋
 
-強力的買氣使得股價上揚，雖然於開盤時有些許賣壓，但不久後仍是買壓大勝，使得股價直到收
-盤時一直上揚，並且上揚幅度巨大。這代表著大部分資金的投資人強烈看好，並且帶動多數投資
-人引發強烈買氣，若在下跌區段時將會是反轉訊號，上漲區段時則是使股價持續上揚。
+強力的買氣使得股價上揚，該買氣開盤時就非常強盛，直到收盤時仍一直上揚，並且上揚幅度巨
+大。這代表著大部分資金的投資人強烈看好，並且帶動多數投資人引發強烈買氣，若在下跌區段
+時將會是反轉訊號，上漲區段時則是使股價持續上揚。
 
 ### 備註
 
@@ -44,20 +44,21 @@ params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測實體長陽線',
+        desc='希望以哪種 K 線週期來偵測紅色開盤無影線',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022082201'
-py_ver = '2022082201'
+db_ver = '2022082301'
+py_ver = '2022082301'
+tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
-    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生實體長陽線的序列
+    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生紅色開盤無影線的序列
 
     判斷規則:
     1. 實體陽線
     2. 實體長度相對於線圖上其他 K 線較長
-    3. 有短的上下影線
+    3. 沒有下影線，有短上影線
 
     Parameters
     ----------
@@ -70,14 +71,14 @@ def func(market_id:str, **kwargs) -> pd.Series:
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生實體長陽線序列
+        市場各歷史時間點是否有發生紅色開盤無影線序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj007'")
+                           "'wj010'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 50,
@@ -94,10 +95,10 @@ def func(market_id:str, **kwargs) -> pd.Series:
     b_std = b_roll.std()
     b_threshold = b_mean + b_std * 2
     cond_2 = (candle.body >= b_threshold)
-    # 3. 有短的上下影線
+    # 3. 沒有下影線，有短上影線
     usa_ratio = candle.upper_shadow/candle.amplitude
     lsa_ratio = candle.lower_shadow/candle.amplitude
-    cond_3 = (usa_ratio <= 0.1) & (lsa_ratio <= 0.1)
+    cond_3 = (usa_ratio <= 0.1) & (lsa_ratio == 0.1)
 
     cond = cond_1 & cond_2 & cond_3
     result = cond.to_pandas()
@@ -122,7 +123,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj007'")
+                           "'wj010'")
 
     results = {}
     try:
@@ -132,12 +133,12 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj007 的範例圖製作函式
+    """wj010 的範例圖製作函式
 
     判斷規則:
     1. 實體陽線
     2. 實體長度相對於線圖上其他 K 線較長
-    3. 有短的上下影線
+    3. 沒有下影線，有短上影線
 
     Parameters
     ----------
@@ -154,8 +155,8 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj007'")
-    data = [MokeCandle.make(KType.WHITE_LONG_TINY_EQUAL_SHADOW)]
+                           "'wj010'")
+    data = [MokeCandle.make(KType.WHITE_LONG_TINY_UPPER_SHADOW)]
     data = np.array(data)
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
@@ -181,10 +182,10 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj007'")
+                           "'wj010'")
     return 1
 
 
-wj007 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame,
-        db_ver=db_ver, py_ver=py_ver)
+wj010 = Macro(code=code, name=name, description=description, parameters=params,
+        macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
+        db_version=db_ver, py_version=py_ver, tags=tags)

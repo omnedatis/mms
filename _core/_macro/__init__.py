@@ -10,8 +10,10 @@ from ._klp import (KlpCcLeadingTrend, klp_cc_doji, klp_cc_dragonfly_doji,
                    klp_cc_black_longline, klp_cc_white_longline,
                    klp_cc_black_shortline, klp_cc_white_shortline,
                    klp_cc_black_spinning_top, klp_cc_white_spinning_top)
-from ._sakata._wj import (wj011, wj012, wj013, wj014, wj015, wj016, wj017, wj018,
-                    wj019, wj020)
+from ._sakata._wj import (
+    wj001, wj002, wj003, wj004, wj005, wj006, wj007, wj008, wj009, wj010, 
+    wj011, wj012, wj013, wj014, wj015, wj016, wj017, wj018, wj019, wj020,
+    wj021, wj022)
 from func._tp import (
     jack_ma_order_up, jack_ma_order_thick, jack_ma_order_down,
     jack_ma_through_price_down, jack_ma_through_price_up,
@@ -19,8 +21,6 @@ from func._tp import (
     stone_pp000, stone_pp001, stone_pp002, stone_pp003,
     stone_pp004, stone_pp005, stone_pp006, stone_pp007,
     stone_pp008, stone_pp009,
-    wj001, wj002, wj003, wj004, wj005, wj006, wj007, wj008,
-    wj009, wj010,
     PeriodType)
 
 class MacroManager(MacroManagerBase):
@@ -45,16 +45,16 @@ class MacroManager(MacroManagerBase):
     stone_pp007 = gen_macro(stone_pp007, [MacroTags.PRICE])
     stone_pp008 = gen_macro(stone_pp008, [MacroTags.PRICE])
     stone_pp009 = gen_macro(stone_pp009, [MacroTags.PRICE])
-    wj001 = gen_macro(wj001, [MacroTags.PRICE])
-    wj002 = gen_macro(wj002, [MacroTags.PRICE])
-    wj003 = gen_macro(wj003, [MacroTags.PRICE])
-    wj004 = gen_macro(wj004, [MacroTags.PRICE])
-    wj005 = gen_macro(wj005, [MacroTags.PRICE])
-    wj006 = gen_macro(wj006, [MacroTags.PRICE])
-    wj007 = gen_macro(wj007, [MacroTags.PRICE])
-    wj008 = gen_macro(wj008, [MacroTags.PRICE])
-    wj009 = gen_macro(wj009, [MacroTags.PRICE])
-    wj010 = gen_macro(wj010, [MacroTags.PRICE])
+    wj001 = wj001
+    wj002 = wj002
+    wj003 = wj003
+    wj004 = wj004
+    wj005 = wj005
+    wj006 = wj006
+    wj007 = wj007
+    wj008 = wj008
+    wj009 = wj009
+    wj010 = wj010
     wj011 = wj011
     wj012 = wj012
     wj013 = wj013
@@ -65,6 +65,8 @@ class MacroManager(MacroManagerBase):
     wj018 = wj018
     wj019 = wj019
     wj020 = wj020
+    wj021 = wj021
+    wj022 = wj022
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
     klp_cc_gravestone_doji = klp_cc_gravestone_doji

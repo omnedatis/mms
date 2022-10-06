@@ -2,38 +2,43 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
+from _core._macro._sakata._wj import wj017, wj011
 from _core._macro.common import Macro, MacroTags
 from _core._macro._sakata._moke_candle import MokeCandle, KType
 from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
 
-code = 'wj015'
-name = '酒田戰法指標(WJ版)-紅色紡錘線'
+
+code = 'wj022'
+name = '酒田戰法指標(WJ版)-空頭吞噬'
 description = """
 
-> 趨勢不明
+> 先漲後跌，由多轉空的反轉型態
 
 ## 型態說明
 
-1. 實體陽線
-2. 實體較短
-3. 有上下影線
-4. 上下影線皆比實體長
+1. 先前市場趨勢向上
+2. 第一個 K 線是短實體陽線
+3. 第二個 K 線是較長的實體黑線
+4. 第二個 K 線的實體完全吞噬前一個 K 線實體的紅色實體
 
 ## 未來趨勢
 
-發生後，市場趨勢處於不明的階段，任何情況都有可能會發生。
+發生後，則代表市場即將向下反轉。
 
 ## 現象解釋
 
 ### 傳統解釋
 
-股價有可能是開低走高，也有可能是開高走低，最終收在高於開盤價相對較近的位置。
+第一天的實體短陽線代表原本的上升力道變弱，第二天雖然開高，但接著一路下挫至低於前日開
+盤價，代表賣壓已經形成，多頭失去了動能，而空頭的力道正在增強
 
 ### 心理面解釋
 
-買氣稍高於賣氣，但不足以形成強烈趨勢，使得發生賣氣隨時可以超越買氣的不明趨勢狀態。
+實體短陽線代表買氣的下降，並且第二日的長黑線代表賣壓遠超於買壓，使得原先的上漲趨勢完
+全停止，刺激不久前入場或融資的投資者，進一步造成賣壓的持續上升，導致最終形成反轉向下
+趨勢。
 
 ### 備註
 
@@ -43,22 +48,22 @@ params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測紅色紡錘線',
+        desc='希望以哪種 K 線週期來偵測空頭吞噬',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022090501'
-py_ver = '2022090501'
+db_ver = '2022100301'
+py_ver = '2022100301'
 tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
-    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生紅色紡錘線的序列
+    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生空頭吞噬的序列
 
     判斷規則:
-    1. 實體陽線
-    2. 實體較短
-    3. 有上下影線
-    4. 上下影線皆比實體長
+    1. 先前市場趨勢向上
+    2. 第一個 K 線是短實體陽線
+    3. 第二個 K 線是較長的實體黑線
+    4. 第二個 K 線的實體完全吞噬前一個 K 線實體的紅色實體
 
     Parameters
     ----------
@@ -71,14 +76,14 @@ def func(market_id:str, **kwargs) -> pd.Series:
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生紅色紡錘線序列
+        市場各歷史時間點是否有發生空頭吞噬序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj015'")
+                           "'wj022'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 50,
@@ -86,22 +91,24 @@ def func(market_id:str, **kwargs) -> pd.Series:
         TimeUnit.MONTH: 3
     }
     period = period_type_to_period[period_type]
-    # 1. 實體陽線
-    is_white = candle.close > candle.open
-    cond_1 = is_white
-    # 2. 實體較短
-    b_roll = candle.body.rolling(period, period_type)
-    b_mean = b_roll.mean()
-    b_std = b_roll.std()
-    b_threshold = b_mean - b_std * 1
-    cond_2 = (candle.body <= b_threshold)
-    # 3. 上下影線皆比實體長
-    ugtb = candle.upper_shadow > candle.body
-    lgtb = candle.lower_shadow > candle.body
-    cond_3 = ugtb & lgtb
+    # 1. 型態發生前會出現上升區段
+    ma_5 = TI.MA(market_id, 5, period_type)
+    ma_10 = TI.MA(market_id, 10, period_type)
+    ma_diff = (ma_5 - ma_10).rolling(period, period_type).min()
+    cond_1 = (ma_diff > 0)
 
-    cond = cond_1 & cond_2 & cond_3
-    result = cond.to_pandas()
+    # 2. 第一個 K 線是短實體陽線
+    raise_long_body = wj017.macro(market_id, **kwargs).shift(1)
+    cond_2 = raise_long_body & (raise_long_body==raise_long_body)
+    
+    # 3. 第二個 K 線是較長的實體黑線
+    down_long_body = wj011.macro(market_id, **kwargs)
+    cond_3 = down_long_body & (down_long_body==down_long_body)
+    
+    # 4. 第二個 K 線的實體完全吞噬前一個 K 線實體的紅色實體
+    cond_4 = (candle.open > candle.shift(1).close) & (candle.close < candle.shift(1).open).to_pandas()
+    cond_4 = cond_4 & (cond_4==cond_4)
+    result = cond_1.to_pandas() & cond_2 & cond_3 & cond_4
     return result
 
 def check(**kwargs) -> Dict[str, str]:
@@ -123,7 +130,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj015'")
+                           "'wj022'")
 
     results = {}
     try:
@@ -133,13 +140,13 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj015 的範例圖製作函式
+    """wj022 的範例圖製作函式
 
     判斷規則:
-    1. 實體陽線
-    2. 實體較短
-    3. 有上下影線
-    4. 上下影線皆比實體長
+    1. 先前市場趨勢向上
+    2. 第一個 K 線是短實體陽線
+    3. 第二個 K 線是較長的實體黑線
+    4. 第二個 K 線的實體完全吞噬前一個 K 線實體的紅色實體
 
     Parameters
     ----------
@@ -156,9 +163,20 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj015'")
-    data = [MokeCandle.make(KType.WHITE_TINY_LONG_EQUAL_SHADOW)]
-    data = np.array(data)
+                           "'wj021'")
+    period_type_to_period = {
+        TimeUnit.DAY: 10,
+        TimeUnit.WEEK: 3,
+        TimeUnit.MONTH: 3
+    }
+    period = period_type_to_period[period_type]
+    rand_size = np.cumsum(np.abs(np.random.normal(5, 1, period+2)))
+    rand_size[-1] = rand_size[-1]-10
+    rand_size[-2] = rand_size[-1]
+    data = [
+        MokeCandle.make(KType.DOJI_FOUR_PRICE) for _ in range(period)
+    ]+[MokeCandle.make(KType.WHITE_SHORT), MokeCandle.make(KType.BLACK_LONG)]
+    data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
         title=f"K線",
@@ -183,10 +201,16 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj015'")
-    return 1
+                           "'wj022'")
+    period_type_to_period = {
+        TimeUnit.DAY: 10,
+        TimeUnit.WEEK: 3,
+        TimeUnit.MONTH: 3
+    }
+    period = period_type_to_period[period_type]
+    return period
 
 
-wj015 = Macro(code=code, name=name, description=description, parameters=params,
+wj022 = Macro(code=code, name=name, description=description, parameters=params,
         macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
         db_version=db_ver, py_version=py_ver, tags=tags)

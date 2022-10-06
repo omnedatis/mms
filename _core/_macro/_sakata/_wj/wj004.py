@@ -2,87 +2,92 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
-from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
+from _core._macro.common import Macro, MacroTags
+from _core._macro._sakata._moke_candle import MokeCandle, KType
+from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
-from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj006'
-name = '酒田戰法指標(WJ版)-槌子'
+code = 'wj004'
+name = '酒田戰法指標(WJ版)-傘型線'
 description = """
 
-> 趨勢反轉向上
+> 趨勢的鏡像反轉
 
 ## 型態說明
 
-1. 型態發生前會有下降區段
-2. 短實體陽線
+1. 型態發生前會有上升或下降區段
+2. 沒有實體線
 3. 沒有上影線
-4. 下影線很長, 長度為實體長度的兩倍以上
+4. 下影線很長
 
 ## 未來趨勢
 
-若是於下跌趨勢發生，則是反轉向上訊號。
+若是於上漲趨勢發生，則是反轉向下訊號；若是於下跌趨勢發生，則是反轉向上訊號。
 
 ## 現象解釋
 
 ### 傳統解釋
 
-在下跌趨勢發生時，開盤後維持下跌，但盤中開始出現大量買壓，並且買壓超過賣壓一直到收盤
-。這表示開始出現大量買氣，使得原先的下跌趨勢可能面臨向上反轉。
+當發生在上升趨勢時，代表賣壓強過買壓，使得盤中價格大幅下跌，雖然最終收盤時將價格拉回
+至開盤價，但仍凸顯出賣壓已開始強過買壓，因此為向下反轉訊號；當發生在下跌趨勢時，代表
+持續的賣壓無法壓制買壓，使得最終收盤時價格落於開盤價，意味著買壓已開始強過賣壓，因此
+為向上反轉訊號。
 
 ### 心理面解釋
 
-在下跌區段中，盤中出現了大量的買氣，不僅造成下跌的中段開始反彈，更是使得收盤價高於開
-盤價。這樣的買氣會增加放空投資人的風險，使其開始擔心放空部位是否已造成過大的風險，進
-一步開始考量平倉，促成下跌區段的停止，進而造成股價反轉向上。
+當傘型線發生在上漲趨勢時，持續上漲的價格被突然的賣壓打斷，使得盤中價格下降，雖然因為
+買氣還在並且仍然強烈，因此使得價格回升，但那些較近期才持有的投資人會開始對於市場的信
+心產生動搖，使得賣壓持續上升，最終導致反轉向下（這樣的過程類似於吊人線）；當傘型線發
+生在下跌趨勢時，持續下跌的價格起初仍持續下探，但突然的強烈買壓導致價格大幅回彈，最終
+導致價格收於開盤價附近，這使得短期賣空者風險大幅上升，發生比起再上漲區段的傘型線更為
+強烈且快速的反彈，導致市場反轉向上。
 
 ### 備註
 
-當發生槌子時，可能是造成趨勢反轉向上的前兆，可以觀察到市場買壓已高於賣壓，但仍需觀察
-數日以確保該現象能夠發酵，進而確認反轉訊號。若是有多個反轉向上的訊號於附近發生，那麼
-則有很大的可能可以確定為反轉向上訊號。
+與吊人線相同，傘型線發生後若發生吊人線或傘型線，則反轉趨勢會更加明顯。此外，若是於下
+跌區段發生傘型線，那麼會有著比起上漲區段更加強烈的反轉訊號。
 """
 params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測槌子',
+        desc='希望以哪種 K 線週期來偵測傘型線',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022082201'
-py_ver = '2022082201'
+db_ver = '2022082301'
+py_ver = '2022081001'
+tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
-    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生槌子的序列
+    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生傘型線的序列
 
     判斷規則:
-    1. 型態發生前會有下降區段
-    2. 短實體陽線
+    1. 型態發生前會有上升或下降區段
+    2. 沒有實體線
     3. 沒有上影線
-    4. 下影線很長, 長度為實體長度的兩倍以上
+    4. 下影線很長
 
     Parameters
     ----------
     market_id: str
         市場 ID
-    period_type: PeriodType
+    period_type: str
         [day | week | month]
         取得 K 線資料時需轉換為哪個時間單位做偵測(日K, 週K, 月K)
 
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生槌子序列
+        市場各歷史時間點是否有發生傘型線序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj006'")
+                           "'wj004'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 10,
@@ -90,19 +95,18 @@ def func(market_id:str, **kwargs) -> pd.Series:
         TimeUnit.MONTH: 3
     }
     period = period_type_to_period[period_type]
-    # 1. 型態發生前會有下降區段
+    # 1. 型態發生前會有上升或下降區段
     ma_5 = TI.MA(market_id, 5, period_type)
     ma_10 = TI.MA(market_id, 10, period_type)
     ma_diff = (ma_5 - ma_10).rolling(period, period_type)
-    cond_1 = (ma_diff.min() > 0)
-    # 2. 短實體陽線
-    is_white = candle.close > candle.open
+    cond_1 = (ma_diff.min() > 0) | ((ma_diff.max() < 0))
+    # 2. 沒有實體線
     ba_ratio = candle.body/candle.amplitude
-    cond_2 = is_white & (ba_ratio > 0) & (ba_ratio < 0.2)
+    cond_2 = (ba_ratio == 0)
     # 3. 沒有上影線
     usa_ratio = candle.upper_shadow/candle.amplitude
     cond_3 = usa_ratio == 0
-    # 4. 下影線很長, 長度為實體長度的兩倍以上
+    # 4. 下影線很長
     lsb_ratio = candle.lower_shadow/candle.body
     cond_4 = lsb_ratio >= 2
 
@@ -129,7 +133,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj006'")
+                           "'wj004'")
 
     results = {}
     try:
@@ -139,13 +143,13 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj006 的範例圖製作函式
+    """wj004 的範例圖製作函式
 
     判斷規則:
-    1. 型態發生前會有下降區段
-    2. 短實體陽線
+    1. 型態發生前會有上升或下降區段
+    2. 沒有實體線
     3. 沒有上影線
-    4. 下影線很長, 長度為實體長度的兩倍以上
+    4. 下影線很長
 
     Parameters
     ----------
@@ -162,18 +166,19 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj006'")
+                           "'wj004'")
     period_type_to_period = {
         TimeUnit.DAY: 10,
         TimeUnit.WEEK: 3,
         TimeUnit.MONTH: 3
     }
     period = period_type_to_period[period_type]
-    rand_size = (-1) * np.cumsum(np.abs(np.random.normal(5, 1, period+1)))
+    pos_neg_rand = np.random.randint(0,2)*2 - 1
+    rand_size = pos_neg_rand * np.cumsum(np.abs(np.random.normal(5, 1, period+1)))
     rand_size[-1] = rand_size[-1]-10
     data = [
         MokeCandle.make(KType.DOJI_FOUR_PRICE) for _ in range(period)
-    ]+[MokeCandle.make(KType.WHITE_HAMMER)]
+    ]+[MokeCandle.make(KType.DOJI_UMBRELLA)]
     data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
@@ -199,7 +204,7 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj006'")
+                           "'wj004'")
     period_type_to_period = {
         TimeUnit.DAY: 10,
         TimeUnit.WEEK: 3,
@@ -209,6 +214,6 @@ def frame(**kwargs) -> int:
     return period
 
 
-wj006 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame,
-        db_ver=db_ver, py_ver=py_ver)
+wj004 = Macro(code=code, name=name, description=description, parameters=params,
+        macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
+        db_version=db_ver, py_version=py_ver, tags=tags)
