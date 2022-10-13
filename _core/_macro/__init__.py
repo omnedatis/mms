@@ -65,8 +65,8 @@ class MacroManager(MacroManagerBase):
     wj018 = wj018
     wj019 = wj019
     wj020 = wj020
-    wj021 = wj021
-    wj022 = wj022
+    # wj021 = wj021
+    # wj022 = wj022
     klp_cc_doji = klp_cc_doji
     klp_cc_dragonfly_doji = klp_cc_dragonfly_doji
     klp_cc_gravestone_doji = klp_cc_gravestone_doji

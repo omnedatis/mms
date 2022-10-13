@@ -99,17 +99,17 @@ def func(market_id:str, **kwargs) -> pd.Series:
     cond_1 = (ma_diff > 0)
     # 2. 第一個 K 線是實體長陽線
     raise_long_body = wj007.macro(market_id, **kwargs).shift(1)
-    cond_2 = raise_long_body & (raise_long_body==raise_long_body)
+    cond_2 = raise_long_body * (raise_long_body==raise_long_body)
     
     # 3. 第二個 K 線是實體長黑線，開盤價高於前一天的最高價
     down_long_body = wj011.macro(market_id, **kwargs)
     cgth = (candle.close > candle.shift(1).high).to_pandas()
-    cond_3 = down_long_body & cgth & (cgth==cgth)
+    cond_3 = down_long_body * cgth * (cgth==cgth)
     
     # 4. 第二個 K 線的收盤價深入到前一個 K 線實體的下半部
     cond_4 = ((candle.shift(1).open + candle.shift(1).close)/2 > candle.close).to_pandas()
-    cond_4 = cond_4 & (cond_4==cond_4)
-    result = cond_1.to_pandas() & cond_2 & cond_3 & cond_4
+    cond_4 = cond_4 * (cond_4==cond_4)
+    result = cond_1.to_pandas() * cond_2 * cond_3 * cond_4
     return result
 
 def check(**kwargs) -> Dict[str, str]:

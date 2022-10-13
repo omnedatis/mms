@@ -99,16 +99,16 @@ def func(market_id:str, **kwargs) -> pd.Series:
 
     # 2. 第一個 K 線是短實體陽線
     raise_long_body = wj017.macro(market_id, **kwargs).shift(1)
-    cond_2 = raise_long_body & (raise_long_body==raise_long_body)
+    cond_2 = raise_long_body * (raise_long_body==raise_long_body)
     
     # 3. 第二個 K 線是較長的實體黑線
     down_long_body = wj011.macro(market_id, **kwargs)
-    cond_3 = down_long_body & (down_long_body==down_long_body)
+    cond_3 = down_long_body * (down_long_body==down_long_body)
     
     # 4. 第二個 K 線的實體完全吞噬前一個 K 線實體的紅色實體
-    cond_4 = (candle.open > candle.shift(1).close) & (candle.close < candle.shift(1).open).to_pandas()
-    cond_4 = cond_4 & (cond_4==cond_4)
-    result = cond_1.to_pandas() & cond_2 & cond_3 & cond_4
+    cond_4 = ((candle.open > candle.shift(1).close) & (candle.close < candle.shift(1).open)).to_pandas()
+    cond_4 = cond_4 * (cond_4==cond_4)
+    result = cond_1.to_pandas() * cond_2 * cond_3 * cond_4
     return result
 
 def check(**kwargs) -> Dict[str, str]:
