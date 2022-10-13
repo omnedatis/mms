@@ -340,8 +340,8 @@ def api_get_occurred_patterns():
             items:
               type: string
     responses:
-      202:
-        description: 請求已接收，等待執行
+      200:
+        description: 成功取得
         schema:
           type: object
           properties:
