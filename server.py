@@ -241,7 +241,7 @@ def api_get_patterns_dates():
             data:
               type: object
               properties:
-                occurDates:
+                occurDate:
                   type: array
                   items:
                     type: string
@@ -320,7 +320,7 @@ def api_get_pattern_count():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/occurred", methods=["POST"])
+@app.route("/pattern/occurredPatterns", methods=["POST"])
 def api_get_occurred_patterns():
     """
     取得指定日期有發生的現象
@@ -989,7 +989,7 @@ def api_get_pattern_draft_date():
             data:
               type: object
               properties:
-                occurDates:
+                occurDate:
                   type: array
                   items:
                     type: string
@@ -1022,7 +1022,7 @@ def api_get_pattern_draft_date():
     except ValueError:
         raise InternalServerError
     ret = get_draft_date(func_code, kwargs, market_code, start_date, end_date)
-    ret = {'occurDates':[datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]}
+    ret = {'occurDate':[datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]}
     return HttpResponseCode.OK.format(ret)
 
 
