@@ -2,11 +2,11 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
-from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
+from _core._macro.common import Macro, MacroTags
+from _core._macro._sakata._moke_candle import MokeCandle, KType
+from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
-from func._tp._sakata._moke_candle import MokeCandle, KType
 
 code = 'wj006'
 name = '酒田戰法指標(WJ版)-槌子'
@@ -54,6 +54,7 @@ params = [
 ]
 db_ver = '2022082201'
 py_ver = '2022082201'
+tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
     """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生槌子的序列
@@ -209,6 +210,6 @@ def frame(**kwargs) -> int:
     return period
 
 
-wj006 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame,
-        db_ver=db_ver, py_ver=py_ver)
+wj006 = Macro(code=code, name=name, description=description, parameters=params,
+        macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
+        db_version=db_ver, py_version=py_ver, tags=tags)

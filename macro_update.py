@@ -301,7 +301,7 @@ if __name__ == '__main__':
     fmt = '%(asctime)s.%(msecs)03d - %(levelname)s - %(threadName)s - %(filename)s - line %(lineno)d: %(message)s'
     level = {ExecMode.DEV.value: logging.DEBUG,
                 ExecMode.UAT.value: logging.INFO,
-                ExecMode.PROD.value: logging.ERROR}[exec_mode]
+                ExecMode.PROD.value: logging.INFO}[exec_mode]
     file_hdlr.setLevel(level)
     logging.basicConfig(level=0, format=fmt, handlers=[
                         err_hdlr, info_hdlr, file_hdlr], datefmt='%Y-%m-%d %H:%M:%S')

@@ -13,7 +13,7 @@ from func._td import NumericTimeSeries, TimeUnit
 from ..._common import Candlestick, LeadingTrend, MacroInfo
 
 LeadingTrends = LeadingTrend.type
-_ENG_NAME = 'BlackLongLine'
+_ENG_NAME = 'BlackShortLine'
 _CHT_NAME = '小陰線'
 
 description = (f"[{_CHT_NAME}({_ENG_NAME})]\n"

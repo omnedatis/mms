@@ -3,10 +3,10 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
 from _core._macro.common import Macro, MacroTags
+from _core._macro._sakata._moke_candle import MokeCandle, KType
 from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
-from func._tp._sakata._moke_candle import MokeCandle, KType
 
 code = 'wj012'
 name = '酒田戰法指標(WJ版)-黑色光頭光腳'
