@@ -2,14 +2,14 @@ import numpy as np
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, Callable
 
 import pandas as pd
-from func._tp._ma import _stone as tp
-from func.common import Macro, MacroParam, ParamType, PlotInfo, Ptype, PeriodType
+from _core._macro.common import Macro, MacroTags
+from _core._macro._sakata._moke_candle import MokeCandle, KType
+from func.common import MacroParam, ParamType, PlotInfo, Ptype, PeriodType
 from func._td._index import TimeUnit
 from func._ti import TechnicalIndicator as TI
-from func._tp._sakata._moke_candle import MokeCandle, KType
 
-code = 'wj005'
-name = '酒田戰法指標(WJ版)-倒狀傘型線'
+code = 'wj004'
+name = '酒田戰法指標(WJ版)-傘型線'
 description = """
 
 > 趨勢的鏡像反轉
@@ -18,8 +18,8 @@ description = """
 
 1. 型態發生前會有上升或下降區段
 2. 沒有實體線
-3. 沒有下影線
-4. 上影線很長
+3. 沒有上影線
+4. 下影線很長
 
 ## 未來趨勢
 
@@ -29,63 +29,65 @@ description = """
 
 ### 傳統解釋
 
-當發生在上升趨勢時，代表買壓僅持續至盤中，後續開始低於賣壓，是多轉空的訊號；當發生在
-下降區段時，則是賣壓無法完全高於買壓，使得盤中價格上升，雖後續賣壓仍高於買壓，但已經
-出現了反彈的預兆，是空轉多的訊號。
+當發生在上升趨勢時，代表賣壓強過買壓，使得盤中價格大幅下跌，雖然最終收盤時將價格拉回
+至開盤價，但仍凸顯出賣壓已開始強過買壓，因此為向下反轉訊號；當發生在下跌趨勢時，代表
+持續的賣壓無法壓制買壓，使得最終收盤時價格落於開盤價，意味著買壓已開始強過賣壓，因此
+為向上反轉訊號。
 
 ### 心理面解釋
 
-當倒狀傘型線發生在上漲趨勢時，持續上漲的趨勢於盤中後便遭到巨大的賣壓壓回，雖然賣壓最
-終與買壓達到平衡，使得最終收盤價落於開盤價附近，但仍代表市場中持有大量資金的投資人已
-經有半數開始持空頭看法，因此為向下反轉訊號；當倒狀傘型線發生在下跌趨勢時，代表下跌趨
-勢在盤中以前受到大量的買氣影響，使得價格一路飆升，雖然無法持續至收盤，但仍對於持空頭
-的投資人帶來巨大的壓力，進而增加額外的風險，使得空頭部分投資人承受壓力，進一步造成市
-場向上反彈。
+當傘型線發生在上漲趨勢時，持續上漲的價格被突然的賣壓打斷，使得盤中價格下降，雖然因為
+買氣還在並且仍然強烈，因此使得價格回升，但那些較近期才持有的投資人會開始對於市場的信
+心產生動搖，使得賣壓持續上升，最終導致反轉向下（這樣的過程類似於吊人線）；當傘型線發
+生在下跌趨勢時，持續下跌的價格起初仍持續下探，但突然的強烈買壓導致價格大幅回彈，最終
+導致價格收於開盤價附近，這使得短期賣空者風險大幅上升，發生比起再上漲區段的傘型線更為
+強烈且快速的反彈，導致市場反轉向上。
 
 ### 備註
 
-當倒狀傘型線發生後，若是後續發生其他的反彈訊號時，因為會使得持有空頭部位的投資人需要
-承擔的風險持續放大，因此應該會使得該反轉型態更加確定。
+與吊人線相同，傘型線發生後若發生吊人線或傘型線，則反轉趨勢會更加明顯。此外，若是於下
+跌區段發生傘型線，那麼會有著比起上漲區段更加強烈的反轉訊號。
 """
 params = [
     MacroParam(
         code='period_type',
         name='K線週期',
-        desc='希望以哪種 K 線週期來偵測倒狀傘型線',
+        desc='希望以哪種 K 線週期來偵測傘型線',
         dtype=PeriodType,
         default=PeriodType.type.DAY)
 ]
-db_ver = '2022082201'
-py_ver = '2022082201'
+db_ver = '2022082301'
+py_ver = '2022081001'
+tags = [MacroTags.PRICE]
 
 def func(market_id:str, **kwargs) -> pd.Series:
-    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生倒狀傘型線的序列
+    """計算並取得指定市場 ID 中的歷史資料, 每個日期是否有發生傘型線的序列
 
     判斷規則:
     1. 型態發生前會有上升或下降區段
     2. 沒有實體線
-    3. 沒有下影線
-    4. 上影線很長
+    3. 沒有上影線
+    4. 下影線很長
 
     Parameters
     ----------
     market_id: str
         市場 ID
-    period_type: PeriodType
+    period_type: str
         [day | week | month]
         取得 K 線資料時需轉換為哪個時間單位做偵測(日K, 週K, 月K)
 
     Returns
     -------
     result: pd.Series
-        市場各歷史時間點是否有發生倒狀傘型線序列
+        市場各歷史時間點是否有發生傘型線序列
 
     """
     try:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj005'")
+                           "'wj004'")
     candle = TI.Candle(market_id, period_type)
     period_type_to_period = {
         TimeUnit.DAY: 10,
@@ -101,12 +103,12 @@ def func(market_id:str, **kwargs) -> pd.Series:
     # 2. 沒有實體線
     ba_ratio = candle.body/candle.amplitude
     cond_2 = (ba_ratio == 0)
-    # 3. 沒有下影線
-    lsa_ratio = candle.lower_shadow/candle.amplitude
-    cond_3 = lsa_ratio == 0
-    # 4. 上影線很長
-    usb_ratio = candle.upper_shadow/candle.body
-    cond_4 = usb_ratio >= 2
+    # 3. 沒有上影線
+    usa_ratio = candle.upper_shadow/candle.amplitude
+    cond_3 = usa_ratio == 0
+    # 4. 下影線很長
+    lsb_ratio = candle.lower_shadow/candle.body
+    cond_4 = lsb_ratio >= 2
 
     cond = cond_1 & cond_2 & cond_3 & cond_4
     result = cond.to_pandas()
@@ -131,7 +133,7 @@ def check(**kwargs) -> Dict[str, str]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj005'")
+                           "'wj004'")
 
     results = {}
     try:
@@ -141,13 +143,13 @@ def check(**kwargs) -> Dict[str, str]:
     return results
 
 def plot(**kwargs) -> List[PlotInfo]:
-    """wj005 的範例圖製作函式
+    """wj004 的範例圖製作函式
 
     判斷規則:
     1. 型態發生前會有上升或下降區段
     2. 沒有實體線
-    3. 沒有下影線
-    4. 上影線很長
+    3. 沒有上影線
+    4. 下影線很長
 
     Parameters
     ----------
@@ -164,7 +166,7 @@ def plot(**kwargs) -> List[PlotInfo]:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj005'")
+                           "'wj004'")
     period_type_to_period = {
         TimeUnit.DAY: 10,
         TimeUnit.WEEK: 3,
@@ -176,7 +178,7 @@ def plot(**kwargs) -> List[PlotInfo]:
     rand_size[-1] = rand_size[-1]-10
     data = [
         MokeCandle.make(KType.DOJI_FOUR_PRICE) for _ in range(period)
-    ]+[MokeCandle.make(KType.DOJI_INVERSE_UMBRELLA)]
+    ]+[MokeCandle.make(KType.DOJI_UMBRELLA)]
     data = np.array(data) + rand_size.reshape((len(rand_size), 1))
     result = [PlotInfo(
         ptype=Ptype.CANDLE,
@@ -202,7 +204,7 @@ def frame(**kwargs) -> int:
         period_type = kwargs['period_type'].data
     except KeyError as esp:
         raise RuntimeError(f"miss argument '{esp.args[0]}' when calling "
-                           "'wj005'")
+                           "'wj004'")
     period_type_to_period = {
         TimeUnit.DAY: 10,
         TimeUnit.WEEK: 3,
@@ -212,6 +214,6 @@ def frame(**kwargs) -> int:
     return period
 
 
-wj005 = Macro(code=code, name=name, desc=description, params=params,
-        run=func, check=check, plot=plot, frame=frame,
-        db_ver=db_ver, py_ver=py_ver)
+wj004 = Macro(code=code, name=name, description=description, parameters=params,
+        macro=func, sample_generator=plot, interval_evaluator=frame, arg_checker=check,
+        db_version=db_ver, py_version=py_ver, tags=tags)
