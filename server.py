@@ -182,9 +182,9 @@ def api_get_pattern_dates():
               type: string
             data:
               type: array
-                items:
-                  type: string
-                  format: date
+              items:
+                type: string
+                format: date
     """
     try:
         logging.info(f"api_get_pattern_dates receiving: {request.json}")
@@ -236,13 +236,10 @@ def api_get_patterns_dates():
             message:
               type: string
             data:
-              type: object
-              properties:
-                occurDates:
-                  type: array
-                  items:
-                    type: string
-                    format: date
+              type: array
+              items:
+                type: string
+                format: date
     """
     try:
         logging.info(f"api_get_patterns_dates receiving: {request.json}")
@@ -317,7 +314,7 @@ def api_get_pattern_count():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/occurredPatterns", methods=["POST"])
+@app.route("/pattern/occurredpatterns", methods=["POST"])
 def api_get_occurred_patterns():
     """
     取得指定日期有發生的現象
@@ -347,12 +344,9 @@ def api_get_occurred_patterns():
             message:
               type: string
             data:
-                type: object
-                properties:
-                  occurPatterns:
-                    type: array
-                    items:
-                      type: string
+                type: array
+                items:
+                  type: string
     """
     try:
         logging.info(
@@ -362,7 +356,7 @@ def api_get_occurred_patterns():
         patterns = data['patterns']
     except Exception:
         raise BadRequest
-    ret = {'occurPatterns': get_occurred_patterns(date, patterns)}
+    ret = get_occurred_patterns(date, patterns)
     return HttpResponseCode.OK.format(ret)
 
 
@@ -445,7 +439,7 @@ def api_get_pattern_distribution():
               type: string
           datePeriod:
             type: integer
-          marketCodes:
+          markets:
             type: array
             items:
               type: string
@@ -481,7 +475,7 @@ def api_get_pattern_distribution():
         data = request.json
         patterns = data['patterns']
         date_period = data['datePeriod']
-        markets = data['marketCodes']
+        markets = data['markets']
     except Exception as esp:
         raise BadRequest
     ret = get_mix_pattern_mkt_dist_info(
@@ -552,7 +546,7 @@ def api_edit_pattern(patternId):
 
 
 @app.route("/markets/upprob", methods=["GET"])
-def api_market_upprob():
+def api_get_market_upprob():
     """
     取得指定市場集上漲機率
     ---
@@ -586,7 +580,7 @@ def api_market_upprob():
                   type: number
     """
     try:
-        logging.info(f"api_market_upprob receiving: {request.args}")
+        logging.info(f"api_get_market_upprob receiving: {request.args}")
         data = request.args
         date_period = data["datePeriod"]
         market_type = data.get("marketType") or None
@@ -599,7 +593,7 @@ def api_market_upprob():
 
 
 @app.route("/markets/distribution", methods=["POST"])
-def api_market_distribution():
+def api_get_market_distribution():
     """
     取得指定市場集分布資訊
     ---
@@ -612,7 +606,7 @@ def api_market_distribution():
         properties:
           datePeriod:
             type: integer
-          marketCodes:
+          markets:
             type: array
             items:
               type: string
@@ -643,10 +637,10 @@ def api_market_distribution():
                     type: number
     """
     try:
-        logging.info(f"api_market_distribution receiving: {request.args}")
+        logging.info(f"api_get_market_distribution receiving: {request.args}")
         data = request.json
         date_period = data["datePeriod"]
-        markets = data['marketCodes']
+        markets = data['markets']
     except Exception as esp:
         raise BadRequest
     ret = get_mkt_dist_info(int(date_period), markets)
@@ -775,7 +769,7 @@ def api_pattern_paramscheck():
 
 
 @app.route('/pattern/frame', methods=["POST"])
-def api_pattern_get_frame():
+def api_get_pattern_frame():
     """
     取得 pattern 示意圖規則區間長度
     ---
@@ -814,7 +808,7 @@ def api_pattern_get_frame():
                 patternInterval:
                   type: integer
     """
-    logging.info(f"api_pattern_get_frame receiving: {request.json}")
+    logging.info(f"api_get_pattern_frame receiving: {request.json}")
     try:
         data = request.json
         func_code = data['funcCode']
@@ -836,7 +830,7 @@ def api_pattern_get_frame():
 
 
 @app.route('/pattern/plot', methods=["POST"])
-def api_pattern_get_plot():
+def api_get_pattern_plot():
     """
     取得 pattern 示意圖
     ---
@@ -891,7 +885,7 @@ def api_pattern_get_plot():
                         index:
                           type: integer
     """
-    logging.info(f"api_pattern_get_plot receiving: {request.json}")
+    logging.info(f"api_get_pattern_plot receiving: {request.json}")
     try:
         data = request.json
         func_code = data['funcCode']
@@ -984,13 +978,10 @@ def api_get_pattern_draft_date():
             message:
               type: string
             data:
-              type: object
-              properties:
-                occurDate:
-                  type: array
-                  items:
-                    type: string
-                    format: date
+              type: array
+              items:
+                type: string
+                format: date
     """
     logging.info(f"api_pattern_get_frame receiving: {request.json}")
     try:
@@ -1019,7 +1010,7 @@ def api_get_pattern_draft_date():
     except ValueError:
         raise InternalServerError
     ret = get_draft_date(func_code, kwargs, market_code, start_date, end_date)
-    ret = {'occurDate':[datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]}
+    ret = [datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]
     return HttpResponseCode.OK.format(ret)
 
 
