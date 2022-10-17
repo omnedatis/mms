@@ -53,10 +53,10 @@ def api_batch():
 @app.route("/models/<string:modelId>", methods=["POST"])
 def api_add_model(modelId):
     """
-    新增模型
+    新增觀點
     ---
     tags:
-      - 前台
+      - 觀點
     parameters:
       - name: modelId
         in: path
@@ -84,10 +84,10 @@ def api_add_model(modelId):
 @app.route("/models/<string:modelId>", methods=["DELETE"])
 def api_remove_model(modelId):
     """
-    移除模型
+    移除觀點
     ---
     tags:
-      - 前台
+      - 觀點
     parameters:
       - name: modelId
         in: path
@@ -117,10 +117,10 @@ def api_remove_model(modelId):
 @app.route("/models/<string:modelId>", methods=["PATCH"])
 def api_edit_model(modelId):
     """
-    編輯模型
+    編輯觀點
     ---
     tags:
-      - Studio
+      - 觀點
     parameters:
       - name: modelId
         in: path
@@ -146,13 +146,13 @@ def api_edit_model(modelId):
     return HttpResponseCode.ACCEPTED.format()
 
 
-@app.route("/pattern/compound/occurdates", methods=["POST"])
+@app.route("/patterns/compound/occurdates", methods=["POST"])
 def api_get_pattern_dates():
     """
     取得複合現象歷史發生日期
     ---
     tags:
-      - Studio
+      - 統計相關
     parameters:
       - name: request
         in: body
@@ -201,13 +201,13 @@ def api_get_pattern_dates():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/occurdates", methods=["POST"])
+@app.route("/patterns/multi/occurdates", methods=["POST"])
 def api_get_patterns_dates():
     """
     取得多個現象的指定市場, 指定期間歷史發生日期
     ---
     tags:
-      - Studio
+      - 統計相關
     parameters:
       - name: request
         in: body
@@ -238,8 +238,13 @@ def api_get_patterns_dates():
             data:
               type: array
               items:
-                type: string
-                format: date
+                type: object
+                properties:
+                  patternId:
+                    type: string
+                  occurDate:
+                    type: string
+                    format: date
     """
     try:
         logging.info(f"api_get_patterns_dates receiving: {request.json}")
@@ -254,19 +259,19 @@ def api_get_patterns_dates():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/count", methods=["POST"])
+@app.route("/patterns/compound/count", methods=["POST"])
 def api_get_pattern_count():
     """
     取得複合現象上漲次數
     ---
     tags:
-      - Studio
+      - 統計相關
     parameters:
       - name: request
         in: body
         type: object
         properties:
-          patternId:
+          patterns:
             type: string
           markets:
             type: array
@@ -301,7 +306,7 @@ def api_get_pattern_count():
             f"api_get_pattern_count receiving: {request.json}")
         data = request.json
 
-        pattern_id = data['patternId']
+        patterns = data['patterns']
         markets =  data['markets']
         start_date = data.get('startDate') and datetime.datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()
         end_date = data.get('endDate') and datetime.datetime.strptime(data.get('endDate'), '%Y-%m-%d').date()
@@ -309,18 +314,18 @@ def api_get_pattern_count():
         raise BadRequest
 
     occur, non_occur = get_mix_pattern_occur_cnt(
-        pattern_id, markets, start_date, end_date)
+        patterns, markets, start_date, end_date)
     ret = {"occurCnt": int(occur), "nonOccurCnt": int(non_occur)}
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/occurredpatterns", methods=["POST"])
+@app.route("/patterns/compound/occurredpatterns", methods=["POST"])
 def api_get_occurred_patterns():
     """
-    取得指定日期有發生的現象
+    取得指定日期有發生的複合現象
     ---
     tags:
-      - Studio
+      - 統計相關
     parameters:
       - name: request
         in: body
@@ -360,13 +365,13 @@ def api_get_occurred_patterns():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/updownprob", methods=["POST"])
+@app.route("/patterns/compound/updownprob", methods=["POST"])
 def api_get_pattern_updownprob():
     """
     取得複合現象上漲/下跌機率
     ---
     tags:
-      - Studio
+      - 統計相關
     parameters:
       - name: request
         in: body
@@ -395,18 +400,18 @@ def api_get_pattern_updownprob():
               items:
                 type: object
                 properties:
-                  statisticsCategory:
+                  dataType:
                     type: string
-                  upAndDownCategories:
+                  upDownType:
                     type: string
-                  probabilityValue:
+                  values:
                       type: array
                       items:
                         type: object
                         properties:
-                          days:
+                          datePeriod:
                             type: integer
-                          probability:
+                          prob:
                             type: number
     """
     try:
@@ -421,13 +426,13 @@ def api_get_pattern_updownprob():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route("/pattern/distribution", methods=["POST"])
+@app.route("/patterns/compound/distribution", methods=["POST"])
 def api_get_pattern_distribution():
     """
     取得複合現象分布資訊
     ---
     tags:
-      - Studio
+      - 統計相關
     parameters:
       - name: request
         in: body
@@ -489,7 +494,7 @@ def api_add_pattern(patternId):
     新增現象
     ---
     tags:
-      - Studio
+      - 現象相關
     parameters:
       - name: patternId
         in: path
@@ -519,7 +524,7 @@ def api_edit_pattern(patternId):
     編輯現象
     ---
     tags:
-      - Studio
+      - 現象相關
     parameters:
       - name: patternId
         in: path
@@ -551,7 +556,7 @@ def api_get_market_upprob():
     取得指定市場集上漲機率
     ---
     tags:
-      - 前台
+      - 統計相關
     parameters:
       - name: datePeriod
         in: query
@@ -598,7 +603,7 @@ def api_get_market_distribution():
     取得指定市場集分布資訊
     ---
     tags:
-      - 前台
+      - 統計相關
     parameters:
       - name: request
         in: body
@@ -653,7 +658,7 @@ def api_get_market_price_date(marketId):
     取得起始日起各天期資料日期和對應價格天期
     ---
     tags:
-      - 前台
+      - 市場
     parameters:
       - name: startDate
         in: query
@@ -706,10 +711,10 @@ def api_get_market_price_date(marketId):
 @app.route('/pattern/paramcheck', methods=["POST"])
 def api_pattern_paramscheck():
     """
-    檢查 Pattern 參數合法性
+    檢查現象參數合法性
     ---
     tags:
-      - Studio
+      - 現象相關
     parameters:
       - name: request
         in: body
@@ -771,10 +776,10 @@ def api_pattern_paramscheck():
 @app.route('/pattern/frame', methods=["POST"])
 def api_get_pattern_frame():
     """
-    取得 pattern 示意圖規則區間長度
+    取得現象示意圖規則區間長度
     ---
     tags:
-      - Studio
+      - 現象相關
     parameters:
       - name: request
         in: body
@@ -832,10 +837,10 @@ def api_get_pattern_frame():
 @app.route('/pattern/plot', methods=["POST"])
 def api_get_pattern_plot():
     """
-    取得 pattern 示意圖
+    取得現象示意圖
     ---
     tags:
-      - Studio
+      - 現象相關
     parameters:
       - name: request
         in: body
@@ -939,10 +944,10 @@ def api_get_pattern_plot():
 @app.route('/pattern/draft/occurdates', methods=['POST'])
 def api_get_pattern_draft_date():
     """
-    取得 pattern 草稿發生日期
+    取得現象草稿發生日期
     ---
     tags:
-      - Studio
+      - 現象相關
     parameters:
       - name: request
         in: body
