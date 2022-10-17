@@ -808,7 +808,7 @@ def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: st
         if end_date is not None:
             ret = ret[:(ret <= end_date).sum()]
         dates: List[datetime.date] = ret.tolist()
-        result = [{'patternId': pattern, "occurDates": date.strftime('%Y-%m-%d')} for date in dates]
+        result = [{'patternId': pattern, "occurDate": date.strftime('%Y-%m-%d')} for date in dates]
         results += result
     return results
 

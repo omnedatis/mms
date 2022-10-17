@@ -181,13 +181,10 @@ def api_get_pattern_dates():
             message:
               type: string
             data:
-              type: object
-              properties:
-                occurDates:
-                  type: array
-                  items:
-                    type: string
-                    format: date
+              type: array
+                items:
+                  type: string
+                  format: date
     """
     try:
         logging.info(f"api_get_pattern_dates receiving: {request.json}")
@@ -199,7 +196,7 @@ def api_get_pattern_dates():
     except Exception as esp:
         raise BadRequest
     ret = get_mix_pattern_occur(market_id, patterns, start_date, end_date)
-    ret = {"occurDates": [each.strftime('%Y-%m-%d') for each in ret]}
+    ret = [each.strftime('%Y-%m-%d') for each in ret]
 
     return HttpResponseCode.OK.format(ret)
 
@@ -241,7 +238,7 @@ def api_get_patterns_dates():
             data:
               type: object
               properties:
-                occurDate:
+                occurDates:
                   type: array
                   items:
                     type: string
