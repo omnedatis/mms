@@ -917,17 +917,23 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
     returns = [_db.get_future_returns(
         mid, [period]).values[:, 0] for mid in markets]
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
+    # 發生後
     market_occured_future_rets = np.concatenate([func(v, r) for v, r in zip(pvalues, returns)], axis=0)
     drops = ~np.isnan(market_occured_future_rets)
     market_occured_future_rets: np.ndarray = market_occured_future_rets[drops]
     market_occured_future_rets.sort()
+    # 全歷史報酬
+    future_rets = np.concatenate(returns, axis=0)
+    drops = ~np.isnan(future_rets)
+    future_rets: np.ndarray = future_rets[drops]
+    future_rets.sort()
 
     size = 100
-    diff = (market_occured_future_rets[-1] - market_occured_future_rets[0])/size
+    diff = (future_rets[-1] - future_rets[0])/size
     segments = []
     for i in range(1, size+1):
         if len(segments) == 0:
-            segments.append(market_occured_future_rets[0])
+            segments.append(future_rets[0])
         else:
             segments.append(segments[-1]+diff)
 
@@ -935,15 +941,26 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
     for i in range(1, len(segments)):
         min = segments[i-1]
         max = segments[i]
-        seg = market_occured_future_rets[
+        p_seg = market_occured_future_rets[
             (market_occured_future_rets>=min) &
             (market_occured_future_rets<max)]
+        seg = future_rets[
+            (future_rets>=min) & 
+            (future_rets<max)
+        ]
         segs.append({
             'type': "pattern",
             'rangeUp': max,
             'rangeDown': min,
             'name': np.round(min, 1),
-            'value': np.round(len(seg)/len(market_occured_future_rets) * 100, 2)
+            'value': np.round(len(p_seg)/len(market_occured_future_rets) * 100, 2)
+        })
+        segs.append({
+            'type': "market",
+            'rangeUp': max,
+            'rangeDown': min,
+            'name': np.round(min, 1),
+            'value': np.round(len(seg)/len(future_rets) * 100, 2)
         })
     return segs
 
