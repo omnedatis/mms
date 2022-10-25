@@ -85,6 +85,7 @@ class MimosaDB:
     def __init__(self, idx: int):
         self._dbid = idx
         self._market_ids: Optional[Dict[str, int]] = None
+        # 市場屬性資料, 格式為: [欄位名稱] - 各市場該欄位資料
         self._market_info: Optional[Dict[str, np.ndarray]] = None
         self._pattern_ids: Optional[Dict[str, int]] = None
         self._patterns: Optional[List[Pattern]] = None
@@ -146,7 +147,21 @@ class MimosaDB:
             self._market_pattern_values = pickle_load(f'{path}/pvalues.pkl')
             self._market_future_returns = pickle_load(f'{path}/freturns.pkl')
 
-    def get_markets(self, mtype=None, category=None) -> List[str]:
+    def get_markets(self, mtype: str=None, category: str=None) -> List[str]:
+        """取得指定條件的市場 ID
+
+        Parameters
+        ----------
+        mtype: str
+            市場資料種類為 BLB 或是 TEJ
+        category: str
+            市場資料類別代碼
+        
+        Returns
+        -------
+        result: List[str]
+            符合指定條件的市場 ID 清單
+        """
         if self._market_ids is None:
             raise RuntimeError("market data is not initialized")
         ret = list(self._market_ids.keys())
@@ -187,6 +202,18 @@ class MimosaDB:
         return ret
 
     def get_market_prices(self, market_id: str) -> pd.Series:
+        """根據市場ID, 取得指定市場收盤價
+        
+        Parameters
+        ----------
+        market_id: str
+            要取得收盤價的市場ID
+        
+        Returns
+        -------
+        result: pd.Series
+            指定市場收盤價資料, Index 為 datetime.date, columns 為 CP
+        """
         if self._market_ids is None:
             raise RuntimeError("market data is not initialized")
         if market_id not in self._market_ids:
@@ -195,6 +222,21 @@ class MimosaDB:
 
     def get_future_returns(self, market_id: str,
                            periods: Optional[List[int]]=None) -> pd.DataFrame:
+        """取得指定市場未來報酬
+
+        Parameters
+        ----------
+        market_id: str
+            要取得未來報酬的市場ID
+        periods: List[int] | None
+            要取得的未來報酬天期
+        
+        Returns
+        -------
+        ret: pd.DataFrame
+            指定市場的未來報酬 DataFrame, 
+            Index 為 datetime.date, columns 為 各天期 int
+        """
         if self._market_future_returns is None:
             raise RuntimeError("market return values are not initialized")
         midx = self._market_ids.get(market_id)

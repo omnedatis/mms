@@ -12,7 +12,7 @@ import traceback
 import threading as mt
 import sys
 from model import (
-    get_patterns_occur_dates, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
+    get_mkt_trend_score, get_patterns_occur_dates, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
@@ -1018,6 +1018,87 @@ def api_get_pattern_draft_date():
     ret = [datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]
     return HttpResponseCode.OK.format(ret)
 
+@app.route("/markets/trend", methods=["POST"])
+def api_get_market_trend():
+    """
+    取得指定市場指定時間段的過去各天期報酬趨勢
+    ---
+    tags:
+      - 市場
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          marketId:
+            type: string
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  CP:
+                    type: number
+                  p_5:
+                    type: integer
+                  p_10:
+                    type: integer
+                  p_20:
+                    type: integer
+                  p_40:
+                    type: integer
+                  p_60:
+                    type: integer
+                  p_120:
+                    type: integer
+    """
+    try:
+        logging.info(f"api_get_market_trend receiving: {request.json}")
+        data = request.json
+        market_id = data["marketId"]
+        start_date = data.get("startDate") or None
+        if start_date is not None:
+            start_date = datetime.datetime.strptime(
+                start_date, "%Y-%m-%d").date()
+        end_date = data.get("endDate") or None
+        if end_date is not None:
+            end_date = datetime.datetime.strptime(
+                end_date, "%Y-%m-%d").date()
+    except Exception as esp:
+        raise BadRequest
+    ret = get_mkt_trend_score(market_id, start_date, end_date)
+    print(ret)
+    result = []
+    dates = ret.index.values.astype('datetime64[D]')
+    for i in range(len(ret)):
+        record = ret.iloc[i]
+        obj = {'date': str(dates[i])}
+        for col in record.index.values:
+            key = col
+            if col != 'CP':
+                key = f'p_{col}'
+            obj[key] = record[col]
+        result.append(obj)
+    return HttpResponseCode.OK.format(result)
 
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
