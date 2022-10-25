@@ -1221,6 +1221,3 @@ def get_draft_date(func_code:str, kwargs:Dict[str, Any], market_id:str,
   "marketId": "TEJ_2330",
   "startDate": "2021-10-10"
 }
-
-a = get_mkt_trend_score('TEJ_2330', datetime.date(2020, 10, 10), datetime.date(2021, 10, 10))
-b = a.values

@@ -11,6 +11,8 @@ import os
 import traceback
 import threading as mt
 import sys
+
+import numpy as np
 from model import (
     get_mkt_trend_score, get_patterns_occur_dates, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
@@ -1093,13 +1095,16 @@ def api_get_market_trend():
         }
         for col in record.index.values:
             if col != 'CP':
+                if np.isnan(record[col]):
+                  continue
                 obj['scores'].append({
                   'datePeriod': col,
                   'score': record[col]
                 })
             else:
                 obj['cp'] = record[col]
-        result.append(obj)
+        if len(obj['scores']) > 0:
+            result.append(obj)
     return HttpResponseCode.OK.format(result)
 
 @app.errorhandler(MethodNotAllowed)
