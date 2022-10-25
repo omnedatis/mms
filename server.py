@@ -1056,20 +1056,17 @@ def api_get_market_trend():
                   date:
                     type: string
                     format: date
-                  CP:
+                  cp:
                     type: number
-                  p_5:
-                    type: integer
-                  p_10:
-                    type: integer
-                  p_20:
-                    type: integer
-                  p_40:
-                    type: integer
-                  p_60:
-                    type: integer
-                  p_120:
-                    type: integer
+                  scores:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        datePeriod:
+                          type: integer
+                        score:
+                          type: integer
     """
     try:
         logging.info(f"api_get_market_trend receiving: {request.json}")
@@ -1091,12 +1088,18 @@ def api_get_market_trend():
     dates = ret.index.values.astype('datetime64[D]')
     for i in range(len(ret)):
         record = ret.iloc[i]
-        obj = {'date': str(dates[i])}
+        obj = {
+          'date': str(dates[i]),
+          'scores': []
+        }
         for col in record.index.values:
-            key = col
             if col != 'CP':
-                key = f'p_{col}'
-            obj[key] = record[col]
+                obj['scores'].append({
+                  'datePeriod': col,
+                  'score': record[col]
+                })
+            else:
+                obj['cp'] = record[col]
         result.append(obj)
     return HttpResponseCode.OK.format(result)
 
