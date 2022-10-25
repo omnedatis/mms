@@ -1083,7 +1083,6 @@ def api_get_market_trend():
     except Exception as esp:
         raise BadRequest
     ret = get_mkt_trend_score(market_id, start_date, end_date)
-    print(ret)
     result = []
     dates = ret.index.values.astype('datetime64[D]')
     for i in range(len(ret)):
