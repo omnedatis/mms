@@ -2979,7 +2979,7 @@ class MimosaDB:
         create_by = self.CREATE_BY
         create_dt = now
         start_dt = now
-        end_dt = None
+        end_dt = now
         data = [[
             create_by, create_dt, exec_id,
             model_id, exection, start_dt, end_dt]]
