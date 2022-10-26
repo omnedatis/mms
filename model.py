@@ -771,7 +771,7 @@ def _model_update():
             else:
                 exec_ids.append(exec_id)
                 if smd:
-                    exec_ids.append(exec_id, smd)
+                    exec_ids.append(smd)
         MT_MANAGER.release(model_id)
     logging.info("End model update")
     return exec_ids
