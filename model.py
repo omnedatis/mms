@@ -91,7 +91,7 @@ def get_mkt_trend_score(
         要取得資料的結束時間(包含)
     periods: List[int]
         要取得趨勢的天期
-    
+
     Returns
     -------
     results: pd.DataFrame
@@ -554,8 +554,9 @@ def _backtest_model(model: ModelInfo, controller: ThreadController):
 
     # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
     logging.info('End model backtest')
+    smd = get_db().set_model_train_complete(model.view_id)
     get_db().set_model_execution_complete(exection_id)
-    get_db().stamp_model_execution([exection_id])
+    get_db().stamp_model_execution([exection_id, smd])
 
 
 class ExecQueue:
@@ -727,7 +728,7 @@ def batch(batch_type=BatchType.SERVICE_BATCH):
 
 def _model_update():
     ModelUpdateMoniter = namedtuple('_ModelUpdateMoniter',
-                                    ['controller', 'exec_id', 'thread'])
+                                    ['controller', 'exec_id', 'smd', 'thread'])
 
     def save_result(data, model_id, exec_id, controller):
         if controller.isactive:
@@ -745,20 +746,22 @@ def _model_update():
         exec_id = get_db().set_model_execution_start(model_id,
                                                      ModelExecution.BATCH_PREDICT)
         logging.info(f'Start model update on {model_id}')
-        recv = _update_model(model_id, controller)
+        recv, smd = _update_model(model_id, controller)
         if not controller.isactive:
             MT_MANAGER.release(model_id)
             logging.info(f'Model update terminated {model_id}')
         else:
             logging.info(f'Finish model update on {model_id}')
+            if smd:
+                smd = get_db().set_model_train_complete(model_id)
             thread = CatchableTread(target=save_result,
                                     args=(recv, model_id, exec_id, controller))
             thread.start()
             moniters[model_id] = ModelUpdateMoniter(
-                controller, exec_id, thread)
+                controller, exec_id, smd, thread)
 
     exec_ids = []
-    for model_id, (controller, exec_id, thread) in moniters.items():
+    for model_id, (controller, exec_id, smd, thread) in moniters.items():
         if not controller.isactive:
             logging.info(f'Model update terminated {model_id}')
         else:
@@ -767,6 +770,8 @@ def _model_update():
                 ...
             else:
                 exec_ids.append(exec_id)
+                if smd:
+                    exec_ids.append(exec_id, smd)
         MT_MANAGER.release(model_id)
     logging.info("End model update")
     return exec_ids
@@ -1005,7 +1010,7 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
             (market_occured_future_rets>=min) &
             (market_occured_future_rets<max)]
         seg = future_rets[
-            (future_rets>=min) & 
+            (future_rets>=min) &
             (future_rets<max)
         ]
         segs.append({

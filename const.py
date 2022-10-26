@@ -224,6 +224,7 @@ class ModelExecution(str, Enum):
     新增模型時預測完成 ADD_PREDICT_FINISHED = 'APF'
     新增模型時回測完成 ADD_BACKTEST_FINISHED = 'ABF'
     批次執行預測完成 BATCH_PREDICT_FINISHED = 'BPF'
+    模型(重)訓練完成 TRAIN_MODEL_FINISHED = 'TMF'
     """
     ADD_PREDICT = 'AP'
     ADD_BACKTEST = 'AB'
@@ -231,6 +232,7 @@ class ModelExecution(str, Enum):
     ADD_PREDICT_FINISHED = 'APF'
     ADD_BACKTEST_FINISHED = 'ABF'
     BATCH_PREDICT_FINISHED = 'BPF'
+    TRAIN_MODEL_FINISHED = 'TMF'
 
 class PatternExecution(str, Enum):
     """Execution types of Model.

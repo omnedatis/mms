@@ -113,6 +113,7 @@ def view_update(view: View, latest_dates: Dict[str, datetime.date],
         x_data[market] = cur_d
 
     ret = []
+    smd = False
     while controller.isactive:
         if len(bdates) == 0:
             break
@@ -131,9 +132,10 @@ def view_update(view: View, latest_dates: Dict[str, datetime.date],
                     del bdates[market]
         for period in PREDICT_PERIODS:
             model = view.get_model(period, sdate)
-            if (not model.is_trained() and
-                not _train_model(_db, model, controller)):
-                break
+            if not model.is_trained():
+                if not _train_model(_db, model, controller):
+                    break
+                smd = True
             new_markets = list(set(cur_x.keys()) - set(model.trained_markets))
             if (new_markets and
                 not _update_model_markets(_db, model, new_markets, controller)):
@@ -144,9 +146,9 @@ def view_update(view: View, latest_dates: Dict[str, datetime.date],
             recv = _combine_predict_results(view.view_id, period, recv)
             ret.append(recv)
     else:
-        return None
+        return None, smd
     if len(ret) > 0:
-        return pd.concat(ret, axis=0)
+        return pd.concat(ret, axis=0), smd
 
 def view_backtest(view: View, earlist_dates: Dict[str, datetime.date],
                   controller: ThreadController) -> Optional[pd.DataFrame]:

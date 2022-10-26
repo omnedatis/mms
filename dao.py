@@ -221,7 +221,8 @@ class MimosaDBCacheManager:
         FINISHED_STATUS = [
             ModelExecution.ADD_BACKTEST_FINISHED.value,
             ModelExecution.ADD_PREDICT_FINISHED.value,
-            ModelExecution.BATCH_PREDICT_FINISHED.value
+            ModelExecution.BATCH_PREDICT_FINISHED.value,
+            ModelExecution.TRAIN_MODEL_FINISHED.value
         ]
         exec_info = exec_info.copy()
         status_records = exec_info.groupby(by=[
@@ -2099,7 +2100,7 @@ class MimosaDB:
         # 刪除舊版 Tag 資訊
         sql = f"""
             SELECT
-                {MacroTagMapField.TAG_ID.value} 
+                {MacroTagMapField.TAG_ID.value}
             FROM
                 {TableName.MACRO_TAG_MAP.value}
         """
@@ -2545,7 +2546,8 @@ class MimosaDB:
         finished_status = {
             ModelExecution.ADD_BACKTEST.value: ModelExecution.ADD_BACKTEST_FINISHED.value,
             ModelExecution.ADD_PREDICT.value: ModelExecution.ADD_PREDICT_FINISHED.value,
-            ModelExecution.BATCH_PREDICT.value: ModelExecution.BATCH_PREDICT_FINISHED.value
+            ModelExecution.BATCH_PREDICT.value: ModelExecution.BATCH_PREDICT_FINISHED.value,
+            ModelExecution.TRAIN_MODEL_FINISHED.value: ModelExecution.TRAIN_MODEL_FINISHED.value
         }
         engine = self._engine()
         sql = f"""
@@ -2761,18 +2763,18 @@ class MimosaDB:
                                      MacroTagField.TAG_NAME.value,
                                      MacroTagField.TAG_DESC.value])
         info[MacroTagField.AUTHOR.value] = self.CREATE_BY
-        
+
         engine = self._engine()
         sql = f"""
             SELECT
                 {MacroInfoField.MACRO_ID.value},
-                {MacroInfoField.FUNC_CODE.value} 
+                {MacroInfoField.FUNC_CODE.value}
             FROM
                 {TableName.MACRO_INFO.value}
         """
         data = pd.read_sql_query(sql, engine)
         func_to_macro_id = {
-            data.iloc[i][MacroInfoField.FUNC_CODE.value] : data.iloc[i][MacroInfoField.MACRO_ID.value] 
+            data.iloc[i][MacroInfoField.FUNC_CODE.value] : data.iloc[i][MacroInfoField.MACRO_ID.value]
             for i in range(len(data))
         }
         values = []
@@ -2780,7 +2782,7 @@ class MimosaDB:
             values += [[func_to_macro_id[macro.code], tags[tag]] for tag in macro.tags]
         maps = pd.DataFrame(values, columns=[MacroTagMapField.MACRO_ID.value,
                                              MacroTagMapField.TAG_ID.value])
-        
+
         info = self._extend_basic_cols(info)
         maps = self._extend_basic_cols(maps)
         return info, maps
@@ -2939,3 +2941,56 @@ class MimosaDB:
         local_status[status] = str(now)
         self.cache_manager.put_status_to_queue(model_id, local_status)
         logging.info(f"[Local Update] Set model execution complete finished: {model_id} -> {status}")
+
+
+    @_do_if_not_read_only
+    def set_model_train_complete(self, model_id: str):
+        """ create model train exec
+
+        Parameters
+        ----------
+        model_id: str
+            ID of model
+
+        Returns
+        -------
+        exec_id: str
+            ID of model execution status
+
+        """
+        table_name = TableName.MODEL_EXECUTION.value
+        exection = ModelExecution.TRAIN_MODEL_FINISHED.value
+        exec_id = 'READ_ONLY_MODE'
+
+        # 取得 EXEC_ID
+        exec_id = self._get_serial_no(SerialNoType.EXECUTION)
+
+        # 建立 status
+        COLUMNS = [
+            'CREATE_BY', 'CREATE_DT',
+            ModelExecutionField.EXEC_ID.value,
+            ModelExecutionField.MODEL_ID.value,
+            ModelExecutionField.STATUS_CODE.value,
+            ModelExecutionField.START_DT.value,
+            ModelExecutionField.END_DT.value
+        ]
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+        create_by = self.CREATE_BY
+        create_dt = now
+        start_dt = now
+        end_dt = None
+        data = [[
+            create_by, create_dt, exec_id,
+            model_id, exection, start_dt, end_dt]]
+        data = pd.DataFrame(data, columns=COLUMNS)
+
+        logging.info(f"[DB Create] Set model train complete {model_id} -> {exection}")
+        self._insert(table_name, data)
+        logging.info(f"[DB Create] Set model train complete finished: {model_id} -> {exection}")
+
+        # 同步本地端快取資料
+        local_status = self.cache_manager._convert_exec_to_status(data)[
+            model_id]
+        self.cache_manager.set_model_status(model_id, local_status)
+        return exec_id
