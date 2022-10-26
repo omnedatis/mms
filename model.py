@@ -383,11 +383,11 @@ MT_MANAGER = ModelThreadManager()
 
 def _update_model(model_id: str, controller):
     latest_dates = get_db().get_latest_dates(model_id)
-    recv = view_update(get_db().get_model_info(
+    recv, smd = view_update(get_db().get_model_info(
         model_id), latest_dates, controller)
     if recv is None:
-        return recv
-    return recv.dropna()
+        return recv, smd
+    return recv.dropna(), smd
 
 
 def add_model(model_id: str):
