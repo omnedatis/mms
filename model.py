@@ -1013,13 +1013,14 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
             (future_rets>=min) &
             (future_rets<max)
         ]
-        segs.append({
-            'type': "pattern",
-            'rangeUp': max,
-            'rangeDown': min,
-            'name': np.round(min, 1),
-            'value': np.round(len(p_seg)/len(market_occured_future_rets) * 100, 2)
-        })
+        if len(market_occured_future_rets) > 0:
+            segs.append({
+                'type': "pattern",
+                'rangeUp': max,
+                'rangeDown': min,
+                'name': np.round(min, 1),
+                'value': np.round(len(p_seg)/len(market_occured_future_rets) * 100, 2)
+            })
         segs.append({
             'type': "market",
             'rangeUp': max,
