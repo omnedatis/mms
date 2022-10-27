@@ -989,6 +989,8 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
     market_occured_future_rets.sort()
     # 全歷史報酬
     future_rets = np.concatenate(returns, axis=0)
+    if len(future_rets) == 0:
+        return []
     drops = ~np.isnan(future_rets)
     future_rets: np.ndarray = future_rets[drops]
     future_rets.sort()
