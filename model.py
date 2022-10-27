@@ -77,66 +77,6 @@ def get_markets():
     return ret
 
 
-def get_mkt_trend_score(
-    market_id: str, start_date=datetime.date, end_date=datetime.date) -> pd.DataFrame:
-    """取得指定時間內, 指定市場 ID 的各指定天期未來趨勢
-
-    Parameters
-    ----------
-    market_id: str
-        要取得的市場 ID
-    start_date: datetime.date
-        要取得資料的起始時間(包含)
-    end_date: datetime.date
-        要取得資料的結束時間(包含)
-    periods: List[int]
-        要取得趨勢的天期
-
-    Returns
-    -------
-    results: pd.DataFrame
-        指定時間內指定市場的各指定天期未來趨勢, Index 為日期, 欄位有 CP, 各天期未來趨勢
-    """
-    _db = MimosaDBManager().current_db
-    future_rets = _db.get_future_returns(market_id)
-    cps = _db.get_market_prices(market_id)
-    date_range = (
-        future_rets.index.values.astype('datetime64[D]') >= start_date) & (
-            future_rets.index.values.astype('datetime64[D]') <= end_date)
-
-    scores, lfactor, ufactor = list(zip(*get_db().get_score_meta_info()))
-    lfactor = np.array(lfactor)
-    ufactor = np.array(ufactor)
-    result = {p:{} for p in PREDICT_PERIODS}
-    for i in range(len(future_rets)):
-        date = future_rets.index.values[i]
-        record = future_rets.iloc[i]
-        _rets = future_rets[:i+1]
-        for period, freturn in zip(PREDICT_PERIODS, _rets.values.T):
-            if len(freturn) <= period:
-                result[period][date] = np.nan
-                continue
-            freturn = freturn[:-period]
-            mean = freturn.mean()
-            std = freturn.std(ddof=1)
-
-            ret = record[period]
-            uppers = ufactor * std + mean
-            lowers = lfactor * std + mean
-            for score, upper, lower in zip(scores, uppers, lowers):
-                if np.isnan(lower) and ret <= upper:
-                    result[period][date] = score
-                    break
-                elif np.isnan(upper) and ret >= lower:
-                    result[period][date] = score
-                    break
-                elif ret >= lower and ret <= upper:
-                    result[period][date] = score
-                    break
-    result = pd.DataFrame(result)
-    result = pd.concat([cps, result], axis=1)[date_range]
-    return result
-
 def save_mkt_score(recv: Dict[str, pd.DataFrame]):
     """save mkt score to DB."""
     def gen_records(recv):
@@ -1224,8 +1164,80 @@ def get_draft_date(func_code:str, kwargs:Dict[str, Any], market_id:str,
         ret = ret[ret <= end_date]
     return ret.tolist()
 
-{
-  "endDate": "2020-10-10",
-  "marketId": "TEJ_2330",
-  "startDate": "2021-10-10"
-}
+
+def get_mkt_trend_score(market_id: str,
+                        start_date:Optional[datetime.date]=None,
+                        end_date:Optional[datetime.date]=None,
+                        dates:Optional[List[datetime.date]]=None
+                        ) -> pd.DataFrame:
+    """取得一組或一段指定時間, 指定市場 ID 的各指定天期未來趨勢
+
+    Parameters
+    ----------
+    market_id: str
+        要取得的市場 ID
+    start_date: datetime.date
+        要取得資料的起始時間(包含)
+    end_date: datetime.date
+        要取得資料的結束時間(包含)
+    dates: list of datetime.date
+        要取得資料的時間
+    periods: List[int]
+        要取得趨勢的天期
+
+    Returns
+    -------
+    results: pd.DataFrame
+        指定一組或一段時間指定市場的各指定天期未來趨勢, Index 為日期, 欄位有 CP, 各天期未來趨勢
+    """
+    _db = MimosaDBManager().current_db
+    future_rets = _db.get_future_returns(market_id)
+    if dates is not None:
+        start_date = min(dates)
+        end_date = max(dates)
+    sidx = (0 if start_date is None else
+            (future_rets.index.values.astype('datetime64[D]') < start_date).sum())
+    eidx = (len(future_rets) if end_date is None else
+            (future_rets.index.values.astype('datetime64[D]') <= end_date).sum())
+    cps = _db.get_market_prices(market_id)[sidx:eidx]
+    scores, lfactor, ufactor = list(zip(*get_db().get_score_meta_info()))
+    lfactor = np.array(lfactor)
+    ufactor = np.array(ufactor)
+    result = {p:{} for p in PREDICT_PERIODS}
+    idxs = []
+    if dates is not None:
+        dates = np.array(dates).astype('datetime64[D]')
+    for i in range(sidx, eidx):
+        date = future_rets.index.values[i]
+        if dates is not None and date not in dates:
+            idxs.append(False)
+            continue
+        idxs.append(True)
+        record = future_rets.iloc[i]
+        _rets = future_rets[:i+1]
+        for period, freturn in zip(PREDICT_PERIODS, _rets.values.T):
+            if len(freturn) <= period:
+                result[period][date] = np.nan
+                continue
+            freturn = freturn[:-period]
+            mean = freturn.mean()
+            std = freturn.std(ddof=1)
+
+            ret = record[period]
+            uppers = ufactor * std + mean
+            lowers = lfactor * std + mean
+            for score, upper, lower in zip(scores, uppers, lowers):
+                if np.isnan(lower) and ret <= upper:
+                    result[period][date] = score
+                    break
+                elif np.isnan(upper) and ret >= lower:
+                    result[period][date] = score
+                    break
+                elif ret >= lower and ret <= upper:
+                    result[period][date] = score
+                    break
+    if dates is not None:
+        cps = cps[idxs]
+    result = pd.DataFrame(result)
+    result = pd.concat([cps, result], axis=1)
+    return result

@@ -1023,7 +1023,7 @@ def api_get_pattern_draft_date():
 @app.route("/markets/trend", methods=["POST"])
 def api_get_market_trend():
     """
-    取得指定市場指定時間段的過去各天期報酬趨勢
+    取得指定市場一組或一段指定時間的過去各天期報酬趨勢
     ---
     tags:
       - 市場
@@ -1040,6 +1040,11 @@ def api_get_market_trend():
           endDate:
             type: string
             format: date
+          dates:
+            type: array
+            items:
+              type: string
+              format: date
     responses:
       200:
         description: 成功取得
@@ -1082,9 +1087,13 @@ def api_get_market_trend():
         if end_date is not None:
             end_date = datetime.datetime.strptime(
                 end_date, "%Y-%m-%d").date()
+        dates = data.get("dates") or None
+        if dates is not None:
+            dates = [datetime.datetime.strptime(
+                     each, "%Y-%m-%d").date() for each in dates]
     except Exception as esp:
         raise BadRequest
-    ret = get_mkt_trend_score(market_id, start_date, end_date)
+    ret = get_mkt_trend_score(market_id, start_date, end_date, dates)
     result = []
     dates = ret.index.values.astype('datetime64[D]')
     for i in range(len(ret)):
