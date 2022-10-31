@@ -338,12 +338,13 @@ def _db_update(batch_type: BatchType = BatchType.SERVICE_BATCH):
     if batch_type == BatchType.SERVICE_BATCH:
         ret += [CatchableTread(target=save_latest_pattern_results,
                                args=(_db.get_latest_pattern_values(), )),
-                CatchableTread(target=save_latest_mkt_period,
-                               args=({each.mid: _db.get_market_prices(each.mid)
-                                      for each in markets}, )),
-                CatchableTread(target=save_mkt_score,
-                               args=({each.mid: _db.get_future_returns(each.mid)
-                                      for each in markets}, ))]
+                # CatchableTread(target=save_latest_mkt_period,
+                               # args=({each.mid: _db.get_market_prices(each.mid)
+                                      # for each in markets}, )),
+                # CatchableTread(target=save_mkt_score,
+                               # args=({each.mid: _db.get_future_returns(each.mid)
+                                      # for each in markets}, ))
+                ]
         for exec_id in exec_ids:
             get_db().set_pattern_execution_complete(exec_id)
     for t in ret:
@@ -397,10 +398,10 @@ def _batch_recover_views(model_id: str, status: ModelStatus):
         model = get_db().get_model_info(model_id)
         # the following thrown error will be catched
         if status < ModelStatus.CREATED:
-            del_view_execution(model_id)  
-            del_view_data(model_id) 
+            del_view_execution(model_id)
+            del_view_data(model_id)
             _batch_create_view(model, controller)
-        _batch_backtest_view(model, controller) 
+        _batch_backtest_view(model, controller)
         save_model_hit_sum(model_id, BatchType.INIT_BATCH)
         MT_MANAGER.release(model_id)
     except Exception as esp:
@@ -505,7 +506,7 @@ def _batch_update_views():
             if batch_controller.isactive and controller.isactive:
                 if smd:
                     complete_exce_id:str = get_db().set_model_train_complete(model_id)
-                thread = CatchableTread(target=save_result, 
+                thread = CatchableTread(target=save_result,
                                         args=(recv, model_id, exec_id, controller))
                 thread.start()
                 moniters[model_id] = ModelUpdateMoniter(
@@ -528,7 +529,7 @@ def _batch_update_views():
                 if moniter.thread.esp is None:
                     exec_ids.append(moniter.exec_id)
                     if moniter.smd:
-                        exec_ids.append(moniter.complete_exce_id) 
+                        exec_ids.append(moniter.complete_exce_id)
             if not moniter.controller.isactive:
                 logging.info(f'Joining view thread on {model_id} terminated')
             MT_MANAGER.release(model_id)
@@ -549,7 +550,7 @@ def _batch_update_view(model_id: str, controller: ThreadController,
         ) -> Tuple[Union[pd.DataFrame, None], bool]:
     latest_dates = get_db().get_latest_dates(model_id)
     recv, is_retrained = update_view(get_db().get_model_info(
-        model_id), latest_dates, controller)  
+        model_id), latest_dates, controller)
     if recv is not None:
         recv = recv.dropna()
     return recv, is_retrained
@@ -574,7 +575,7 @@ def _batch_del_view_data():
         logging.info("Batch deleting view data falied")
         MT_MANAGER.release(BATCH_EXE_CODE)
         raise esp
-    
+
 
 def _init_db():
     try:
@@ -583,16 +584,16 @@ def _init_db():
         logging.info('Batch init started')
         clean_db_cache()
         clone_db_cache(batch_type)
-        model_prepare_thread = get_db().clone_model_results(controller)
+        #model_prepare_thread = get_db().clone_model_results(controller)
         #
         logging.info("Batch pattern update started")
         if not MimosaDBManager().is_ready():
             _db_update(batch_type)
         logging.info("Batch pattern update finished")
         #
-        model_prepare_thread.join()
-        _batch_del_view_data()
-        _batch_recover_executions()
+        #model_prepare_thread.join()
+        #_batch_del_view_data()
+        #_batch_recover_executions()
         logging.info('Batch init finished')
     except Exception as esp:
         logging.error("Batch init failed")
@@ -611,7 +612,7 @@ def _batch():
         logging.info("Batch service started")
         clean_db_cache()
         clone_db_cache(batch_type)
-        model_prepare_thread = get_db().clone_model_results(controller)
+        #model_prepare_thread = get_db().clone_model_results(controller)
         #
         logging.info("Batch pattern update started")
         threads = []
@@ -619,15 +620,15 @@ def _batch():
         threads = _db_update(batch_type) or []
         logging.info("Bacth pattern update finished") # should not be here
         #
-        model_prepare_thread.join()
-        _batch_del_view_data()
-        model_exec_ids = _batch_update_views()
+        #model_prepare_thread.join()
+        #_batch_del_view_data()
+        #model_exec_ids = _batch_update_views()
         for t in threads:
             if controller.isactive:
                 t.join()
         if controller.isactive:
             get_db().checkout_fcst_data()
-            get_db().stamp_model_execution(model_exec_ids)
+            #get_db().stamp_model_execution(model_exec_ids)
             MimosaDBManager().swap_db()
             logging.info("Batch finished")
             MT_MANAGER.release(BATCH_EXE_CODE)
@@ -649,7 +650,7 @@ def batch():
     sec =  now.second
     task_queue.do_prioritized_task(
         _batch, name=f'service_batch_{date}{hour}{minute}{sec}')
-    
+
 
 
 def add_model(model_id: str):
@@ -687,7 +688,7 @@ def add_model(model_id: str):
         logging.error("Adding view failed ")
         logging.error(traceback.format_exc())
         MT_MANAGER.release(model_id)
-        
+
 
 def remove_model(model_id):
     """移除模型
