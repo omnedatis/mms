@@ -602,10 +602,9 @@ def _init_db():
 
 def init_db():
     task_queue.do_prioritized_task(
-        _init_db, args=(BatchType.INIT_BATCH,), name='init_batch')
+        _init_db, name='init_batch')
 
-
-def batch():
+def _batch():
     try:
         batch_type = BatchType.SERVICE_BATCH
         controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
@@ -640,6 +639,17 @@ def batch():
         logging.error("Batch failed")
         logging.error(traceback.format_exc())
         MT_MANAGER.release(BATCH_EXE_CODE)
+
+
+def batch():
+    now = datetime.datetime.now()
+    date = now.date().day
+    hour = now.hour
+    minute = now.minute
+    sec =  now.second
+    task_queue.do_prioritized_task(
+        _batch, name=f'service_batch_{date}{hour}{minute}{sec}')
+    
 
 
 def add_model(model_id: str):

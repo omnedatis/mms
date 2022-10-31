@@ -99,77 +99,80 @@ def _combine_predict_results(view_id: str, period: int,
 
 def update_view(view: View, latest_dates: Dict[str, datetime.date],
                 controller: ThreadController) -> Tuple[Union[pd.DataFrame, None], bool]:
-    batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
-    _db = MimosaDBManager().next_db
-    # pattern data for markets
-    x_data = _get_x_data(_db, _db.get_markets(), view.patterns, controller)
-    first_bdates:Dict[str, datetime.date] = {}
-    # get backtest dates for each market
-    for market, p_data in x_data.items():
-        if batch_controller.isactive:
-            ldate = latest_dates.get(market)
-            if ldate is None: # if none, get minimum backtest length
-                idx = -MIN_BACKTEST_LEN 
-            else:
-                idx = (p_data.index.values.astype('datetime64[D]') <= ldate).sum()
-            p_data = p_data[idx:]
-            if len(p_data) > 0:
-                # get the earliest backtest date for each market
-                first_bdates[market] = p_data.index.values[0].astype('datetime64[D]').tolist()
-            x_data.update({market:p_data})
-
-    ret = []
-    smd = False
-    while controller.isactive:
-        if len(first_bdates) == 0:
-            # no more update necessary
-            break
-        start_date = min(first_bdates.values())
-        expired_date = view.get_expiration_date(start_date)
-        cur_model_x = {}
-        for market, bdate in list(first_bdates.items()):
-            if not batch_controller.isactive:
-                break
-            if bdate < expired_date:
-                p_data = x_data[market]
-                idx = (p_data.index.values.astype('datetime64[D]') < expired_date).sum()
-                cur_model_x[market] = p_data[:idx]
-                x_data[market] = p_data[idx:]
-                if len(x_data[market]) > 0:
-                    # update earliest backtest date for each market
-                    first_bdates[market] = x_data[market].index.values[0].astype('datetime64[D]').tolist()
+    try:
+        batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        _db = MimosaDBManager().next_db
+        # pattern data for markets
+        x_data = _get_x_data(_db, _db.get_markets(), view.patterns, controller)
+        first_bdates:Dict[str, datetime.date] = {}
+        # get backtest dates for each market
+        for market, p_data in x_data.items():
+            if batch_controller.isactive:
+                ldate = latest_dates.get(market)
+                if ldate is None: # if none, get minimum backtest length
+                    idx = -MIN_BACKTEST_LEN 
                 else:
-                    del first_bdates[market] # no more available data
-        # train model for every period and get prediction
-        for period in PREDICT_PERIODS:
-            if not batch_controller.isactive:
+                    idx = (p_data.index.values.astype('datetime64[D]') <= ldate).sum()
+                p_data = p_data[idx:]
+                if len(p_data) > 0:
+                    # get the earliest backtest date for each market
+                    first_bdates[market] = p_data.index.values[0].astype('datetime64[D]').tolist()
+                x_data.update({market:p_data})
+
+        ret = []
+        smd = False
+        while controller.isactive:
+            if len(first_bdates) == 0:
+                # no more update necessary
                 break
-            model = view.get_model(period, start_date)
-            if not model.is_trained():
-                if not _train_model(_db, model, controller): # model is mutable
+            start_date = min(first_bdates.values())
+            expired_date = view.get_expiration_date(start_date)
+            cur_model_x = {}
+            for market, bdate in list(first_bdates.items()):
+                if not batch_controller.isactive:
                     break
-                smd = True
-            new_markets = list(set(cur_model_x.keys()) - set(model.trained_markets))
-            if (new_markets and
-                not _update_model_markets(_db, model, new_markets, controller)):
-                break
-            recv = model.predict(cur_model_x)
-            if recv is None or len(recv) == 0:
-                continue
-            # flattern data structure to db schema (multiple model under one view)
-            recv = _combine_predict_results(view.view_id, period, recv)
-            ret.append(recv)
-    else:
-        # ????
-        # view have no update for every model and every period
-        return None, smd
-    if len(ret) > 0:
-        if not batch_controller.isactive:
-            logging.info('')
+                if bdate < expired_date:
+                    p_data = x_data[market]
+                    idx = (p_data.index.values.astype('datetime64[D]') < expired_date).sum()
+                    cur_model_x[market] = p_data[:idx]
+                    x_data[market] = p_data[idx:]
+                    if len(x_data[market]) > 0:
+                        # update earliest backtest date for each market
+                        first_bdates[market] = x_data[market].index.values[0].astype('datetime64[D]').tolist()
+                    else:
+                        del first_bdates[market] # no more available data
+            # train model for every period and get prediction
+            for period in PREDICT_PERIODS:
+                if not batch_controller.isactive:
+                    break
+                model = view.get_model(period, start_date)
+                if not model.is_trained():
+                    if not _train_model(_db, model, controller): # model is mutable
+                        break
+                    smd = True
+                new_markets = list(set(cur_model_x.keys()) - set(model.trained_markets))
+                if (new_markets and
+                    not _update_model_markets(_db, model, new_markets, controller)):
+                    break
+                recv = model.predict(cur_model_x)
+                if recv is None or len(recv) == 0:
+                    continue
+                # flattern data structure to db schema (multiple model under one view)
+                recv = _combine_predict_results(view.view_id, period, recv)
+                ret.append(recv)
         else:
-            MT_MANAGER.release(BATCH_EXE_CODE)
-        return pd.concat(ret, axis=0), smd
-    # ??? return any ?
+            # ????
+            # view have no update for every model and every period
+            return None, smd
+        if len(ret) > 0:
+            if not batch_controller.isactive:
+                logging.info('')
+            else:
+                MT_MANAGER.release(BATCH_EXE_CODE)
+            return pd.concat(ret, axis=0), smd
+        # ??? return any ?
+    except Exception as esp:
+        logging.info(f'Updating view on {view.view_id} started')
 
 def backtest_view(view: View, earlist_dates: Dict[str, datetime.date],
                   controller: ThreadController) -> Optional[pd.DataFrame]:
