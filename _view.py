@@ -6,15 +6,16 @@ Created on Wed Jun 22 15:45:34 2022
 """
 
 import datetime
-from typing import Dict, List, Optional, Tuple
+import logging
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
 from _core import View, ViewModel, ModelResultField
 from _db import MimosaDBManager, MimosaDB
-from const import PredictResultField, MIN_BACKTEST_LEN, PREDICT_PERIODS
-from utils import ThreadController
+from const import PredictResultField, MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE
+from utils import ThreadController, MT_MANAGER
 
 
 
@@ -96,77 +97,99 @@ def _combine_predict_results(view_id: str, period: int,
         return None
     return pd.concat(ret, axis=0)
 
-def view_update(view: View, latest_dates: Dict[str, datetime.date],
-                controller: ThreadController) -> Optional[pd.DataFrame]:
+def update_view(view: View, latest_dates: Dict[str, datetime.date],
+                controller: ThreadController) -> Tuple[Union[pd.DataFrame, None], bool]:
+    batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
     _db = MimosaDBManager().next_db
+    # pattern data for markets
     x_data = _get_x_data(_db, _db.get_markets(), view.patterns, controller)
-    bdates = {}
-    for market, cur_d in x_data.items():
-        ldate = latest_dates.get(market)
-        if ldate is None:
-            idx = -MIN_BACKTEST_LEN
-        else:
-            idx = (cur_d.index.values.astype('datetime64[D]') <= ldate).sum()
-        cur_d = cur_d[idx:]
-        if len(cur_d) > 0:
-            bdates[market] = cur_d.index.values[0].astype('datetime64[D]').tolist()
-        x_data[market] = cur_d
+    first_bdates:Dict[str, datetime.date] = {}
+    # get backtest dates for each market
+    for market, p_data in x_data.items():
+        if batch_controller.isactive:
+            ldate = latest_dates.get(market)
+            if ldate is None: # if none, get minimum backtest length
+                idx = -MIN_BACKTEST_LEN 
+            else:
+                idx = (p_data.index.values.astype('datetime64[D]') <= ldate).sum()
+            p_data = p_data[idx:]
+            if len(p_data) > 0:
+                # get the earliest backtest date for each market
+                first_bdates[market] = p_data.index.values[0].astype('datetime64[D]').tolist()
+            x_data.update({market:p_data})
 
     ret = []
     smd = False
     while controller.isactive:
-        if len(bdates) == 0:
+        if len(first_bdates) == 0:
+            # no more update necessary
             break
-        sdate = min(bdates.values())
-        edate = view.get_expiration_date(sdate)
-        cur_x = {}
-        for market, bdate in list(bdates.items()):
-            if bdate < edate:
-                cur_d = x_data[market]
-                idx = (cur_d.index.values.astype('datetime64[D]') < edate).sum()
-                cur_x[market] = cur_d[:idx]
-                x_data[market] = cur_d[idx:]
+        start_date = min(first_bdates.values())
+        expired_date = view.get_expiration_date(start_date)
+        cur_model_x = {}
+        for market, bdate in list(first_bdates.items()):
+            if not batch_controller.isactive:
+                break
+            if bdate < expired_date:
+                p_data = x_data[market]
+                idx = (p_data.index.values.astype('datetime64[D]') < expired_date).sum()
+                cur_model_x[market] = p_data[:idx]
+                x_data[market] = p_data[idx:]
                 if len(x_data[market]) > 0:
-                    bdates[market] = x_data[market].index.values[0].astype('datetime64[D]').tolist()
+                    # update earliest backtest date for each market
+                    first_bdates[market] = x_data[market].index.values[0].astype('datetime64[D]').tolist()
                 else:
-                    del bdates[market]
+                    del first_bdates[market] # no more available data
+        # train model for every period and get prediction
         for period in PREDICT_PERIODS:
-            model = view.get_model(period, sdate)
+            if not batch_controller.isactive:
+                break
+            model = view.get_model(period, start_date)
             if not model.is_trained():
-                if not _train_model(_db, model, controller):
+                if not _train_model(_db, model, controller): # model is mutable
                     break
                 smd = True
-            new_markets = list(set(cur_x.keys()) - set(model.trained_markets))
+            new_markets = list(set(cur_model_x.keys()) - set(model.trained_markets))
             if (new_markets and
                 not _update_model_markets(_db, model, new_markets, controller)):
                 break
-            recv = model.predict(cur_x)
+            recv = model.predict(cur_model_x)
             if recv is None or len(recv) == 0:
                 continue
+            # flattern data structure to db schema (multiple model under one view)
             recv = _combine_predict_results(view.view_id, period, recv)
             ret.append(recv)
     else:
+        # ????
+        # view have no update for every model and every period
         return None, smd
     if len(ret) > 0:
+        if not batch_controller.isactive:
+            logging.info('')
+        else:
+            MT_MANAGER.release(BATCH_EXE_CODE)
         return pd.concat(ret, axis=0), smd
+    # ??? return any ?
 
-def view_backtest(view: View, earlist_dates: Dict[str, datetime.date],
+def backtest_view(view: View, earlist_dates: Dict[str, datetime.date],
                   controller: ThreadController) -> Optional[pd.DataFrame]:
     _db = MimosaDBManager().current_db
     markets = list(earlist_dates.keys())
-    edate = max(earlist_dates.values())
-    x_data = {}
-    ldates = []
+    # edate = max(earlist_dates.values())
+    x_data:Dict[str, pd.DataFrame] = {} # backtest dates for markets
+    latest_dates = []
     for mid, data in _get_x_data(_db, markets, view.patterns, controller).items():
         dates = data.index.values.astype('datetime64[D]')
-        eidx = (dates < earlist_dates[mid]).sum()
+        # index of to which date backtest is done
+        eidx = (dates < earlist_dates[mid]).sum() 
         if eidx > 0:
             x_data[mid] = data[:eidx]
-            ldates.append(dates[eidx-1])
-    sdate = view.get_effective_date(np.array(ldates).max().tolist())
-    edate = view.get_expiration_date(sdate)
+            latest_dates.append(dates[eidx-1])
+    sdate = view.get_effective_date(np.array(latest_dates).max().tolist())
+    # edate = view.get_expiration_date(sdate)
     for mid, data in list(x_data.items()):
         dates = data.index.values.astype('datetime64[D]')
+        # market need not backtest
         if sdate > dates[-1]:
             del x_data[mid]
         else:
@@ -193,7 +216,7 @@ def view_backtest(view: View, earlist_dates: Dict[str, datetime.date],
         return pd.concat(ret, axis=0)
 
 
-def view_create(view: View, controller: ThreadController) -> Optional[pd.DataFrame]:
+def create_view(view: View, controller: ThreadController) -> Optional[pd.DataFrame]:
     _db = MimosaDBManager().current_db
     x_data = _get_x_data(_db, _db.get_markets(), view.patterns, controller)
     bdates = {}

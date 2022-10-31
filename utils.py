@@ -10,11 +10,16 @@ import logging
 import os
 import pickle
 import threading as mt
+from threading import Lock
+import time
 import traceback
-from typing import Any, List, Union, Dict
+from typing import Any, List, Union, Dict, Optional, Tuple, Callable
 
 import numpy as np
 import pandas as pd
+
+from const import TaskCode
+
 
 def mkdir(path: str):
     """make dir recursively.
@@ -27,6 +32,7 @@ def mkdir(path: str):
     """
     if not os.path.exists(path):
         os.makedirs(path)
+
 
 def pickle_dump(data: Any, file: str):
     """dump object to file by pickle.
@@ -42,6 +48,7 @@ def pickle_dump(data: Any, file: str):
     mkdir(os.path.dirname(file))
     with open(file, 'wb') as f:
         pickle.dump(data, f)
+
 
 def pickle_load(file: str) -> Any:
     """load object from file by pickle.
@@ -61,9 +68,11 @@ def pickle_load(file: str) -> Any:
         ret = pickle.load(f)
     return ret
 
-def esp2str(esp:Exception) -> str:
+
+def esp2str(esp: Exception) -> str:
     """Trans exception to string."""
     return f'{type(esp).__name__}: {str(esp)}'
+
 
 def fast_concat(data: List[Union[pd.Series, pd.DataFrame]]) -> pd.DataFrame:
     """Concat Pandas's Series and DataFrames with common index fastly."""
@@ -78,6 +87,7 @@ def fast_concat(data: List[Union[pd.Series, pd.DataFrame]]) -> pd.DataFrame:
             columns.append(each.name)
             values.append(each.values)
     return pd.DataFrame(np.array(values).T, columns=columns, index=index)
+
 
 def dict_equals(dict_a: Dict, dict_b: Dict) -> bool:
     """判斷兩個 dict 內容是否完全相等
@@ -105,6 +115,7 @@ def dict_equals(dict_a: Dict, dict_b: Dict) -> bool:
             result = False
             break
     return result
+
 
 class _CacheElement:
     def __init__(self, prev: int, next_: int, key: str, value: Any):
@@ -140,6 +151,7 @@ class _CacheElement:
     @next_.setter
     def next_(self, key: int):
         self._next = key
+
 
 class Cache:
     # 這邊建立了一個記憶體空間做快取,
@@ -230,7 +242,8 @@ class Cache:
             head = self._buffer[self._head]
             del self._map[head.key]
             self._map[key] = self._head
-            self._buffer[self._head] = _CacheElement(head.prev, head.next_, key, value)
+            self._buffer[self._head] = _CacheElement(
+                head.prev, head.next_, key, value)
             self._set_tail(self._head)
         else:
             idx = len(self._map)
@@ -260,11 +273,14 @@ class Cache:
             keys: {self.keys()}
         """)
 
+
 def datetime64d2int(recv: np.ndarray):
     return recv.astype(int)
 
+
 def int2datetime64d(recv: np.ndarray):
     return recv.astype('datetime64[D]')
+
 
 def extend_working_dates(recv: np.ndarray, length: int) -> np.ndarray:
     """Extend given dates with designated working dates.
@@ -349,11 +365,13 @@ class CatchableTread:
     def join(self):
         self._thread.join()
 
+
 def print_error_info(esp):
     try:
         raise esp
     except:
         logging.error(traceback.format_exc())
+
 
 class Wtimer:
     def __init__(self):
@@ -370,9 +388,11 @@ class Wtimer:
             raise RuntimeError("Timer is active")
         self._t0 = datetime.datetime.now()
 
+
 def singleton(cls):
     """ Decorator, used to define classes on singleton pattern. """
     instances = {}
+
     def _wrapper():
         if cls not in instances:
             instances[cls] = cls()
@@ -406,3 +426,189 @@ class ThreadController:
 
     def switch_off(self):
         self._state = False
+
+
+class ModelThreadManager:
+    """模型多執行緒管理器
+
+    提供多執行緒環境下，模型操作的共享控制器管理
+
+    Methods
+    -------
+    exists: 詢問指定模型是否還有未完成的操作正在執行中
+    acquire: 請求指定模型的控制器
+    release: 釋出指定模型的控制器
+
+    Notes
+    -----
+    執行一個模型操作前，應先請求其控制器，並於操作完成(或因故中止)後，將其釋出
+
+    """
+
+    def __init__(self):
+        self._controllers = {}
+        self._lock = Lock()
+
+    def acquire(self, model_id: str) -> ThreadController:
+        """請求指定模型的Controller
+
+        如果該模型的controller不存在，則建立後，回傳，計數器設定為1；
+        否則回傳該模型的controller，並將計數器累加1。
+
+        Parameters
+        ----------
+        model_id: str
+            ID of the desigated model.
+
+        Returns
+        -------
+        ThreadController
+            Controller of the desigated model.
+
+        """
+        self._lock.acquire()
+        if model_id not in self._controllers:
+            ret = ThreadController()
+            self._controllers[model_id] = {'controller': ret, 'requests': 1}
+        else:
+            ret = self._controllers[model_id]['controller']
+            self._controllers[model_id]['requests'] += 1
+        self._lock.release()
+        return ret
+
+    def release(self, model_id: str):
+        """釋放指定模型的Controller
+
+        指定模型的計數器減1，若計數器歸零，則刪除該模型的controller。
+
+        Parameters
+        ----------
+        model_id: str
+            ID of the desigated model.
+
+        """
+        self._lock.acquire()
+        if model_id not in self._controllers:
+            raise RuntimeError('release an not existed controller')
+        self._controllers[model_id]['requests'] -= 1
+        if self._controllers[model_id]['requests'] <= 0:
+            del self._controllers[model_id]
+        self._lock.release()
+
+    def exists(self, model_id: str) -> bool:
+        """指定模型的Controller是否存在
+
+        主要用途是讓外部使用者可以知道是否還有其他程序正在對該指定模型進行操作。
+
+        Parameters
+        ----------
+        model_id: str
+            ID of the desigated model.
+
+        Returns
+        -------
+        bool
+            False, if no thread operating the designated model; otherwise, True.
+
+        """
+        return model_id in self._controllers
+
+
+MT_MANAGER = ModelThreadManager()
+
+
+class ExecQueue:
+
+    def __init__(self, name: str):
+        self.occupants = 0
+        self._queue = []
+        self.isactive = True
+        self.is_paused = False
+        self.tasks = []
+        self._lock = Lock()
+        self._thread = CatchableTread(self._run, name=name)
+        self.limit: Optional[TaskCode] = None
+        self.name = name
+
+    def _run(self):
+        while self.isactive:
+            if self._queue and not self.is_paused:
+                func, args = self._pop(0)
+                self.occupants += 1
+                if self.occupants <= self.limit.value:
+                    def callback():
+                        if args is not None:
+                            ret = func(*args)
+                        else:
+                            ret = func()
+                        self.occupants -= 1
+                        return ret
+                    t = CatchableTread(target=callback)
+                    t.start()
+                    self.tasks.append(t)
+                else:
+                    self.cut_line(func, args=args)
+                    self.occupants -= 1
+            time.sleep(1)
+
+    def start(self):
+        if self.limit is None:
+            raise RuntimeError('task limit is not set')
+        self._thread.start()
+
+    def _pop(self, index) -> Tuple[Callable, Tuple[Any]]:
+        self._lock.acquire()
+        item = self._queue.pop(index)
+        self._lock.release()
+        return item
+
+    def push(self, func: Callable, *, args: tuple = None):
+        self._lock.acquire()
+        self._queue.append((func, args))
+        self._lock.release()
+
+    def cut_line(self, func: Callable, *, args: tuple = None):
+        self._lock.acquire()
+        self._queue.insert(0, (func, args))
+        self._lock.release()
+
+    def collect_threads(self):
+        self._thread.join()
+        self.tasks.append(self._thread)
+        return self.tasks
+
+
+class QueueManager:
+
+    def __init__(self, queues: Dict[TaskCode, ExecQueue]):
+        self._queues = queues
+        for key, queue in self._queues.items():
+            queue.limit = key.value
+
+    def push(self, func: Callable, task_code: TaskCode, *, args: Optional[tuple] = None):
+        self._queues[task_code].push(func, args=args)
+
+    def do_prioritized_task(self, func: Callable, *, args: Optional[tuple] = None,
+                            name: Optional[str] = None):
+        def _task():
+            for each in self._queues.values():
+                each.is_paused = True
+            while sum(i.occupants for i in self._queues.values()):
+                time.sleep(1)
+            try:
+                if args is None:
+                    ret = func()
+                else:
+                    ret = func(*args)
+            except Exception as esp:
+                for each in self._queues.values():
+                    each.is_paused = False
+                raise esp
+            for each in self._queues.values():
+                each.is_paused = False
+            return ret
+        return CatchableTread(_task, name=name).start()
+
+    def start(self):
+        for each in self._queues.values():
+            each.start()

@@ -2,6 +2,26 @@
 """
 Created on Tue March 8 17:07:36 2021
 
+definition of MIMOSA python service functions
+
+develop guilds
+--------------
+
+* function specifics
+    dao-actions:
+
+    api-referenced:
+
+    batch-exclusive:
+
+    queue-pushed:
+
+    queue-prioritized-task:
+
+* logging specification
+
+
+* batch controller
 """
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import namedtuple, defaultdict
@@ -12,7 +32,7 @@ import shutil
 from threading import Lock
 import time
 import multiprocessing as mp
-from typing import Any, List, Optional, Dict, Callable, Tuple
+from typing import Any, List, NamedTuple, Optional, Dict, Callable, Tuple
 import numpy as np
 import pandas as pd
 from scipy.stats.distributions import norm
@@ -25,21 +45,25 @@ from _core import MarketInfo
 from _core._macro import MacroManager, MacroParaEnumManager
 from func.common import ParamType
 from func._tp import *
-from _view import view_backtest, view_create, view_update
+from _view import backtest_view, create_view, update_view
 from const import *
 from utils import *
 from const import (BatchType, MarketPeriodField, MarketScoreField,
                    ModelExecution, ModelMarketHitSumField, ModelStatus,
                    PatternExecution, PatternResultField, PredictResultField,
-                   MIN_BACKTEST_LEN, PREDICT_PERIODS, TaskLimitCode)
+                   MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE, TaskCode)
 from utils import extend_working_dates, CatchableTread, ThreadController
-
-# from func._tp import
-
 from _core import Pattern
 from _db import get_dao, set_dao, MimosaDBManager
 
+
 batch_lock = Lock()
+
+
+task_queue = QueueManager({
+    TaskCode.PATTERN: ExecQueue('pattern_queue'),
+    TaskCode.MODEL: ExecQueue('model_queue')
+})
 
 
 def get_db():
@@ -77,6 +101,29 @@ def get_markets():
     return ret
 
 
+def del_pattern_data(pattern_id: str):
+    logging.info('Deleting pattern data')
+    get_db().del_pattern_data(pattern_id)
+
+
+def del_view_execution(model_id: str):
+    # ???
+    # MT_MANAGER.acquire(model_id).switch_off()
+    # MT_MANAGER.release(model_id)
+    # while MT_MANAGER.exists(model_id):
+    #     time.sleep(1)
+    logging.info("Deleting view execution")
+    get_db().del_model_execution(model_id)
+
+
+def del_view_data(model_id: str):
+    logging.info(f"Deleting view data predict history on {model_id}")
+    get_db().del_model_data(model_id)
+    logging.info(f"Deleting view data local on {model_id}")
+    model_dir = ModelInfo.get_dir(model_id)
+    if os.path.exists(model_dir):
+        shutil.rmtree(model_dir)
+
 def save_mkt_score(recv: Dict[str, pd.DataFrame]):
     """save mkt score to DB."""
     def gen_records(recv):
@@ -87,6 +134,8 @@ def save_mkt_score(recv: Dict[str, pd.DataFrame]):
         for mid, freturns in recv.items():
             # Note: without making `dropna` for performance
             for period, freturn in zip(PREDICT_PERIODS, freturns.values.T):
+                if not controller.isactive:
+                    break
                 if len(freturn) <= period:
                     continue
                 cur = pd.DataFrame()
@@ -101,12 +150,23 @@ def save_mkt_score(recv: Dict[str, pd.DataFrame]):
                 cur[MarketScoreField.MARKET_ID.value] = mid
                 ret.append(cur)
         return ret
-
-    if len(recv) > 0:
-        records = gen_records(recv)
-        if len(records) > 0:
-            db = get_db()
-            db.save_mkt_score(pd.concat(records, axis=0))
+    try:
+        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info("Saving market score to db started")
+        if len(recv) > 0:
+            records = gen_records(recv)
+            if len(records) > 0:
+                if controller.isactive:
+                    db = get_db()
+                    db.save_mkt_score(pd.concat(records, axis=0))
+        if not controller.isactive:
+            logging.info("Saving market score to db terminated")
+        else:
+            logging.info("Saving market score to db finished")
+    except Exception as esp:
+        logging.info("Saving market score to db failed")
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        raise esp
 
 
 def save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
@@ -114,30 +174,44 @@ def save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
     def gen_records(recv):
         ret = []
         for mid, cps in recv.items():
-            # Note: without making `dropna` for performance
-            periods = list(filter(lambda p: p < len(cps), PREDICT_PERIODS))
-            if len(periods) <= 0:
-                continue
-            cur = pd.DataFrame()
-            offsets = list(map(lambda p: -(p+1), periods))
-            dates = cps.index.values[offsets + [-1]
-                                     ].astype('datetime64[D]').tolist()
-            bps = cps.values[offsets]
-            changes = cps.values[-1] - bps
-            cur[MarketPeriodField.DATE_PERIOD.value] = periods
-            cur[MarketPeriodField.PRICE_DATE.value] = dates[-1]
-            cur[MarketPeriodField.DATA_DATE.value] = dates[:-1]
-            cur[MarketPeriodField.NET_CHANGE.value] = changes
-            cur[MarketPeriodField.NET_CHANGE_RATE.value] = changes / bps
-            cur[MarketPeriodField.MARKET_ID.value] = mid
-            ret.append(cur)
+            if controller.isactive:
+                # Note: without making `dropna` for performance
+                periods = list(filter(lambda p: p < len(cps), PREDICT_PERIODS))
+                if len(periods) <= 0:
+                    continue
+                cur = pd.DataFrame()
+                offsets = list(map(lambda p: -(p+1), periods))
+                dates = cps.index.values[offsets + [-1]
+                                        ].astype('datetime64[D]').tolist()
+                bps = cps.values[offsets]
+                changes = cps.values[-1] - bps
+                cur[MarketPeriodField.DATE_PERIOD.value] = periods
+                cur[MarketPeriodField.PRICE_DATE.value] = dates[-1]
+                cur[MarketPeriodField.DATA_DATE.value] = dates[:-1]
+                cur[MarketPeriodField.NET_CHANGE.value] = changes
+                cur[MarketPeriodField.NET_CHANGE_RATE.value] = changes / bps
+                cur[MarketPeriodField.MARKET_ID.value] = mid
+                ret.append(cur)
         return ret
 
-    if len(recv) > 0:
-        records = gen_records(recv)
-        if len(records) > 0:
-            db = get_db()
-            db.save_latest_mkt_period(pd.concat(records, axis=0))
+    try:
+        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info("Saving latest market period to db started")
+        if len(recv) > 0:
+            records = gen_records(recv)
+            if len(records) > 0:
+                if controller.isactive:
+                    db = get_db()
+                    db.save_latest_mkt_period(pd.concat(records, axis=0))
+        if not controller.isactive:
+            logging.info("Saving latest market period to db terminated")
+        else:
+            logging.info("Saving latest market period to db finished")
+        MT_MANAGER.release(BATCH_EXE_CODE)
+    except Exception as esp:
+        logging.info("Saving latest market period to db failed")
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        raise esp
 
 
 def save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = False):
@@ -145,24 +219,40 @@ def save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = Fa
     def trans2dbformat(recv):
         ret_buffer = []
         for mid, pdata in recv.items():
-            cur = pd.DataFrame()
-            mdate = pdata.index.values[-1].astype('datetime64[D]').tolist()
-            values = np.full(len(pdata.columns), 'N')
-            values[pdata.values[-1] == 1] = 'Y'
-            cur[PatternResultField.VALUE.value] = values
-            cur[PatternResultField.DATE.value] = mdate
-            cur[PatternResultField.MARKET_ID.value] = mid
-            cur[PatternResultField.PATTERN_ID.value] = pdata.columns
-            ret_buffer.append(cur)
+            if controller.isactive:
+                cur = pd.DataFrame()
+                mdate = pdata.index.values[-1].astype('datetime64[D]').tolist()
+                values = np.full(len(pdata.columns), 'N')
+                values[pdata.values[-1] == 1] = 'Y'
+                cur[PatternResultField.VALUE.value] = values
+                cur[PatternResultField.DATE.value] = mdate
+                cur[PatternResultField.MARKET_ID.value] = mid
+                cur[PatternResultField.PATTERN_ID.value] = pdata.columns
+                ret_buffer.append(cur)
         return pd.concat(ret_buffer, axis=0)
-
-    if len(recv) > 0:
-        db = get_db()
-        if update:
-            for pid, data in trans2dbformat(recv).groupby(by=PatternResultField.PATTERN_ID.value):
-                db.update_latest_pattern_results(pid, data)
+    try:
+        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info('Saving lastest pattern result to db started')
+        if len(recv) > 0:
+            db = get_db()
+            if update:
+                for pid, data in trans2dbformat(recv).groupby(
+                    by=PatternResultField.PATTERN_ID.value):
+                    if not controller.isactive:
+                        break
+                    db.update_latest_pattern_results(pid, data)
+            else:
+                if controller.isactive:
+                    db.save_latest_pattern_results(trans2dbformat(recv))
+        if not controller.isactive:
+            logging.info('Saving lastest pattern result to db terminated')
         else:
-            db.save_latest_pattern_results(trans2dbformat(recv))
+            logging.info('Saving lastest pattern result to db fnished')
+        MT_MANAGER.release(BATCH_EXE_CODE)
+    except Exception as esp:
+        logging.info('Saving lastest pattern result to db failed')
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        raise esp
 
 
 def _evaluate_hit_sum(market: str, results: Dict[str, pd.DataFrame], freturns):
@@ -228,379 +318,8 @@ def save_model_hit_sum(model_id: str, batch_type: BatchType):
 def _get_backtest_length(market: str, earlist_date: datetime.date):
     db = get_db()
     dates = db.get_market_data(market).index.values.astype('datetime64[D]')
-    ret = min([MIN_BACKTEST_LEN, len(dates)]) - (dates >= earlist_date).sum()
+    ret = min([MIN_BACKTEST_LEN, len(dates)]) - (dates >= earlist_date).sum() #???
     return ret
-
-
-class ModelThreadManager:
-    """模型多執行緒管理器
-
-    提供多執行緒環境下，模型操作的共享控制器管理
-
-    Methods
-    -------
-    exists: 詢問指定模型是否還有未完成的操作正在執行中
-    acquire: 請求指定模型的控制器
-    release: 釋出指定模型的控制器
-
-    Notes
-    -----
-    執行一個模型操作前，應先請求其控制器，並於操作完成(或因故中止)後，將其釋出
-
-    """
-
-    def __init__(self):
-        self._controllers = {}
-        self._lock = Lock()
-
-    def acquire(self, model_id: str) -> ThreadController:
-        """請求指定模型的Controller
-
-        如果該模型的controller不存在，則建立後，回傳，計數器設定為1；
-        否則回傳該模型的controller，並將計數器累加1。
-
-        Parameters
-        ----------
-        model_id: str
-            ID of the desigated model.
-
-        Returns
-        -------
-        ThreadController
-            Controller of the desigated model.
-
-        """
-        self._lock.acquire()
-        if model_id not in self._controllers:
-            ret = ThreadController()
-            self._controllers[model_id] = {'controller': ret, 'requests': 1}
-        else:
-            ret = self._controllers[model_id]['controller']
-            self._controllers[model_id]['requests'] += 1
-        self._lock.release()
-        return ret
-
-    def release(self, model_id: str):
-        """釋放指定模型的Controller
-
-        指定模型的計數器減1，若計數器歸零，則刪除該模型的controller。
-
-        Parameters
-        ----------
-        model_id: str
-            ID of the desigated model.
-
-        """
-        self._lock.acquire()
-        if model_id not in self._controllers:
-            raise RuntimeError('release an not existed controller')
-        self._controllers[model_id]['requests'] -= 1
-        if self._controllers[model_id]['requests'] <= 0:
-            del self._controllers[model_id]
-        self._lock.release()
-
-    def exists(self, model_id: str) -> bool:
-        """指定模型的Controller是否存在
-
-        主要用途是讓外部使用者可以知道是否還有其他程序正在對該指定模型進行操作。
-
-        Parameters
-        ----------
-        model_id: str
-            ID of the desigated model.
-
-        Returns
-        -------
-        bool
-            False, if no thread operating the designated model; otherwise, True.
-
-        """
-        return model_id in self._controllers
-
-
-MT_MANAGER = ModelThreadManager()
-
-
-def _update_model(model_id: str, controller):
-    latest_dates = get_db().get_latest_dates(model_id)
-    recv, smd = view_update(get_db().get_model_info(
-        model_id), latest_dates, controller)
-    if recv is None:
-        return recv, smd
-    return recv.dropna(), smd
-
-
-def add_model(model_id: str):
-    """新增模型
-
-    此函數目的為新增模型：
-    1. 呼叫_create_model建立模型，並計算各市場、各天期的最近一日的預測結果
-    2. 呼叫_backtest_model計算各市場、各天期的歷史回測結果
-
-    Parameters
-    ----------
-    model_id: str
-        ID of the designated model.
-
-    See Also
-    --------
-    _create_model, _backtest_model
-
-    """
-    if MT_MANAGER.exists(model_id):
-        return
-    controller = MT_MANAGER.acquire(model_id)
-    if not controller.isactive:
-        MT_MANAGER.release(model_id)
-        return
-    try:
-        del_model_data(model_id)
-        model = get_db().get_model_info(model_id)
-        _create_model(model, controller)
-        _backtest_model(model, controller)
-        save_model_hit_sum(model_id, BatchType.INIT_BATCH)
-        logging.info('End add model ')
-    except Exception:
-        logging.error("Add model failed ")
-        logging.error(traceback.format_exc())
-    finally:
-        MT_MANAGER.release(model_id)
-
-
-def model_recover(model_id: str, status: ModelStatus):
-    """重啟模型
-
-    此函數目的為重啟因故中斷的模型：
-    如果模型狀態為 ADDED 則
-    1. 呼叫_create_model建立模型，並計算各市場、各天期的最近一日的預測結果
-    2. 呼叫_backtest_model計算各市場、各天期的歷史回測結果
-    如果模型狀態為 CREATED 則跳過1. 直接執行 2.
-
-    Parameters
-    ----------
-    model_id: str
-        ID of the designated model.
-    status: ModelStatus
-        Status of Model.
-
-    See Also
-    --------
-    _create_model, _backtest_model, ModelStatus
-
-    """
-    controller = MT_MANAGER.acquire(model_id)
-    if not controller.isactive:
-        MT_MANAGER.release(model_id)
-        return
-    try:
-        model = get_db().get_model_info(model_id)
-        if status < ModelStatus.CREATED:
-            del_model_data(model_id)
-            _create_model(model, controller)
-        _backtest_model(model, controller)
-        save_model_hit_sum(model_id, BatchType.INIT_BATCH)
-    except Exception:
-        logging.error("recover model failed")
-        logging.error(traceback.format_exc())
-    finally:
-        MT_MANAGER.release(model_id)
-
-
-def remove_model(model_id):
-    """移除模型
-
-    此函數目的為移除指定模型：
-    1. 取得指定模型控制器，以中斷所有該模型正在執行中的工作
-    2. 等待所有該模型正在執行中的工作中斷
-    3. 呼叫del_model_data，於DB中移除該模型相關資料
-    4. 移除本地端與該模型相關的資料
-
-    Parameters
-    ----------
-    model_id: str
-        ID of the designated model.
-
-    """
-    logging.info('Start model remove')
-    MT_MANAGER.acquire(model_id).switch_off()
-    MT_MANAGER.release(model_id)
-    while MT_MANAGER.exists(model_id):
-        time.sleep(1)
-    del_model_data(model_id)
-    logging.info('End model remove')
-
-
-def del_model_execution(model_id: str):
-    MT_MANAGER.acquire(model_id).switch_off()
-    MT_MANAGER.release(model_id)
-    while MT_MANAGER.exists(model_id):
-        time.sleep(1)
-    logging.info("Start model execution deletion")
-    get_db().del_model_execution(model_id)
-
-
-def del_model_data(model_id: str):
-    get_db().del_model_data(model_id)
-    model_dir = ModelInfo.get_dir(model_id)
-    if os.path.exists(model_dir):
-        shutil.rmtree(model_dir)
-
-
-def _create_model(model: ModelInfo, controller: ThreadController):
-    logging.info('Start model create')
-    if not controller.isactive:
-        logging.info('Model create terminated')
-        return
-    exection_id = get_db().set_model_execution_start(
-        model.view_id, ModelExecution.ADD_PREDICT)
-    recv = view_create(model, controller)
-    logging.info('End model create')
-    if recv is not None and controller.isactive:
-        get_db().save_model_results(model.view_id, recv.dropna(), ModelExecution.ADD_PREDICT)
-    if controller.isactive:
-        get_db().set_model_execution_complete(exection_id)
-        get_db().stamp_model_execution([exection_id])
-
-
-def _backtest_model(model: ModelInfo, controller: ThreadController):
-    logging.info('Start model backtest')
-    exection_id = get_db().set_model_execution_start(
-        model.view_id, ModelExecution.ADD_BACKTEST)
-    earlist_dates = get_db().get_earliest_dates(model.view_id)
-    cur_thread = None
-    while controller.isactive:
-        earlist_dates = {market: date for market, date in earlist_dates.items()
-                         if _get_backtest_length(market, date) > 0}
-
-        if len(earlist_dates) == 0:
-            cur_thread and cur_thread.join()
-            break
-        recv = view_backtest(model, earlist_dates, controller)
-        if recv is None:
-            cur_thread and cur_thread.join()
-            break
-        cur_thread and cur_thread.join()
-        cur_thread = CatchableTread(target=get_db().save_model_results,
-                                    args=(model.view_id, recv.dropna(),
-                                          ModelExecution.ADD_BACKTEST))
-        cur_thread.start()
-        for mid, data in recv.groupby(PredictResultField.MARKET_ID.value):
-            earlist_dates[mid] = data[PredictResultField.DATE.value
-                                      ].values.min().astype('datetime64[D]').tolist()
-
-    if not controller.isactive:
-        logging.info('Model backtest terminated')
-        return
-
-    # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
-    logging.info('End model backtest')
-    smd = get_db().set_model_train_complete(model.view_id)
-    get_db().set_model_execution_complete(exection_id)
-    get_db().stamp_model_execution([exection_id, smd])
-
-
-class ExecQueue:
-
-    def __init__(self, name: str):
-
-        self.occupants = 0
-        self._queue = []
-        self.isactive = True
-        self.is_paused = False
-        self.tasks = []
-        self._lock = Lock()
-        self._thread = CatchableTread(self._run, name=name)
-        self.name = name
-
-    def _run(self):
-        while self.isactive:
-            # logging.info(self.is_paused)
-            # print(self._queue)
-            if self._queue and not self.is_paused:
-                func, task_limit, args = self._pop(0)
-                self.occupants += 1
-                if self.occupants <= task_limit.value:
-                    def callback():
-                        try:
-                            if args is not None:
-                                ret = func(*args)
-                            else:
-                                ret = func()
-                        except Exception as esp:
-                            logging.error(traceback.format_exc())
-                            ret = None
-                        self.occupants -= 1
-                        return ret
-                    t = CatchableTread(target=callback)
-                    t.start()
-                    self.tasks.append(t)
-                else:
-                    self.cut_line(func, task_limit, args=args)
-                    self.occupants -= 1
-            time.sleep(1)
-
-    def start(self):
-        self._thread.start()
-
-    def _pop(self, index) -> Tuple[Callable, TaskLimitCode, Tuple[Any]]:
-        self._lock.acquire()
-        item = self._queue.pop(index)
-        self._lock.release()
-        return item
-
-    def push(self, func: Callable, task_limit, *, args: tuple = None):
-        self._lock.acquire()
-        self._queue.append((func, task_limit, args))
-        self._lock.release()
-
-    def cut_line(self, func: Callable, task_limit, *, args: tuple = None):
-        self._lock.acquire()
-        self._queue.insert(0, (func, task_limit, args))
-        self._lock.release()
-
-    def collect_threads(self):
-        self._thread.join()
-        self.tasks.append(self._thread)
-        return self.tasks
-
-
-class QueueManager:
-
-    def __init__(self, queues: Dict[TaskLimitCode, ExecQueue]):
-        self._queues = queues
-
-    def push(self, func: Callable, task_limit: int, *, args: Optional[tuple] = None):
-        self._queues[task_limit].push(func, task_limit, args=args)
-
-    def do_prioritized_task(self, func: Callable, args: Optional[tuple] = None):
-        def _task():
-            for each in self._queues.values():
-                each.is_paused = True
-            while sum(i.occupants for i in self._queues.values()):
-                time.sleep(1)
-            try:
-                if args is None:
-                    ret = func()
-                else:
-                    ret = func(*args)
-            except Exception as esp:
-                for each in self._queues.values():
-                    each.is_paused = False
-                raise esp
-            for each in self._queues.values():
-                each.is_paused = False
-            return ret
-        return CatchableTread(_task).start()
-
-    def start(self):
-        for each in self._queues.values():
-            each.start()
-
-
-task_queue = QueueManager({
-    TaskLimitCode.PATTERN: ExecQueue('pattern_queue'),
-    TaskLimitCode.MODEL: ExecQueue('model_queue')
-})
 
 
 def _db_update(batch_type: BatchType = BatchType.SERVICE_BATCH):
@@ -632,123 +351,374 @@ def _db_update(batch_type: BatchType = BatchType.SERVICE_BATCH):
     return ret
 
 
-def model_execution_recover(batch_type: BatchType):
-    logging.info('Start model execution recover')
-    for model, etype in get_db().get_recover_model_execution():
-        if etype == ModelExecution.ADD_PREDICT:
-            model_recover(model, ModelStatus.ADDED)
-        if etype == ModelExecution.ADD_BACKTEST:
-            model_recover(model, ModelStatus.CREATED)
-
-    logging.info('End model execution recover')
-
-
-def init_db():
+def _batch_recover_executions():
+    logging.info('Batch view execution recover started')
     try:
-        logging.info('Start batch init')
-        task_queue.do_prioritized_task(batch, args=(BatchType.INIT_BATCH,))
-        logging.info('End batch init')
-    except Exception:
-        logging.error("Batch init failed")
-        logging.error(traceback.format_exc())
-
-
-def batch(batch_type=BatchType.SERVICE_BATCH):
-    batch_lock.acquire()
-    if MT_MANAGER.exists('Batch executing'):
-        batch_lock.release()
-        while MT_MANAGER.exists('Batch executing'):
-            time.sleep(1)
+        exec_info = get_db().get_recover_model_execution()
+    except:
+        logging.info('Batch view execution recover failed')
+    for model, etype in exec_info:
+        if etype == ModelExecution.ADD_PREDICT:
+            status = ModelStatus.ADDED
+        elif etype == ModelExecution.ADD_BACKTEST:
+            status = ModelStatus.CREATED
+        else:
+            raise RuntimeError(f'Invalid model execution type {etype} ecountered')
+        _batch_recover_views(model, status)
     else:
-        MT_MANAGER.acquire('Batch executing')
-        batch_lock.release()
-        _batch(batch_type)
-        MT_MANAGER.release('Batch executing')
+        logging.info('Batch view execution recover finished')
+    logging.info('Batch view execution recover terminated')
 
 
-def _model_update():
-    ModelUpdateMoniter = namedtuple('_ModelUpdateMoniter',
-                                    ['controller', 'exec_id', 'smd', 'thread'])
+def _batch_recover_views(model_id: str, status: ModelStatus):
+    """重啟模型
 
-    def save_result(data, model_id, exec_id, controller):
+    此函數目的為重啟因故中斷的模型：
+    如果模型狀態為 ADDED 則
+    1. 呼叫_create_model建立模型，並計算各市場、各天期的最近一日的預測結果
+    2. 呼叫_backtest_model計算各市場、各天期的歷史回測結果
+    如果模型狀態為 CREATED 則跳過1. 直接執行 2.
+
+    Parameters
+    ----------
+    model_id: str
+        ID of the designated model.
+    status: ModelStatus
+        Status of Model.
+
+    See Also
+    --------
+    _create_model, _backtest_model, ModelStatus
+
+    """
+    try:
+        logging.info(f"Recovering on view {model_id} started")
+        controller = MT_MANAGER.acquire(model_id)
+        model = get_db().get_model_info(model_id)
+        # the following thrown error will be catched
+        if status < ModelStatus.CREATED:
+            del_view_execution(model_id)  
+            del_view_data(model_id) 
+            _batch_create_view(model, controller)
+        _batch_backtest_view(model, controller) 
+        save_model_hit_sum(model_id, BatchType.INIT_BATCH)
+        MT_MANAGER.release(model_id)
+    except Exception as esp:
+        logging.error(f"Recovering on view {model_id} failed")
+        MT_MANAGER.release(model_id)
+        raise esp
+
+
+def _batch_create_view(model: ModelInfo, controller: ThreadController):
+    batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+    logging.info(f'Creating on view {model.view_id} started')
+    if controller.isactive and batch_controller.isactive:
+        exection_id = get_db().set_model_execution_start(
+            model.view_id, ModelExecution.ADD_PREDICT)
+    if controller.isactive and batch_controller.isactive:
+        recv = create_view(model, controller)
+    if controller.isactive and batch_controller.isactive:
+        get_db().save_model_results(model.view_id, recv.dropna(), ModelExecution.ADD_PREDICT)
+        get_db().set_model_execution_complete(exection_id)
+        get_db().stamp_model_execution([exection_id])
+    if not batch_controller.isactive:
+        logging.info('Batch terminated')
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        return
+    if not controller.isactive:
+        logging.info(f'Creating on view {model.view_id} terminated')
+    else:
+        logging.info(f'Creating on view {model.view_id} finished')
+
+
+def _batch_backtest_view(model: ModelInfo, controller: ThreadController):
+    batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+    logging.info(f'Backtesting on view {model.view_id} started')
+    exection_id = get_db().set_model_execution_start(
+        model.view_id, ModelExecution.ADD_BACKTEST)
+    earlist_dates = get_db().get_earliest_dates(model.view_id)
+    cur_thread = None
+    while controller.isactive:
+        if not batch_controller.isactive:
+            break
+        earlist_dates = {market: date for market, date in earlist_dates.items()
+                        if _get_backtest_length(market, date) > 0}
+
+        if len(earlist_dates) == 0:
+            # no more market has non-zero backtest length
+            cur_thread and cur_thread.join()
+            break
+        if not batch_controller.isactive:
+            break
+        recv = backtest_view(model, earlist_dates, controller)
+        if recv is None:
+            cur_thread and cur_thread.join()
+            break
+        cur_thread and cur_thread.join()
+        cur_thread = CatchableTread(target=get_db().save_model_results,
+                                    args=(model.view_id, recv.dropna(),
+                                          ModelExecution.ADD_BACKTEST))
+        cur_thread.start()
+        for mid, data in recv.groupby(PredictResultField.MARKET_ID.value):
+            earlist_dates[mid] = data[PredictResultField.DATE.value
+                                      ].values.min().astype('datetime64[D]').tolist()
+    if not controller.isactive:
+        logging.info('Backtesting on view {model.view_id} terminated')
+        return
+
+    # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
+    smd = get_db().set_model_train_complete(model.view_id)
+    get_db().set_model_execution_complete(exection_id)
+    get_db().stamp_model_execution([exection_id, smd])
+    logging.info('Backtesting on view {model.view_id} finished')
+
+
+def _batch_update_views():
+    class ModelUpdateMoniter(NamedTuple):
+        controller:ThreadController
+        exec_id:str
+        smd:bool
+        complete_exce_id:str
+        thread:CatchableTread
+    def save_result(data: pd.DataFrame, model_id: str, exec_id: str,
+                    controller: ThreadController):
         if controller.isactive:
             if data is not None:
-                get_db().save_model_results(model_id, data.dropna(), ModelExecution.BATCH_PREDICT)
+                get_db().save_model_results(
+                    model_id, data.dropna(), ModelExecution.BATCH_PREDICT)
         if controller.isactive:
             get_db().set_model_execution_complete(exec_id)
         if controller.isactive:
             save_model_hit_sum(model_id, BatchType.SERVICE_BATCH)
-
-    moniters = {}
-    for model_id in get_db().get_models():
-        controller = MT_MANAGER.acquire(model_id)
-
-        exec_id = get_db().set_model_execution_start(model_id,
-                                                     ModelExecution.BATCH_PREDICT)
-        logging.info(f'Start model update on {model_id}')
-        recv, smd = _update_model(model_id, controller)
-        if not controller.isactive:
-            MT_MANAGER.release(model_id)
-            logging.info(f'Model update terminated {model_id}')
-        else:
-            logging.info(f'Finish model update on {model_id}')
-            if smd:
-                smd = get_db().set_model_train_complete(model_id)
-            thread = CatchableTread(target=save_result,
-                                    args=(recv, model_id, exec_id, controller))
-            thread.start()
-            moniters[model_id] = ModelUpdateMoniter(
-                controller, exec_id, smd, thread)
-
-    exec_ids = []
-    for model_id, (controller, exec_id, smd, thread) in moniters.items():
-        if not controller.isactive:
-            logging.info(f'Model update terminated {model_id}')
-        else:
-            thread.join()
-            if thread.esp is not None:
-                ...
-            else:
-                exec_ids.append(exec_id)
-                if smd:
-                    exec_ids.append(smd)
-        MT_MANAGER.release(model_id)
-    logging.info("End model update")
-    return exec_ids
-
-
-def _batch(batch_type):
     try:
-        logging.info("Start batch ")
+        batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info('Updating view on started')
+        moniters: Dict[str, ModelUpdateMoniter] = {}
+        for model_id in get_db().get_models():
+            controller = MT_MANAGER.acquire(model_id)
+            logging.info(f'Updating view on {model_id} started')
+            if batch_controller.isactive and controller.isactive:
+                exec_id = get_db().set_model_execution_start(
+                    model_id, ModelExecution.BATCH_PREDICT)
+            if batch_controller.isactive and controller.isactive:
+                recv, smd = _batch_update_view(model_id, controller)
+            if batch_controller.isactive and controller.isactive:
+                if smd:
+                    complete_exce_id:str = get_db().set_model_train_complete(model_id)
+                thread = CatchableTread(target=save_result, 
+                                        args=(recv, model_id, exec_id, controller))
+                thread.start()
+                moniters[model_id] = ModelUpdateMoniter(
+                    controller, exec_id, smd, complete_exce_id, thread)
+                logging.info(f'Updaing view on {model_id} finished')
+            if not controller.isactive:
+                logging.info('Updating view on {model_id} terminated')
+            MT_MANAGER.release(model_id)
+        if not batch_controller.isactive:
+            logging.info('Batch terminated')
+            MT_MANAGER.release(model_id)
+            return
+
+        exec_ids = []
+        for model_id, moniter in moniters.items():
+            batch_controller = MT_MANAGER.acquire(model_id)
+            logging.info(f'Joining view thread on {model_id}')
+            moniter.thread.join()
+            if moniter.controller.isactive and batch_controller.isactive:
+                if moniter.thread.esp is None:
+                    exec_ids.append(moniter.exec_id)
+                    if moniter.smd:
+                        exec_ids.append(moniter.complete_exce_id) 
+            if not moniter.controller.isactive:
+                logging.info(f'Joining view thread on {model_id} terminated')
+            MT_MANAGER.release(model_id)
+        if not batch_controller.isactive:
+            logging.info('Batch terminated')
+            MT_MANAGER.release(BATCH_EXE_CODE)
+            return []
+        else:
+            logging.info(f'Updating view finished')
+            return exec_ids
+    except Exception as esp:
+        logging.info(f'Updating view failed')
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        raise esp
+
+
+def _batch_update_view(model_id: str, controller: ThreadController,
+        ) -> Tuple[Union[pd.DataFrame, None], bool]:
+    latest_dates = get_db().get_latest_dates(model_id)
+    recv, is_retrained = update_view(get_db().get_model_info(
+        model_id), latest_dates, controller)  
+    if recv is not None:
+        recv = recv.dropna()
+    return recv, is_retrained
+
+
+def _batch_del_view_data():
+    try:
+        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info("Batch deleting view data started")
+        for model_id in get_db().get_removed_model():
+            if controller.isactive:
+                del_view_data(model_id)
+            else:
+                break
+        else:
+            MT_MANAGER.release(BATCH_EXE_CODE)
+            logging.info("Batch deleting view data finished")
+            return
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        logging.info("Batch deleting view data terminated")
+    except Exception as esp:
+        logging.info("Batch deleting view data falied")
+        MT_MANAGER.release(BATCH_EXE_CODE)
+        raise esp
+    
+
+def _init_db():
+    try:
+        batch_type = BatchType.INIT_BATCH
+        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info('Batch init started')
         clean_db_cache()
         clone_db_cache(batch_type)
-        model_prepare_thread = get_db().clone_model_results(ThreadController())
-        logging.info("Start pattern update")
-        threads = []
-        if batch_type == BatchType.SERVICE_BATCH:
-            get_db().truncate_swap_tables()
-            threads = _db_update(batch_type) or []
-        elif not MimosaDBManager().is_ready():
-            threads = _db_update(batch_type) or []
-        logging.info("End pattern update")
+        model_prepare_thread = get_db().clone_model_results(controller)
+        #
+        logging.info("Batch pattern update started")
+        if not MimosaDBManager().is_ready():
+            _db_update(batch_type)
+        logging.info("Batch pattern update finished")
+        #
         model_prepare_thread.join()
-        for model_id in get_db().get_removed_model():
-            del_model_data(model_id)
-        if batch_type == BatchType.INIT_BATCH:
-            logging.info('Start model execution recover')
-            model_execution_recover(batch_type)
-            logging.info('End model execution recover')
-        if batch_type == BatchType.SERVICE_BATCH:
-            model_exec_ids = _model_update()
-            for t in threads:
+        _batch_del_view_data()
+        _batch_recover_executions()
+        logging.info('Batch init finished')
+    except Exception as esp:
+        logging.error("Batch init failed")
+        logging.error(traceback.format_exc())
+        MT_MANAGER.release(BATCH_EXE_CODE)
+
+
+def init_db():
+    task_queue.do_prioritized_task(
+        _init_db, args=(BatchType.INIT_BATCH,), name='init_batch')
+
+
+def batch():
+    try:
+        batch_type = BatchType.SERVICE_BATCH
+        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        logging.info("Batch service started")
+        clean_db_cache()
+        clone_db_cache(batch_type)
+        model_prepare_thread = get_db().clone_model_results(controller)
+        #
+        logging.info("Batch pattern update started")
+        threads = []
+        get_db().truncate_swap_tables()
+        threads = _db_update(batch_type) or []
+        logging.info("Bacth pattern update finished") # should not be here
+        #
+        model_prepare_thread.join()
+        _batch_del_view_data()
+        model_exec_ids = _batch_update_views()
+        for t in threads:
+            if controller.isactive:
                 t.join()
+        if controller.isactive:
             get_db().checkout_fcst_data()
             get_db().stamp_model_execution(model_exec_ids)
             MimosaDBManager().swap_db()
-        logging.info("End batch")
+            logging.info("Batch finished")
+            MT_MANAGER.release(BATCH_EXE_CODE)
+            return
+        logging.info("Batch Terminated")
+        MT_MANAGER.release(BATCH_EXE_CODE)
+
     except Exception:
         logging.error("Batch failed")
         logging.error(traceback.format_exc())
+        MT_MANAGER.release(BATCH_EXE_CODE)
+
+
+def add_model(model_id: str):
+    """新增模型
+
+    此函數目的為新增模型：
+    1. 呼叫_create_model建立模型，並計算各市場、各天期的最近一日的預測結果
+    2. 呼叫_backtest_model計算各市場、各天期的歷史回測結果
+
+    Parameters
+    ----------
+    model_id: str
+        ID of the designated model.
+
+    See Also
+    --------
+    _create_model, _backtest_model
+
+    """
+    if MT_MANAGER.exists(model_id):
+        return
+    controller = MT_MANAGER.acquire(model_id)
+    if not controller.isactive:
+        MT_MANAGER.release(model_id)
+        return
+    try:
+        logging.info('Adding view started')
+        del_view_data(model_id)
+        model = get_db().get_model_info(model_id)
+        _batch_create_view(model, controller)
+        _batch_backtest_view(model, controller)
+        save_model_hit_sum(model_id, BatchType.INIT_BATCH)
+        MT_MANAGER.release(model_id)
+    except Exception as esp:
+        logging.error("Adding view failed ")
+        logging.error(traceback.format_exc())
+        MT_MANAGER.release(model_id)
+        
+
+def remove_model(model_id):
+    """移除模型
+
+    此函數目的為移除指定模型：
+    1. 取得指定模型控制器，以中斷所有該模型正在執行中的工作
+    2. 等待所有該模型正在執行中的工作中斷
+    3. 呼叫del_model_data，於DB中移除該模型相關資料
+    4. 移除本地端與該模型相關的資料
+
+    Parameters
+    ----------
+    model_id: str
+        ID of the designated model.
+
+    """
+    logging.info('removing view started')
+    MT_MANAGER.acquire(model_id).switch_off()
+    MT_MANAGER.release(model_id)
+    while MT_MANAGER.exists(model_id):
+        time.sleep(1)
+    del_view_data(model_id)
+    logging.info('removing mviewodel started')
+
+
+def add_pattern(pid):
+    pattern = get_db().get_pattern_info(pid)
+
+    _db = MimosaDBManager().current_db
+    sid = get_db().set_pattern_execution_start(pid, PatternExecution.ADD_PATTERN)
+    _db.add_pattern(pattern)
+    latest_pattern_values = _db.get_latest_pattern_values([pid])
+
+    th1 = CatchableTread(target=_db.dump)
+    th1.start()
+    th2 = CatchableTread(target=save_latest_pattern_results,
+                         args=(latest_pattern_values, True))
+    th2.start()
+    th1.join()
+    th2.join()
+    get_db().set_pattern_execution_complete(sid)
 
 
 def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None,
@@ -772,8 +742,8 @@ def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None
     return ret.tolist()
 
 
-def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: str=None,
-                             end_date: str=None) -> List[Dict[str, str]]:
+def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: str = None,
+                             end_date: str = None) -> List[Dict[str, str]]:
     """取得指定市場, 指定時間區段複數現象的發生時間
 
     Parameters
@@ -813,7 +783,8 @@ def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: st
         if end_date is not None:
             ret = ret[:(ret <= end_date).sum()]
         dates: List[datetime.date] = ret.tolist()
-        result = [{'patternId': pattern, "occurDate": date.strftime('%Y-%m-%d')} for date in dates]
+        result = [{'patternId': pattern, "occurDate": date.strftime(
+            '%Y-%m-%d')} for date in dates]
         results += result
     return results
 
@@ -874,23 +845,24 @@ def get_mix_pattern_rise_prob(markets, patterns):
                    'upDownType': 'fall',
                    'values': []}
     pattern_rise = {'dataType': 'patternOccur',
-                   'upDownType': 'rise',
-                   'values': []}
+                    'upDownType': 'rise',
+                    'values': []}
     pattern_fall = {'dataType': 'patternOccur',
-                   'upDownType': 'fall',
-                   'values': []}
+                    'upDownType': 'fall',
+                    'values': []}
     for period in PREDICT_PERIODS:
         (mcnt, mup, mdown, pcnt, pup, pdown
          ) = _get_mix_pattern_rise_prob(markets, patterns, period)
         market_rise['values'].append({'datePeriod': period,
-                                                'prob': mup / mcnt * 100 if mcnt > 0 else 0})
+                                      'prob': mup / mcnt * 100 if mcnt > 0 else 0})
         market_fall['values'].append({'datePeriod': period,
-                                                'prob': mdown / mcnt * 100 if mcnt > 0 else 0})
+                                      'prob': mdown / mcnt * 100 if mcnt > 0 else 0})
         pattern_rise['values'].append({'datePeriod': period,
-                                                'prob': pup / pcnt * 100 if pcnt > 0 else 0})
+                                       'prob': pup / pcnt * 100 if pcnt > 0 else 0})
         pattern_fall['values'].append({'datePeriod': period,
-                                                'prob': pdown / pcnt * 100 if pcnt > 0 else 0})
+                                       'prob': pdown / pcnt * 100 if pcnt > 0 else 0})
     return [market_rise, market_fall, pattern_rise, pattern_fall]
+
 
 def get_occurred_patterns(date, patterns):
     _db = MimosaDBManager().current_db
@@ -901,7 +873,7 @@ def get_occurred_patterns(date, patterns):
     pvalues = []
     for mid in markets:
         try:
-           pvalues.append( _db.get_pattern_values(mid, patterns).loc[date])
+            pvalues.append(_db.get_pattern_values(mid, patterns).loc[date])
         except KeyError:
             continue
     if len(pvalues) == 0:
@@ -909,6 +881,7 @@ def get_occurred_patterns(date, patterns):
     pvalues = pd.concat(pvalues, axis=1).fillna(False).astype(bool).T
     ret = pvalues.columns.values[pvalues.values.any(axis=0)].tolist()
     return ret
+
 
 def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[Dict[str, Any]]:
     def func(v, r):
@@ -923,7 +896,8 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
         mid, [period]).values[:, 0] for mid in markets]
     pvalues = [_db.get_pattern_values(mid, patterns).values for mid in markets]
     # 發生後
-    market_occured_future_rets = np.concatenate([func(v, r) for v, r in zip(pvalues, returns)], axis=0)
+    market_occured_future_rets = np.concatenate(
+        [func(v, r) for v, r in zip(pvalues, returns)], axis=0)
     drops = ~np.isnan(market_occured_future_rets)
     market_occured_future_rets: np.ndarray = market_occured_future_rets[drops]
     market_occured_future_rets.sort()
@@ -949,11 +923,11 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
         min = segments[i-1]
         max = segments[i]
         p_seg = market_occured_future_rets[
-            (market_occured_future_rets>=min) &
-            (market_occured_future_rets<max)]
+            (market_occured_future_rets >= min) &
+            (market_occured_future_rets < max)]
         seg = future_rets[
-            (future_rets>=min) &
-            (future_rets<max)
+            (future_rets >= min) &
+            (future_rets < max)
         ]
         if len(market_occured_future_rets) > 0:
             segs.append({
@@ -975,29 +949,6 @@ def get_mix_pattern_mkt_dist_info(patterns, period, markets: List[str]) -> List[
 
 def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_code=None):
     return get_mix_pattern_mkt_dist_info([pattern_id], period, market_type, category_code)
-
-
-def add_pattern(pid):
-    pattern = get_db().get_pattern_info(pid)
-
-    _db = MimosaDBManager().current_db
-    sid = get_db().set_pattern_execution_start(pid, PatternExecution.ADD_PATTERN)
-    _db.add_pattern(pattern)
-    latest_pattern_values = _db.get_latest_pattern_values([pid])
-
-    th1 = CatchableTread(target=_db.dump)
-    th1.start()
-    th2 = CatchableTread(target=save_latest_pattern_results,
-                         args=(latest_pattern_values, True))
-    th2.start()
-    th1.join()
-    th2.join()
-    get_db().set_pattern_execution_complete(sid)
-
-
-def del_pattern_data(pattern_id: str):
-    logging.info('Start delete Pattern model')
-    get_db().del_pattern_data(pattern_id)
 
 
 def get_market_rise_prob(period, market_type=None, category_code=None):
@@ -1043,7 +994,7 @@ def get_mkt_dist_info(period, markets: List[str]) -> List[Dict[str, Any]]:
     for i in range(1, len(segments)):
         min = segments[i-1]
         max = segments[i]
-        seg = future_rets[(future_rets>=min) & (future_rets<max)]
+        seg = future_rets[(future_rets >= min) & (future_rets < max)]
         segs.append({
             'type': "market",
             'rangeUp': max,
@@ -1147,17 +1098,17 @@ def get_frame(func, kwargs):
     return pattern.frame()
 
 
-def get_draft_date(func_code:str, kwargs:Dict[str, Any], market_id:str,
-                   start_date:Optional[datetime.date]=None,
-                   end_date:Optional[datetime.date]=None):
+def get_draft_date(func_code: str, kwargs: Dict[str, Any], market_id: str,
+                   start_date: Optional[datetime.date] = None,
+                   end_date: Optional[datetime.date] = None):
     _db = MimosaDBManager().current_db
     if not _db.is_initialized():
         return []
 
     pattern = PatternInfo.make('draft_ptn', func_code, kwargs)
-    pdata= _db.gen_pattern_data(market_id, pattern)
+    pdata = _db.gen_pattern_data(market_id, pattern)
     index = pdata.index.values.astype('datetime64[D]')
-    ret = index[pdata.values==True]
+    ret = index[pdata.values == True]
     if start_date is not None:
         ret = ret[ret >= start_date]
     if end_date is not None:
@@ -1166,9 +1117,9 @@ def get_draft_date(func_code:str, kwargs:Dict[str, Any], market_id:str,
 
 
 def get_mkt_trend_score(market_id: str,
-                        start_date:Optional[datetime.date]=None,
-                        end_date:Optional[datetime.date]=None,
-                        dates:Optional[List[datetime.date]]=None
+                        start_date: Optional[datetime.date] = None,
+                        end_date: Optional[datetime.date] = None,
+                        dates: Optional[List[datetime.date]] = None
                         ) -> pd.DataFrame:
     """取得一組或一段指定時間, 指定市場 ID 的各指定天期未來趨勢
 
@@ -1203,7 +1154,7 @@ def get_mkt_trend_score(market_id: str,
     scores, lfactor, ufactor = list(zip(*get_db().get_score_meta_info()))
     lfactor = np.array(lfactor)
     ufactor = np.array(ufactor)
-    result = {p:{} for p in PREDICT_PERIODS}
+    result = {p: {} for p in PREDICT_PERIODS}
     idxs = []
     if dates is not None:
         dates = np.array(dates).astype('datetime64[D]')

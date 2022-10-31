@@ -5,7 +5,7 @@ import logging
 import os
 import pickle
 import shutil
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
 import numpy as np
 import pandas as pd
 from pymysql import IntegrityError
@@ -25,7 +25,7 @@ from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
                    StoredProcedule, TableName, SerialNoType, DataType, CacheName)
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
-from utils import CatchableTread, pickle_dump, pickle_load, dict_equals
+from utils import CatchableTread, ThreadController, pickle_dump, pickle_load, dict_equals
 
 
 class MimosaDBCacheManager:
@@ -445,7 +445,7 @@ class MimosaDBCacheManager:
                 need_update = True
         return need_update
 
-    def _sync_model_results_and_status(self, controller=None):
+    def _sync_model_results_and_status(self, controller:ThreadController):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
         , 則將會沿用舊資料, 不會進行下載
 
@@ -458,7 +458,7 @@ class MimosaDBCacheManager:
         -------
         None.
         """
-        logging.info('Clone model predict result from db')
+        logging.info('Cloning model predict result from db started')
 
         engine = self._engine()
         # 這邊犧牲效能, 換取較小的記憶體消耗量
@@ -477,8 +477,9 @@ class MimosaDBCacheManager:
         db_status = self._convert_exec_to_status(model_exec_info)
 
         for model_id_i, model_id in enumerate(model_ids):
-            if controller is not None and not controller.isactive:
-                return
+            if not controller.isactive:
+                logging.info('Cloning model predict result from db terminated')
+                return 
             fp = f'{DATA_LOC}/views/{model_id}'
             if not os.path.exists(fp):
                 os.makedirs(f'{DATA_LOC}/views', exist_ok=True)
@@ -498,9 +499,9 @@ class MimosaDBCacheManager:
                 os.makedirs(fp, exist_ok=True)
                 pickle_dump(data, f'{fp}/history_values.pkl')
                 logging.info(
-                    f'Clone model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
-        logging.info('Clone model predict result from db finished')
+                    f'Cloning model result[{model_id_i+1}/{len(model_ids)}]: {model_id} finished')
         self._save_all_model_status(db_status)
+        logging.info('Cloning model predict result from db finished')
 
     def sync_model_result_and_status(self, model_id: str):
         """取得所有模型歷史預測結果資料, 若檔案已存在且 clean_first 為 False
@@ -1078,7 +1079,7 @@ class MimosaDB:
             result[market_id] = latest_date
         return result
 
-    def get_earliest_dates(self, model_id: str) -> datetime.date:
+    def get_earliest_dates(self, model_id: str) -> Dict[str, datetime.date]:
         """get dates of the earliest predict results of markets for given model.
 
         Paratmeters
@@ -1849,7 +1850,7 @@ class MimosaDB:
         if (exec_type == ModelExecution.ADD_PREDICT or
                 exec_type == ModelExecution.BATCH_PREDICT):
             self.save_model_latest_results(model_id, data.copy(), exec_type)
-        logging.info(f'start saving model history results: {model_id}')
+        logging.info(f'Saving model history results: {model_id} started')
         if (exec_type == ModelExecution.ADD_PREDICT or
                 exec_type == ModelExecution.ADD_BACKTEST):
             table_name = f'{TableName.PREDICT_RESULT_HISTORY.value}'
@@ -1879,7 +1880,7 @@ class MimosaDB:
         self._insert(table_name, data)
         # 與本地端資料同步更新
         self.cache_manager.set_model_results(model_id, data)
-        logging.info(f'Saving model results history finished: {model_id}')
+        logging.info(f'Model results history finished: {model_id} finished')
 
     def save_latest_pattern_results(self, data: pd.DataFrame):
         """儲存最新 Pattern 計算結果進資料庫
@@ -2560,7 +2561,7 @@ class MimosaDB:
         """
         exec_data = pd.read_sql_query(sql, engine)
 
-        logging.info("[DB Update] Stamp model execution")
+        logging.info("[DB Update] Stamp model execution started")
         for exec_id in exec_ids:
             # 取得資料庫模型ID 與執行狀態
             eid_cond = exec_data[ModelExecutionField.EXEC_ID.value].values == exec_id
@@ -2936,16 +2937,16 @@ class MimosaDB:
         status = finished_status[exec_data[ModelExecutionField.STATUS_CODE.value]]
         model_id = exec_data[ModelExecutionField.MODEL_ID.value]
 
-        logging.info(f"[Local Update] Set model execution complete: {model_id} -> {status}")
+        logging.info(f"[Local Update] Set model execution complete: {model_id} -> {status} started")
         local_status = self.cache_manager.get_model_status(model_id)
         local_status[status] = str(now)
         self.cache_manager.put_status_to_queue(model_id, local_status)
-        logging.info(f"[Local Update] Set model execution complete finished: {model_id} -> {status}")
+        logging.info(f"[Local Update] Set model execution complete: {model_id} -> {status} finished")
 
 
     @_do_if_not_read_only
-    def set_model_train_complete(self, model_id: str):
-        """ create model train exec
+    def set_model_train_complete(self, model_id: str) -> str:
+        """ create model train complete exec
 
         Parameters
         ----------
@@ -2963,7 +2964,7 @@ class MimosaDB:
         exec_id = 'READ_ONLY_MODE'
 
         # 取得 EXEC_ID
-        exec_id = self._get_serial_no(SerialNoType.EXECUTION)
+        exec_id:str = self._get_serial_no(SerialNoType.EXECUTION)
 
         # 建立 status
         COLUMNS = [

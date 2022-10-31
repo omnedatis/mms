@@ -8,6 +8,7 @@ WSGI python server
 """
 import argparse
 import os
+import time
 import traceback
 import threading as mt
 import sys
@@ -18,10 +19,11 @@ from model import (
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
-    cast_macro_kwargs, del_model_execution, check_macro_info, CatchableTread,
-    get_occurred_patterns, get_draft_date)
-from const import (ExecMode, PORT, LOG_LOC, MODEL_QUEUE_LIMIT, PATTERN_QUEUE_LIMIT,
-                   MarketPeriodField, HttpResponseCode, TaskLimitCode)
+    cast_macro_kwargs, del_view_execution, check_macro_info, CatchableTread,
+    get_occurred_patterns, get_draft_date, MT_MANAGER)
+from const import (
+    ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
+    BATCH_EXE_CODE)
 from func.common import Ptype
 import datetime
 from dao import MimosaDB
@@ -48,6 +50,10 @@ args = parser.parse_args()
 def api_batch():
     """ Run batch. """
     logging.info("Calling batch, pending")
+    MT_MANAGER.acquire(BATCH_EXE_CODE).switch_off()
+    MT_MANAGER.release(BATCH_EXE_CODE)
+    while MT_MANAGER.exists(BATCH_EXE_CODE):
+      time.sleep(10)
     task_queue.do_prioritized_task(batch)
     return HttpResponseCode.ACCEPTED.format()
 
@@ -79,7 +85,7 @@ def api_add_model(modelId):
               nullable: true
     """
     logging.info(f"api_add_model  receiving: {modelId}")
-    task_queue.push(add_model, args=(modelId,), task_limit=TaskLimitCode.MODEL)
+    task_queue.push(add_model, args=(modelId,), task_code=TaskCode.MODEL)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -110,7 +116,7 @@ def api_remove_model(modelId):
               nullable: true
     """
     logging.info(f"api_remove_model  receiving: {modelId}")
-    del_model_execution(modelId)
+    del_view_execution(modelId)
     t = CatchableTread(target=remove_model, args=(modelId,))
     t.start()
     return HttpResponseCode.ACCEPTED.format()
@@ -143,8 +149,8 @@ def api_edit_model(modelId):
               nullable: true
     """
     logging.info(f"api_edit_model receiving: {modelId}")
-    del_model_execution(modelId)
-    task_queue.push(add_model, args=(modelId,), task_limit=TaskLimitCode.MODEL)
+    del_view_execution(modelId)
+    task_queue.push(add_model, args=(modelId,), task_code=TaskCode.MODEL)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -517,7 +523,7 @@ def api_add_pattern(patternId):
               nullable: true
     """
     logging.info(f"api_add_pattern receiving: {patternId}")
-    task_queue.push(add_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
+    task_queue.push(add_pattern, args=(patternId,), task_code=TaskCode.PATTERN)
     return HttpResponseCode.ACCEPTED.format()
 
 @app.route("/patterns/<string:patternId>", methods=["PATCH"])
@@ -548,7 +554,7 @@ def api_edit_pattern(patternId):
     """
     logging.info(f"api_edit_pattern receiving: {patternId}")
     del_pattern_data(patternId)
-    task_queue.push(add_pattern, args=(patternId,), task_limit=TaskLimitCode.PATTERN)
+    task_queue.push(add_pattern, args=(patternId,), task_code=TaskCode.PATTERN)
     return HttpResponseCode.ACCEPTED.format()
 
 
