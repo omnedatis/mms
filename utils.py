@@ -585,7 +585,7 @@ class QueueManager:
         for key, queue in self._queues.items():
             queue.limit = key.value
 
-    def push(self, func: Callable, task_code: TaskCode, *, args: Optional[tuple] = None):
+    def push(self, func: Callable, *, task_code: TaskCode, args: Optional[tuple] = None):
         self._queues[task_code].push(func, args=args)
 
     def do_prioritized_task(self, func: Callable, *, args: Optional[tuple] = None,
