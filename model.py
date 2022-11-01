@@ -64,6 +64,7 @@ from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
 from _core import MarketInfo
 from _core._macro import MacroManager, MacroParaEnumManager
+from _core._view.model import Labelization
 from func.common import ParamType
 from func._tp import *
 from const import *
@@ -1370,6 +1371,110 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
                  } for a, b in zip(mdates[:eidx],
                                    mdates[period:eidx+period])]
     return ret
+
+
+def get_view_prediction_by_target_date(view_id: str, market_id: str, target_date: datetime.date) -> List[Dict[str, Any]]:
+    """使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
+    那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
+    10 日), 12/11 的 20 天期預測結果(往前 20 日)... 依此類推至 120 天期.
+
+    Parameters
+    ----------
+    view_id: str
+        要用來預測的觀點 ID
+    market_id: str
+        要進行預測的市場 ID
+    target_date: datetime.date
+        要預測的目標日期 
+    
+    Returns
+    -------
+    result: List[Dict[str, Any]]
+        各天期預測結果, 若無該天期結果則不會填入陣列. 內容物件格式為
+         - dataDate: datetime.date
+            基底日期
+         - price: float
+            基底價格
+         - datePeriod: int
+            預測天期
+         - upperBound: float
+            預測上界報酬
+         - lowerBound: float
+            預測下界報酬
+         - score: int
+            預測標籤
+         - priceDate: datetime.date
+            目標預測日期
+    """
+    def _get_model_kernels(model_id: str) -> Dict[datetime.date, Dict[int, Optional[Dtc]]]:
+        """取得觀點訓練完成模型, 會根據起始日期由大到小將字典進行排序
+        
+        Parameters
+        ----------
+        model_id: str
+            觀點 ID
+        
+        Returns
+        -------
+        result: Dict[datetime.date, Dict[int, DecisionTreeClassifier | None]
+            觀點歷史訓練完成模型, 結構為: [可用起始日]-[目標天期]-DecisionTreeClassifier | None
+        """
+        result = {}
+        model_path = f'{LOCAL_DB}/models'
+        if not os.path.exists(model_path):
+            return result
+        model_names = os.listdir(f'{model_path}/{model_id}')
+        for model_name in model_names:
+            start_date = datetime.datetime.strptime(model_name, '%Y-%m-%d')
+            model_info: Optional[Dict[int, Dtc]] = pickle_load(f'{model_path}/{model_name}.pkl')
+            result[start_date] = model_info
+        result = dict(sorted(result.items(), reverse=True))
+        return result
+    results = []
+    _db = MimosaDBManager().current_db
+    _dao = get_dao()
+    market_dates = _db.get_market_dates(market_id)
+    market_cps = _db.get_market_prices(market_id)
+    models = _get_model_kernels(view_id)
+    view = _dao.get_model_info(view_id).get_model(period, start_date)
+    x_data = _db.get_pattern_values(market_id, view.patterns)
+
+    for period in PREDICT_PERIODS:
+        base_dates = market_dates[market_dates < target_date]
+        if len(base_dates) < period:
+            continue
+        base_date = base_dates[-period].tolist()
+        base_cp = market_cps.loc[np.ndarray(base_date).astype('datetime64[D]')]
+        for start_date in models:
+            if start_date < base_date:
+                model = models[start_date].get(period)
+                if model is not None:
+                    y_data = _db.get_future_returns(market_id, [period])[period]
+                    y_data = y_data[~np.isnan(y_data.values)]
+                    dates = y_data.index.values.astype('datetime64[D]')
+                    sidx = (dates < view.train_begin_date).sum()
+                    eidx = (dates < view.effective_date).sum() - view.predict_period
+                    eidx = max([sidx, eidx])
+                    y_coder = Labelization(Y_LABELS)
+                    y_coder.fit(y_data.values, Y_OUTLIER)
+
+                    x = np.array([x_data.loc[np.ndarray(base_date).astype('datetime64[D]')].values])
+                    y = model.predict(x)
+                    lower_bound = y_coder.label2lowerbound(y)[0]
+                    upper_bound = y_coder.label2upperbound(y)[0]
+                    ret = y_coder.label2mean(y)[0]
+
+                    results.append({
+                        'dataDate': str(base_date),
+                        'price': base_cp,
+                        'datePeriod': period,
+                        'upperBound': upper_bound,
+                        'lowerBound': lower_bound,
+                        'score': y[0],
+                        'priceDate': str(target_date)
+                    })
+                break
+    return results
 
 
 def get_macro_params(func_code):
