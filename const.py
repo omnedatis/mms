@@ -133,7 +133,7 @@ class TableName(Enum):
     SCORE_META: 分數標籤統計資訊表
     MODEL_MKT_HIT_SUM: 觀點命中次數記錄表
     PATTERN_EXECUTION: 現象執行紀錄表
-    VIEW_KERNEL: 觀點訓練結果使用資訊
+    MODEL_KERNEL: 觀點訓練結果使用資訊
     """
     DS_S_STOCK = "DS_S_STOCK"
     MKT_INFO = "FCST_MKT"
@@ -162,7 +162,7 @@ class TableName(Enum):
     SCORE_META = "FCST_SCORE"
     MODEL_MKT_HIT_SUM = "FCST_MODEL_MKT_HIT_SUM"
     PATTERN_EXECUTION = 'FCST_PAT_EXECUTION'
-    VIEW_KERNEL = 'FCST_VIEW_KERNEL'
+    MODEL_KERNEL = 'FCST_MODEL_KERNEL_VALID'
 
 class StoredProcedule(Enum):
     """SP名稱
@@ -708,7 +708,7 @@ class MacroTagMapField(str, Enum):
     MACRO_ID = 'MACRO_ID'
     TAG_ID = 'TAG_ID'
 
-class ViewKernelField(str, Enum):
+class ModelKernelField(str, Enum):
     """View 訓練詳細資訊
     
     MODEL_ID: 觀點 ID

@@ -1090,16 +1090,20 @@ def get_view_prediction_by_target_date(view_id: str, market_id: str, target_date
     -------
     result: List[Dict[str, Any]]
         各天期預測結果, 若無該天期結果則不會填入陣列. 內容物件格式為
-         - baseDate: datetime.date
+         - dataDate: datetime.date
             基底日期
-         - basePrice: float
+         - price: float
             基底價格
-         - predictRet: float
-            預測報酬
-         - predictUpperBound: float
+         - datePeriod: int
+            預測天期
+         - upperBound: float
             預測上界報酬
-         - predictLowerBound: float
+         - lowerBound: float
             預測下界報酬
+         - score: int
+            預測標籤
+         - priceDate: datetime.date
+            目標預測日期
     """
     def _get_model_kernels(model_id: str) -> Dict[datetime.date, Dict[int, Optional[Dtc]]]:
         """取得觀點訓練完成模型, 會根據起始日期由大到小將字典進行排序
@@ -1160,11 +1164,13 @@ def get_view_prediction_by_target_date(view_id: str, market_id: str, target_date
                     ret = y_coder.label2mean(y)[0]
 
                     results.append({
-                        'baseDate': base_date,
-                        'basePrice': base_cp,
-                        'predictRet': ret,
-                        'predictUpperBound': upper_bound,
-                        'predictLowerBound': lower_bound
+                        'dataDate': base_date,
+                        'price': base_cp,
+                        'datePeriod': period,
+                        'upperBound': upper_bound,
+                        'lowerBound': lower_bound,
+                        'score': y[0],
+                        'priceDate': target_date
                     })
                 break
     return results

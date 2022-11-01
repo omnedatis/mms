@@ -22,7 +22,7 @@ from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
                    ModelMarketMapField, ModelPatternMapField, PatternExecution,
                    PatternExecutionField, PatternInfoField, PatternParamField,
                    PatternResultField, PredictResultField, ScoreMetaField,
-                   StoredProcedule, TableName, SerialNoType, DataType, CacheName, ViewKernelField)
+                   StoredProcedule, TableName, SerialNoType, DataType, CacheName, ModelKernelField)
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
 from utils import CatchableTread, ThreadController, pickle_dump, pickle_load, dict_equals
@@ -41,7 +41,7 @@ class MimosaDBCacheManager:
         TableName.MACRO_PARAM_ENUM.value, TableName.MACRO_VERSION.value,
         TableName.MODEL_INFO.value, TableName.MODEL_EXECUTION.value,
         TableName.MODEL_MKT_MAP.value, TableName.MODEL_PAT_MAP.value,
-        TableName.SCORE_META.value, TableName.VIEW_KERNEL.value
+        TableName.SCORE_META.value, TableName.MODEL_KERNEL.value
     ]
     SWAP_TABLES = [
         TableName.MKT_HISTORY_PRICE.value,
@@ -165,10 +165,10 @@ class MimosaDBCacheManager:
             ScoreMetaField.LOWER_BOUND.value,
             ScoreMetaField.UPPER_BOUND.value
         ],
-        TableName.VIEW_KERNEL.value: [
-            ViewKernelField.MODEL_ID.value,
-            ViewKernelField.VALID_START_DT.value,
-            ViewKernelField.VALID_END_DT.value
+        TableName.MODEL_KERNEL.value: [
+            ModelKernelField.MODEL_ID.value,
+            ModelKernelField.VALID_START_DT.value,
+            ModelKernelField.VALID_END_DT.value
         ]
     }
     model_execution_stamp_queue = {}
@@ -1138,13 +1138,13 @@ class MimosaDB:
         result: Dict[str, Tuple[datetime.datetime, datetime.datetime]]
             使用觀點ID取得可用起始日與可用終止日, 結構為:觀點ID-(可用起始日, 可用終止日)
         """
-        view_kernel = self.cache_manager.get_data(TableName.VIEW_KERNEL.value)
+        view_kernel = self.cache_manager.get_data(TableName.MODEL_KERNEL.value)
         result = {}
         for i in range(len(view_kernel)):
             data = view_kernel.iloc[i]
-            model_id = data[ViewKernelField.MODEL_ID.value]
-            start_dt = data[ViewKernelField.VALID_START_DT.value]
-            end_dt = data[ViewKernelField.VALID_END_DT.value]
+            model_id = data[ModelKernelField.MODEL_ID.value]
+            start_dt = data[ModelKernelField.VALID_START_DT.value]
+            end_dt = data[ModelKernelField.VALID_END_DT.value]
             result[model_id] = (start_dt, end_dt)
         return result
 
@@ -2158,10 +2158,10 @@ class MimosaDB:
         None.
         """
         data = pd.DataFrame([view_id, start_dt], 
-            columns=[ViewKernelField.MODEL_ID.value, 
-            ViewKernelField.VALID_START_DT.value])
+            columns=[ModelKernelField.MODEL_ID.value, 
+            ModelKernelField.VALID_START_DT.value])
         data = self._extend_basic_cols(data)
-        self._insert(table_name=TableName.VIEW_KERNEL.value, data=data)
+        self._insert(table_name=TableName.MODEL_KERNEL.value, data=data)
 
     @_do_if_not_read_only
     def set_model_execution_start(self, model_id: str, exection: str) -> str:
@@ -2591,14 +2591,14 @@ class MimosaDB:
         now = np.datetime64(now).astype('datetime64[s]').tolist()
 
         whereby = [
-            (ViewKernelField.MODEL_ID.value, model_id),
-            (ViewKernelField.VALID_START_DT.value, 
+            (ModelKernelField.MODEL_ID.value, model_id),
+            (ModelKernelField.VALID_START_DT.value, 
                 np.datetime64(start_dt).astype('datetime64[s]').tolist())
         ]
         self._update(
-            table_name=TableName.VIEW_KERNEL.value,
+            table_name=TableName.MODEL_KERNEL.value,
             set_value=[
-                (ViewKernelField.VALID_END_DT.value, 
+                (ModelKernelField.VALID_END_DT.value, 
                  np.datetime64(end_dt).astype('datetime64[s]').tolist()),
                 ('MODIFY_DT', str(now)),
                 ('MODIFY_BY', self.MODIFY_BY)
