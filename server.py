@@ -15,7 +15,7 @@ import sys
 
 import numpy as np
 from model import (
-    get_mkt_trend_score, get_patterns_occur_dates, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
+    get_mkt_trend_score, get_patterns_occur_dates, get_view_prediction_by_target_date, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
     get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
@@ -1120,6 +1120,68 @@ def api_get_market_trend():
                 obj['cp'] = record[col]
         if len(obj['scores']) > 0:
             result.append(obj)
+    return HttpResponseCode.OK.format(result)
+
+@app.route("/model/prediction/targetdate", methods=["POST"])
+def api_get_prediction_targetdate():
+    """
+    使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
+    那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
+    10 日), 12/11 的 20 天期預測結果(往前 20 日)... 依此類推至 120 天期.
+    ---
+    tags:
+      - 模型
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          modelId:
+            type: string
+          marketId:
+            type: string
+          targetDate:
+            type: string
+            format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  baseDate:
+                    type: string
+                    format: date
+                  basePrice:
+                    type: number
+                  basePrice:
+                    type: number
+                  predictUpperBound:
+                    type: number
+                  predictLowerBound:
+                    type: number
+    """
+    try:
+        logging.info(f"api_get_prediction_targetdate receiving: {request.json}")
+        data = request.json
+        view_id = data["modelId"]
+        market_id = data["marketId"]
+        target_date = data.get("targetDate") or None
+        if targetDate is not None:
+            targetDate = datetime.datetime.strptime(
+                targetDate, "%Y-%m-%d").date()
+    except Exception as esp:
+        raise BadRequest
+    result = get_view_prediction_by_target_date(view_id, market_id, target_date)
     return HttpResponseCode.OK.format(result)
 
 @app.errorhandler(MethodNotAllowed)
