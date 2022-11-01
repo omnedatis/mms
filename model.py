@@ -1164,13 +1164,13 @@ def get_view_prediction_by_target_date(view_id: str, market_id: str, target_date
                     ret = y_coder.label2mean(y)[0]
 
                     results.append({
-                        'dataDate': base_date,
+                        'dataDate': str(base_date),
                         'price': base_cp,
                         'datePeriod': period,
                         'upperBound': upper_bound,
                         'lowerBound': lower_bound,
                         'score': y[0],
-                        'priceDate': target_date
+                        'priceDate': str(target_date)
                     })
                 break
     return results
