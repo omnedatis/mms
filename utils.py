@@ -427,6 +427,8 @@ class ThreadController:
     def switch_off(self):
         self._state = False
 
+    def switch_on(self):
+        self._state = True
 
 class ModelThreadManager:
     """模型多執行緒管理器

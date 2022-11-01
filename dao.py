@@ -22,7 +22,8 @@ from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
                    ModelMarketMapField, ModelPatternMapField, PatternExecution,
                    PatternExecutionField, PatternInfoField, PatternParamField,
                    PatternResultField, PredictResultField, ScoreMetaField,
-                   StoredProcedule, TableName, SerialNoType, DataType, CacheName)
+                   StoredProcedule, TableName, SerialNoType, DataType, CacheName,
+                   ModelKernelField)
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
 from utils import CatchableTread, ThreadController, pickle_dump, pickle_load, dict_equals
@@ -479,7 +480,7 @@ class MimosaDBCacheManager:
         for model_id_i, model_id in enumerate(model_ids):
             if not controller.isactive:
                 logging.info('Cloning model predict result from db terminated')
-                return 
+                return
             fp = f'{DATA_LOC}/views/{model_id}'
             if not os.path.exists(fp):
                 os.makedirs(f'{DATA_LOC}/views', exist_ok=True)
@@ -2621,6 +2622,23 @@ class MimosaDB:
                          (ModelExecutionField.MODEL_ID.value, model_id)
                      ])
 
+    def del_model_kernel(self, model_id: str):
+        """移除資料庫中 Model 的所有 execution 狀態
+
+        Parameters
+        ----------
+        model_id: str
+            Model ID
+
+        Returns
+        -------
+        None.
+        """
+        self._delete(TableName.MODEL_KERNEL.value,
+                     whereby=[
+                         (ModelKernelField.MODEL_ID.value, model_id)
+                     ])
+
     def del_model_data(self, model_id: str):
         """移除資料庫中指定 Model 由 python 計算出的預測結果資訊
 
@@ -2990,8 +3008,4 @@ class MimosaDB:
         self._insert(table_name, data)
         logging.info(f"[DB Create] Set model train complete finished: {model_id} -> {exection}")
 
-        # 同步本地端快取資料
-        local_status = self.cache_manager._convert_exec_to_status(data)[
-            model_id]
-        self.cache_manager.set_model_status(model_id, local_status)
         return exec_id

@@ -10,11 +10,11 @@ develop guilds
 * function specifics
     db-actions: db action that as no side effects on assigned db
         get_db, set_db, clean_db_cache, clone_db_cache, get_markets
-    
+
     db-wb-actions: create/update/delete action of assigned db
-        add_model, remove_model, add_pattern, del_pattern_data, 
+        add_model, remove_model, add_pattern, del_pattern_data,
         del_view_execution, del_view_data
-    
+
     module-privates:
         prefixed by ${_}
 
@@ -23,7 +23,7 @@ develop guilds
 
     api-referenced:
         public function for server api's
-    
+
     queue-pushed:
         add_model, remove_model, add_pattern
         NOTE: Handle by `CatchableThread`
@@ -46,7 +46,7 @@ develop guilds
          woundn't affect the expected flow (not necessarily so in the future).
          (add_model and add_pattern would not be trigger in batch or init, so
          it wouldn't be terminated by batch controller. The two controller
-         should be exculsive, or the function called be separated.) 
+         should be exculsive, or the function called be separated.)
 """
 import datetime
 import logging
@@ -66,17 +66,20 @@ from _core import MarketInfo
 from _core._macro import MacroManager, MacroParaEnumManager
 from func.common import ParamType
 from func._tp import *
-from _view import backtest_view, create_view, update_view
 from const import *
 from utils import *
 from const import (BatchType, MarketPeriodField, MarketScoreField,
                    ModelExecution, ModelMarketHitSumField, ModelStatus,
                    PatternExecution, PatternResultField, PredictResultField,
-                   MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE, TaskCode)
+                   MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE, TaskCode,
+                   Y_LABELS, Y_OUTLIER)
 from utils import extend_working_dates, CatchableTread, ThreadController
 from _core import Pattern
 from _db import get_dao, set_dao, MimosaDBManager
-
+from collections import defaultdict
+import multiprocessing as mp
+from threading import Thread
+from _core._view.model import COMMON_DECISION_TREE_PARAMS, Labelization
 
 task_queue = QueueManager({
     TaskCode.PATTERN: ExecQueue('pattern_queue'),
@@ -696,6 +699,304 @@ def _batch_del_view_data():
         MT_MANAGER.release(BATCH_EXE_CODE)
         raise esp
 
+def _view_batch():
+    pass
+
+def _view_remove():
+    pass
+
+def _view_recover():
+    pass
+
+def _view_update():
+    pass
+
+def _remove_view(view_id):
+    pass
+
+def _get_x_data(db_: MimosaDB, markets: List[str], patterns: List[str],
+                controller: ThreadController) -> Dict[str, pd.DataFrame]:
+    # Note: Bad performance!!
+    ret = {}
+    for market in markets:
+        if not controller.isactive:
+            return {}
+        ret[market] = db_.get_pattern_values(market, patterns)
+    return ret
+
+def _get_y_data(db_: MimosaDB, markets: List[str], period: int,
+                controller: ThreadController) -> Dict[str, pd.Series]:
+    # Note: Bad performance!!
+    ret = {}
+    for market in markets:
+        if not controller.isactive:
+            return {}
+        ret[market] = db_.get_future_returns(market, [period])[period]
+    return ret
+
+def _get_train_dataset(db_: MimosaDB, markets: List[str], patterns: List[str],
+                       tdate: datetime.date, edate: datetime.date, period: int,
+                       controller: ThreadController
+                       ) -> Tuple[Dict[str, pd.DataFrame],
+                                  Dict[str, pd.DataFrame]]:
+    x_train = _get_x_data(db_, markets, patterns, controller)
+    y_train = _get_y_data(db_, markets, period, controller)
+    ret_x = []
+    ret_y = []
+    for market in markets:
+        if not controller.isactive:
+            return np.array(), np.array()
+        dates = x_train[market].index.values.astype('datetime64[D]')
+        sidx = (dates < tdate).sum()
+        eidx = (dates < edate).sum() - period
+        eidx = max([sidx, eidx])
+        if eidx > sidx:
+            values = pd.concat([x_train[market][sidx: eidx],
+                                y_train[market][sidx: eidx]], axis=1).dropna().values
+            if len(values) > 0:
+                ret_x.append(values[:,:-1])
+                ret_y.append(Labelization(Y_LABELS).fit_transform(values[:, -1],
+                                                                  Y_OUTLIER))
+    if not controller.isactive or len(ret_x) == 0 or len(ret_y) == 0:
+        return np.array(), np.array()
+    return np.concatenate(ret_x, axis=0), np.concatenate(ret_y, axis=0)
+
+class _ViewManager:
+    def __init__(self, cpus:int=6):
+        self._controllers = {}
+        self._requires = defaultdict(int)
+        self._lock = Lock()
+        self._tasks = defaultdict(list)
+        self._queue = []
+        self._locks = defaultdict(Lock)
+        self._max_cpus = cpus
+        self._cpus = 0
+
+    def _acquire(self, view_id: str, locked):
+        if locked:
+            if view_id not in self._controllers:
+                self._controllers[view_id] = ThreadController()
+            ret = self._controllers[view_id]
+            self._requires[view_id] += 1
+        else:
+            self._lock.acquire()
+            if view_id not in self._controllers:
+                self._controllers[view_id] = ThreadController()
+            ret = self._controllers[view_id]
+            self._requires[view_id] += 1
+            self._lock.release()
+        return ret
+
+    def _release(self, view_id: str, locked):
+        if locked:
+            if view_id not in self._controllers:
+                raise RuntimeError('release an not existed controller')
+            del self._controllers[view_id]
+            self._requires[view_id] -= 1
+        else:
+            self._lock.acquire()
+            if view_id not in self._controllers:
+                raise RuntimeError('release an not existed controller')
+            del self._controllers[view_id]
+            self._requires[view_id] -= 1
+            self._lock.release()
+
+    def _isready(self, view_id, locked):
+        if locked:
+            ret = self._requires[view_id] == 0
+        else:
+            self._lock.acquire()
+            ret = self._requires[view_id] == 0
+            assert self._requires[view_id] >= 0
+            self._lock.release()
+        return ret
+
+    def _remove(self, view_id):
+        self._lock.acquire()
+        self._tasks[view_id] = ['r']
+        if view_id in self._queue:
+            self._queue.remove(view_id)
+        self._lock.release()
+        self._acquire(view_id).switch_off()
+        self._release(view_id)
+        while not self._isready(view_id):
+            time.sleep(1)
+        self._lock.acquire()
+        self._queue.append(view_id)
+        self._lock.release()
+
+    def _add(self, view_id):
+        self._lock.acquire()
+        if view_id in self._queue:
+            if self._tasks[view_id][0] == ['r']:
+                self._tasks[view_id] = ['r', 'a']
+            else:
+                self._tasks[view_id] = ['a']
+            self._queue.remove(view_id)
+        self._lock.release()
+        self._acquire(view_id).switch_off()
+        self._release(view_id)
+        while not self._isready(view_id):
+            time.sleep(1)
+        self._lock.acquire()
+        self._queue.append(view_id)
+        self._lock.release()
+
+    def _update(self, view_id):
+        self._lock.acquire()
+        if view_id in self._queue:
+            if self._tasks[view_id][-1] != ['u']:
+                self._tasks[view_id].append('u')
+        self._lock.release()
+
+    def acquire_cpu(self, locked):
+        if locked:
+            self._cpus += 1
+        else:
+            self._lock.acquire()
+            self._cpus += 1
+            self._lock.release()
+
+    def release_cpu(self, locked):
+        if locked:
+            self._cpus -= 1
+        else:
+            self._lock.acquire()
+            self._cpus -= 1
+            self._lock.release()
+
+    def _do_remove(self, view_id):
+        try:
+            get_db().del_model_execution(view_id)
+            get_db().del_model_kernal(view_id)
+            path = f'..\_local_db\models\{view_id}'
+            if os.path.exists(path):
+                shutil.rmtree(path)
+        except Exception as esp:
+            logging.error(traceback.format_exc())
+        self._release(view_id)
+        self.release_cpu()
+
+    def _get_bdates(self, view_id):
+        path = f'..\_local_db\models\{view_id}'
+        ret = []
+        if os.path.exists(path):
+            ret = [datetime.date.strptime(each[:-4], "%Y-%m-%d")
+                   for each in os.listdir(path) if each[-4:] == '.pkl']
+            ret.sort()
+        return ret
+
+    def _get_tdates(self, tg:int):
+        today = datetime.date.today()
+        ret = [datetime.date(today.year, today.month, 1)]
+        for i in range(12):
+            ret.append(self._get_prev_bdate(ret[-1], tg))
+            if (today - ret[-1]).days >= 360:
+                break
+        return ret[::-1]
+
+    def _get_prev_bdate(self, next_: datetime.date, tg: int) -> datetime.date:
+        year = next_.year
+        month = next_.month - tg
+        t = (month - 1) // 12
+        ret = datetime.date(year+t, month-12*t, 1)
+        return ret
+
+    def _do_add(self, view_id, controller):
+        try:
+            db_ = MimosaDBManager().current_db
+            view = get_db().get_model_info(view_id)
+            bdates = self._get_bdates(view_id)
+            prev = None
+            for bdate in self._get_tdates(view.train_gap):
+                if bdate in bdates:
+                    prev = bdate
+                    continue
+                if not controller.isactive:
+                    break
+                models = self._train(view, bdate, controller)
+                if controller.isactive:
+                    pickle_dump(models, f'..\_local_db\models\{view_id}\{bdate}.pkl')
+                    if prev is not None:
+                        get_db().update_view_kernel(view_id, prev, bdate-datetime.timedelta(1))
+                    get_db().save_view_kernel(view_id, bdate)
+                prev = bdate
+
+        except Exception as esp:
+            logging.error(traceback.format_exc())
+        self._release(view_id)
+        self.release_cpu()
+
+    def _get_next_bdate(self, prev: datetime.date, tg: int) -> datetime.date:
+        year = prev.year
+        month = prev.month + tg
+        t = (month - 1) // 12
+        ret = datetime.date(year+t, month-12*t, 1)
+        return ret
+
+    def _train(self, view, bdate, controller):
+        models = {}
+        for p in PREDICT_PERIODS:
+            x, y = _get_train_dataset(db_, view.markets, view.patterns,
+                                      view.train_begin, bdate, p, controller)
+            if not controller.isactive:
+                break
+            if len(x) <= 0 or len(y) <= 0:
+                continue
+            models[p] = Dtc(**COMMON_DECISION_TREE_PARAMS)
+            models[p].fit(x,y)
+        if controller.isactive:
+            return models
+        return None
+
+    def _do_update(self, view_id, controller):
+        try:
+            db_ = MimosaDBManager().next_db
+            view = get_db().get_model_info(view_id)
+            bdates = _get_bdates(view_id)
+            if len(models) <= 0:
+                raise RuntimeError("update model before adding")
+            bdate = self._get_next_bdate(bdates[-1], tg)
+            if datetime.date.today() >= bdate:
+                models = self._train(view, bdate, controller)
+            if controller.isactive:
+                pickle_dump(models, f'..\_local_db\models\{view_id}\{bdate}.pkl')
+                get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
+                get_db().save_view_kernel(view_id, bdate)
+        except Exception as esp:
+            logging.error(traceback.format_exc())
+        self._release(view_id)
+        self.release_cpu()
+
+    def _run(self):
+        while True:
+            self._lock.acquire()
+            if len(self._queue) > 0 or self._cpus >= self._max_cpus:
+                self._lock.release()
+                time.sleep(1)
+                continue
+            for view_id in self._queue:
+                if not self._isready(view_id, locked=True):
+                    continue
+                if len(self._tasks[view_id]) > 0:
+                    t = self._tasks[view_id][0]
+                    self._tasks[view_id] = self._tasks[view_id][1:]
+                    self.acquire_cpu(locked=True)
+                    controller = self._acquire(view_id, locked=True)
+                    self._lock.release()
+                    if t == 'r':
+                        Thread(targer=self._do_remove, args=(view_id, )).start()
+                    elif t == 'a':
+                        Thread(targer=self._do_add, args=(view_id, controller)).start()
+                    elif t == 'u':
+                        Thread(targer=self._do_update, args=(view_id, controller)).start()
+                    else:
+                        raise RuntimeError(f"invalid execution type {t}")
+                    time.sleep(1)
+                else:
+                    self._queue = self._queue[1:]
+                    self._lock.release()
+
 
 def _init_db():
     try:
@@ -1158,7 +1459,6 @@ def get_draft_date(func_code: str, kwargs: Dict[str, Any], market_id: str,
     if end_date is not None:
         ret = ret[ret <= end_date]
     return ret.tolist()
-
 
 def get_mkt_trend_score(market_id: str,
                         start_date: Optional[datetime.date] = None,
