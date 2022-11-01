@@ -22,7 +22,7 @@ from const import (DATA_LOC, BatchType, DBModelStatus, DBPatternStatus,
                    ModelMarketMapField, ModelPatternMapField, PatternExecution,
                    PatternExecutionField, PatternInfoField, PatternParamField,
                    PatternResultField, PredictResultField, ScoreMetaField,
-                   StoredProcedule, TableName, SerialNoType, DataType, CacheName)
+                   StoredProcedule, TableName, SerialNoType, DataType, CacheName, ViewKernelField)
 from _core import Pattern as PatternInfo
 from _core import View as ModelInfo
 from utils import CatchableTread, ThreadController, pickle_dump, pickle_load, dict_equals
@@ -41,7 +41,7 @@ class MimosaDBCacheManager:
         TableName.MACRO_PARAM_ENUM.value, TableName.MACRO_VERSION.value,
         TableName.MODEL_INFO.value, TableName.MODEL_EXECUTION.value,
         TableName.MODEL_MKT_MAP.value, TableName.MODEL_PAT_MAP.value,
-        TableName.SCORE_META.value
+        TableName.SCORE_META.value, TableName.VIEW_KERNEL.value
     ]
     SWAP_TABLES = [
         TableName.MKT_HISTORY_PRICE.value,
@@ -164,6 +164,11 @@ class MimosaDBCacheManager:
             ScoreMetaField.SCORE_VALUE.value,
             ScoreMetaField.LOWER_BOUND.value,
             ScoreMetaField.UPPER_BOUND.value
+        ],
+        TableName.VIEW_KERNEL.value: [
+            ViewKernelField.MODEL_ID.value,
+            ViewKernelField.VALID_START_DT.value,
+            ViewKernelField.VALID_END_DT.value
         ]
     }
     model_execution_stamp_queue = {}
@@ -1124,6 +1129,24 @@ class MimosaDB:
         )
         model_ids = model_info[ModelInfoField.MODEL_ID.value].values.tolist()
         return model_ids
+
+    def get_view_kernel(self) -> Dict[str, Tuple[datetime.datetime, datetime.datetime]]:
+        """取得觀點訓練結果使用資訊
+
+        Returns
+        -------
+        result: Dict[str, Tuple[datetime.datetime, datetime.datetime]]
+            使用觀點ID取得可用起始日與可用終止日, 結構為:觀點ID-(可用起始日, 可用終止日)
+        """
+        view_kernel = self.cache_manager.get_data(TableName.VIEW_KERNEL.value)
+        result = {}
+        for i in range(len(view_kernel)):
+            data = view_kernel.iloc[i]
+            model_id = data[ViewKernelField.MODEL_ID.value]
+            start_dt = data[ViewKernelField.VALID_START_DT.value]
+            end_dt = data[ViewKernelField.VALID_END_DT.value]
+            result[model_id] = (start_dt, end_dt)
+        return result
 
 # 當下由資料庫取得資料
     def get_macro_param_type(self, function_code: str) -> Dict[str, str]:
@@ -2120,6 +2143,26 @@ class MimosaDB:
         self._insert(TableName.MACRO_TAG.value, macro_tag)
         self._insert(TableName.MACRO_TAG_MAP.value, macro_tag_map)
 
+    def save_view_kernel(self, view_id: str, start_dt: datetime.date):
+        """儲存觀點訓練結果資訊
+
+        Parameters
+        ----------
+        view_id: str
+            觀點ID
+        start_dt: datetime.date
+            觀點訓練結果可用起始日
+        
+        Returns
+        -------
+        None.
+        """
+        data = pd.DataFrame([view_id, start_dt], 
+            columns=[ViewKernelField.MODEL_ID.value, 
+            ViewKernelField.VALID_START_DT.value])
+        data = self._extend_basic_cols(data)
+        self._insert(table_name=TableName.VIEW_KERNEL.value, data=data)
+
     @_do_if_not_read_only
     def set_model_execution_start(self, model_id: str, exection: str) -> str:
         """ create model exec
@@ -2527,6 +2570,41 @@ class MimosaDB:
                 ],
                 whereby=whereby
             )
+
+    def update_view_kernel(self, model_id: str, start_dt: datetime.date, end_dt: datetime.date):
+        """更新觀點訓練結果資訊
+
+        Parameters
+        ----------
+        model_id: str
+            觀點ID
+        start_dt: datetime.date
+            觀點訓練結果可用起始日
+        end_dt: datetime.date
+            觀點訓練結果可用終止日
+        
+        Returns
+        -------
+        None.
+        """
+        now = datetime.datetime.now()
+        now = np.datetime64(now).astype('datetime64[s]').tolist()
+
+        whereby = [
+            (ViewKernelField.MODEL_ID.value, model_id),
+            (ViewKernelField.VALID_START_DT.value, 
+                np.datetime64(start_dt).astype('datetime64[s]').tolist())
+        ]
+        self._update(
+            table_name=TableName.VIEW_KERNEL.value,
+            set_value=[
+                (ViewKernelField.VALID_END_DT.value, 
+                 np.datetime64(end_dt).astype('datetime64[s]').tolist()),
+                ('MODIFY_DT', str(now)),
+                ('MODIFY_BY', self.MODIFY_BY)
+            ],
+            whereby=whereby
+        )
 
     @_do_if_not_read_only
     def stamp_model_execution(self, exec_ids: List[str]):
@@ -2945,7 +3023,7 @@ class MimosaDB:
 
 
     @_do_if_not_read_only
-    def set_model_train_complete(self, model_id: str) -> str:
+    def set_model_train_complete(self, model_id: str):
         """ create model train complete exec
 
         Parameters
@@ -2955,8 +3033,7 @@ class MimosaDB:
 
         Returns
         -------
-        exec_id: str
-            ID of model execution status
+        None.
 
         """
         table_name = TableName.MODEL_EXECUTION.value
@@ -2989,9 +3066,3 @@ class MimosaDB:
         logging.info(f"[DB Create] Set model train complete {model_id} -> {exection}")
         self._insert(table_name, data)
         logging.info(f"[DB Create] Set model train complete finished: {model_id} -> {exection}")
-
-        # 同步本地端快取資料
-        local_status = self.cache_manager._convert_exec_to_status(data)[
-            model_id]
-        self.cache_manager.set_model_status(model_id, local_status)
-        return exec_id

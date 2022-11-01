@@ -132,6 +132,8 @@ class TableName(Enum):
     PREDICT_RESULT_HISTORY: 觀點歷史預測結果資訊表
     SCORE_META: 分數標籤統計資訊表
     MODEL_MKT_HIT_SUM: 觀點命中次數記錄表
+    PATTERN_EXECUTION: 現象執行紀錄表
+    VIEW_KERNEL: 觀點訓練結果使用資訊
     """
     DS_S_STOCK = "DS_S_STOCK"
     MKT_INFO = "FCST_MKT"
@@ -160,6 +162,7 @@ class TableName(Enum):
     SCORE_META = "FCST_SCORE"
     MODEL_MKT_HIT_SUM = "FCST_MODEL_MKT_HIT_SUM"
     PATTERN_EXECUTION = 'FCST_PAT_EXECUTION'
+    VIEW_KERNEL = 'FCST_VIEW_KERNEL'
 
 class StoredProcedule(Enum):
     """SP名稱
@@ -705,6 +708,16 @@ class MacroTagMapField(str, Enum):
     MACRO_ID = 'MACRO_ID'
     TAG_ID = 'TAG_ID'
 
+class ViewKernelField(str, Enum):
+    """View 訓練詳細資訊
+    
+    MODEL_ID: 觀點 ID
+    VALID_START_DT: 模型可用的起始時間(包含該日期)
+    VALID_END_DT: 模型可用的終止時間(包含該日期)
+    """
+    MODEL_ID = 'MODEL_ID'
+    VALID_START_DT = 'VALID_START_DT'
+    VALID_END_DT = 'VALID_END_DT'
 
 class SerialNoType(Enum):
     """呼叫取得序列號時需要使用的參數
