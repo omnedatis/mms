@@ -5,7 +5,8 @@ import logging
 import os
 import pickle
 import shutil
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+from threading import Lock
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from pymysql import IntegrityError
@@ -771,7 +772,7 @@ class MimosaDB:
                 return func(self, *args, **kwargs)
         return wrap
 
-    def _use_write_local(func: Callable) -> Callable:
+    def _use_write_local(func: Callable, lock=Lock()) -> Callable:
         """使用 write local 裝飾詞時, 修飾的方法需要有
         data 與 table_name 兩個參數
         """
@@ -782,10 +783,12 @@ class MimosaDB:
                 data = args[1] if 'data' not in kwargs else kwargs['data']
                 fp = f'{self.WRITE_LOCAL_FP}/{table_name}.pkl'
                 record = {}
+                lock.acquire()
                 if os.path.exists(fp):
                     record = pickle_load(fp)
                 record[str(now)] = data
                 pickle_dump(record, fp)
+                lock.release()
             return func(self, *args, **kwargs)
         return wrap
 
@@ -2158,7 +2161,7 @@ class MimosaDB:
         -------
         None.
         """
-        data = pd.DataFrame([view_id, start_dt], 
+        data = pd.DataFrame([[view_id, start_dt]], 
             columns=[ModelKernelField.MODEL_ID.value, 
             ModelKernelField.VALID_START_DT.value])
         data = self._extend_basic_cols(data)
@@ -2594,13 +2597,13 @@ class MimosaDB:
         whereby = [
             (ModelKernelField.MODEL_ID.value, model_id),
             (ModelKernelField.VALID_START_DT.value, 
-                np.datetime64(start_dt).astype('datetime64[s]').tolist())
+                np.datetime64(start_dt).astype('datetime64[D]').tolist())
         ]
         self._update(
             table_name=TableName.MODEL_KERNEL.value,
             set_value=[
                 (ModelKernelField.VALID_END_DT.value, 
-                 np.datetime64(end_dt).astype('datetime64[s]').tolist()),
+                 str(np.datetime64(end_dt).astype('datetime64[D]').tolist())),
                 ('MODIFY_DT', str(now)),
                 ('MODIFY_BY', self.MODIFY_BY)
             ],

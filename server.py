@@ -7,36 +7,39 @@ Created on Tue March 8 17:07:36 2021
 WSGI python server
 """
 import argparse
+import datetime
+import logging
+from logging import handlers
 import os
 import time
 import traceback
 import threading as mt
+from typing import Optional
 import sys
+import warnings
 
 import numpy as np
-from model import (
-    get_mkt_trend_score, get_patterns_occur_dates, get_view_prediction_by_target_date, set_db, batch, init_db, get_mix_pattern_occur, get_mix_pattern_mkt_dist_info,
-    get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, get_market_price_dates,
-    get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
-    task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
-    cast_macro_kwargs, del_view_execution, check_macro_info, CatchableTread,
-    get_occurred_patterns, get_draft_date, MT_MANAGER, edit_model, _ViewManagerFactory)
-from const import (
-    ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
-    BATCH_EXE_CODE)
-from func.common import Ptype
-import datetime
 from dao import MimosaDB
 from flask import Flask, request
 from flasgger import Swagger
 from waitress import serve
 from werkzeug.exceptions import MethodNotAllowed, NotFound, InternalServerError, BadRequest
-import logging
-from logging import handlers
-import warnings
+
+from model import (
+    get_mkt_trend_score, get_patterns_occur_dates, set_db, batch, add_model,
+    get_mix_pattern_occur,get_mix_pattern_rise_prob, get_mix_pattern_occur_cnt, 
+    get_market_price_dates, get_market_rise_prob, get_mkt_dist_info, add_pattern, 
+    verify_pattern, get_frame, get_plot, del_pattern_data, cast_macro_kwargs, 
+    del_view_execution, check_macro_info, get_mix_pattern_mkt_dist_info, 
+    get_occurred_patterns, get_draft_date, edit_model, remove_model, task_queue,
+    get_daterange_pred, get_basedate_pred, init_db, get_targetdate_pred, ViewManagerFactory)
+from utils import MT_MANAGER, CatchableTread
+from const import (
+    ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
+    BATCH_EXE_CODE)
+from func.common import Ptype
 
 app = Flask(__name__)
-
 Swagger(app)
 
 parser = argparse.ArgumentParser(prog="Program start server")
@@ -54,7 +57,7 @@ def api_batch():
     MT_MANAGER.release(BATCH_EXE_CODE)
     while MT_MANAGER.exists(BATCH_EXE_CODE):
       time.sleep(10)
-    task_queue.do_prioritized_task(batch)
+    mt.Thread(target=batch).start
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -85,7 +88,7 @@ def api_add_model(modelId):
               nullable: true
     """
     logging.info(f"api_add_model  receiving: {modelId}")
-    task_queue.push(add_model, args=(modelId,), task_code=TaskCode.MODEL)
+    add_model(modelId)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -149,7 +152,7 @@ def api_edit_model(modelId):
               nullable: true
     """
     logging.info(f"api_edit_model receiving: {modelId}")
-    task_queue.push(edit_model, args=(modelId,), task_code=TaskCode.MODEL)
+    edit_model(modelId)
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -948,240 +951,6 @@ def api_get_pattern_plot():
             })
     return HttpResponseCode.OK.format(ret)
 
-@app.route('/pattern/draft/occurdates', methods=['POST'])
-def api_get_pattern_draft_date():
-    """
-    取得現象草稿發生日期
-    ---
-    tags:
-      - 現象相關
-    parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          funcCode:
-            type: string
-          paramCodes:
-            type: array
-            items:
-              type: object
-              properties:
-                paramCode:
-                  type: string
-                paramValue:
-                  type: string
-          marketCode:
-            type: string
-          startDate:
-            type: string
-            format: date
-          endDate:
-            type: string
-            format: date
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: array
-              items:
-                type: string
-                format: date
-    """
-    logging.info(f"api_pattern_get_frame receiving: {request.json}")
-    try:
-        data = request.json
-        func_code = data['funcCode']
-        params_codes = data['paramCodes']
-        market_code = data['marketCode']
-        kwargs = {each["paramCode"]: each["paramValue"]
-                  for each in params_codes}
-        start_date = data.get('startDate')
-        end_date = data.get('endDate')
-        if start_date is not None:
-            start_date = datetime.datetime.strptime(
-                start_date, "%Y-%m-%d").date()
-        if end_date is not None:
-            end_date = datetime.datetime.strptime(
-                end_date, "%Y-%m-%d").date()
-        if check_macro_info(func_code):
-            raise InternalServerError(f'found inconsistent data type on {func_code}')
-        print(kwargs)
-        kwargs, msg = cast_macro_kwargs(func_code, kwargs)
-        if msg:
-            return HttpResponseCode.BAD_REQUEST.format(msg)
-    except KeyError:
-        raise BadRequest
-    except ValueError:
-        raise InternalServerError
-    ret = get_draft_date(func_code, kwargs, market_code, start_date, end_date)
-    ret = [datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]
-    return HttpResponseCode.OK.format(ret)
-
-@app.route("/markets/trend", methods=["POST"])
-def api_get_market_trend():
-    """
-    取得指定市場一組或一段指定時間的過去各天期報酬趨勢
-    ---
-    tags:
-      - 市場
-    parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          marketId:
-            type: string
-          startDate:
-            type: string
-            format: date
-          endDate:
-            type: string
-            format: date
-          dates:
-            type: array
-            items:
-              type: string
-              format: date
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  date:
-                    type: string
-                    format: date
-                  cp:
-                    type: number
-                  scores:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        datePeriod:
-                          type: integer
-                        score:
-                          type: integer
-    """
-    try:
-        logging.info(f"api_get_market_trend receiving: {request.json}")
-        data = request.json
-        market_id = data["marketId"]
-        start_date = data.get("startDate") or None
-        if start_date is not None:
-            start_date = datetime.datetime.strptime(
-                start_date, "%Y-%m-%d").date()
-        end_date = data.get("endDate") or None
-        if end_date is not None:
-            end_date = datetime.datetime.strptime(
-                end_date, "%Y-%m-%d").date()
-        dates = data.get("dates") or None
-        if dates is not None:
-            dates = [datetime.datetime.strptime(
-                     each, "%Y-%m-%d").date() for each in dates]
-    except Exception as esp:
-        raise BadRequest
-    ret = get_mkt_trend_score(market_id, start_date, end_date, dates)
-    result = []
-    dates = ret.index.values.astype('datetime64[D]')
-    for i in range(len(ret)):
-        record = ret.iloc[i]
-        obj = {
-          'date': str(dates[i]),
-          'scores': []
-        }
-        for col in record.index.values:
-            if col != 'CP':
-                if np.isnan(record[col]):
-                  continue
-                obj['scores'].append({
-                  'datePeriod': col,
-                  'score': record[col]
-                })
-            else:
-                obj['cp'] = record[col]
-        if len(obj['scores']) > 0:
-            result.append(obj)
-    return HttpResponseCode.OK.format(result)
-
-@app.route("/model/prediction/targetdate", methods=["POST"])
-def api_get_prediction_targetdate():
-    """
-    使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
-    那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
-    10 日), 12/11 的 20 天期預測結果(往前 20 日)... 依此類推至 120 天期.
-    ---
-    tags:
-      - 模型
-    parameters:
-      - name: request
-        in: body
-        type: object
-        properties:
-          modelId:
-            type: string
-          marketId:
-            type: string
-          targetDate:
-            type: string
-            format: date
-    responses:
-      200:
-        description: 成功取得
-        schema:
-          type: object
-          properties:
-            status:
-              type: integer
-            message:
-              type: string
-            data:
-              type: array
-              items:
-                type: object
-                properties:
-                  baseDate:
-                    type: string
-                    format: date
-                  basePrice:
-                    type: number
-                  basePrice:
-                    type: number
-                  predictUpperBound:
-                    type: number
-                  predictLowerBound:
-                    type: number
-    """
-    try:
-        logging.info(f"api_get_prediction_targetdate receiving: {request.json}")
-        data = request.json
-        view_id = data["modelId"]
-        market_id = data["marketId"]
-        target_date = data.get("targetDate") or None
-        if targetDate is not None:
-            targetDate = datetime.datetime.strptime(
-                targetDate, "%Y-%m-%d").date()
-    except Exception as esp:
-        raise BadRequest
-    result = get_view_prediction_by_target_date(view_id, market_id, target_date)
-    return HttpResponseCode.OK.format(result)
 
 @app.route('/pattern/draft/occurdates', methods=['POST'])
 def api_get_pattern_draft_date():
@@ -1355,6 +1124,7 @@ def api_get_market_trend():
         if len(obj['scores']) > 0:
             result.append(obj)
     return HttpResponseCode.OK.format(result)
+
 
 @app.route("/model/prediction/targetdate", methods=["POST"])
 def api_get_prediction_targetdate():
@@ -1410,12 +1180,12 @@ def api_get_prediction_targetdate():
         view_id = data["modelId"]
         market_id = data["marketId"]
         target_date = data.get("targetDate") or None
-        if targetDate is not None:
-            targetDate = datetime.datetime.strptime(
-                targetDate, "%Y-%m-%d").date()
+        if target_date is not None:
+            target_date = datetime.datetime.strptime(
+                target_date, "%Y-%m-%d").date()
     except Exception as esp:
         raise BadRequest
-    result = get_view_prediction_by_target_date(view_id, market_id, target_date)
+    result = get_targetdate_pred(view_id, market_id, target_date)
     return HttpResponseCode.OK.format(result)
 
 @app.route("/model/prediction/basedate", methods=["POST"])
@@ -1615,7 +1385,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=0, format=fmt, handlers=[
                             err_hdlr, info_hdlr, file_hdlr], datefmt='%Y-%m-%d %H:%M:%S')
         task_queue.start()
-        Thread(target=_ViewManagerFactory.get()._run).start()
+        Thread(target=ViewManagerFactory.get()._run).start()
         set_db(MimosaDB(mode=exec_mode))
 
     except Exception:
