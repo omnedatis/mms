@@ -1183,6 +1183,388 @@ def api_get_prediction_targetdate():
     result = get_view_prediction_by_target_date(view_id, market_id, target_date)
     return HttpResponseCode.OK.format(result)
 
+@app.route('/pattern/draft/occurdates', methods=['POST'])
+def api_get_pattern_draft_date():
+    """
+    取得現象草稿發生日期
+    ---
+    tags:
+      - 現象相關
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          funcCode:
+            type: string
+          paramCodes:
+            type: array
+            items:
+              type: object
+              properties:
+                paramCode:
+                  type: string
+                paramValue:
+                  type: string
+          marketCode:
+            type: string
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: string
+                format: date
+    """
+    logging.info(f"api_pattern_get_frame receiving: {request.json}")
+    try:
+        data = request.json
+        func_code = data['funcCode']
+        params_codes = data['paramCodes']
+        market_code = data['marketCode']
+        kwargs = {each["paramCode"]: each["paramValue"]
+                  for each in params_codes}
+        start_date = data.get('startDate')
+        end_date = data.get('endDate')
+        if start_date is not None:
+            start_date = datetime.datetime.strptime(
+                start_date, "%Y-%m-%d").date()
+        if end_date is not None:
+            end_date = datetime.datetime.strptime(
+                end_date, "%Y-%m-%d").date()
+        if check_macro_info(func_code):
+            raise InternalServerError(f'found inconsistent data type on {func_code}')
+        print(kwargs)
+        kwargs, msg = cast_macro_kwargs(func_code, kwargs)
+        if msg:
+            return HttpResponseCode.BAD_REQUEST.format(msg)
+    except KeyError:
+        raise BadRequest
+    except ValueError:
+        raise InternalServerError
+    ret = get_draft_date(func_code, kwargs, market_code, start_date, end_date)
+    ret = [datetime.datetime.strftime(i, '%Y-%m-%d') for i in ret]
+    return HttpResponseCode.OK.format(ret)
+
+@app.route("/markets/trend", methods=["POST"])
+def api_get_market_trend():
+    """
+    取得指定市場一組或一段指定時間的過去各天期報酬趨勢
+    ---
+    tags:
+      - 市場
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          marketId:
+            type: string
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
+          dates:
+            type: array
+            items:
+              type: string
+              format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  cp:
+                    type: number
+                  scores:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        datePeriod:
+                          type: integer
+                        score:
+                          type: integer
+    """
+    try:
+        logging.info(f"api_get_market_trend receiving: {request.json}")
+        data = request.json
+        market_id = data["marketId"]
+        start_date = data.get("startDate") or None
+        if start_date is not None:
+            start_date = datetime.datetime.strptime(
+                start_date, "%Y-%m-%d").date()
+        end_date = data.get("endDate") or None
+        if end_date is not None:
+            end_date = datetime.datetime.strptime(
+                end_date, "%Y-%m-%d").date()
+        dates = data.get("dates") or None
+        if dates is not None:
+            dates = [datetime.datetime.strptime(
+                     each, "%Y-%m-%d").date() for each in dates]
+    except Exception as esp:
+        raise BadRequest
+    ret = get_mkt_trend_score(market_id, start_date, end_date, dates)
+    result = []
+    dates = ret.index.values.astype('datetime64[D]')
+    for i in range(len(ret)):
+        record = ret.iloc[i]
+        obj = {
+          'date': str(dates[i]),
+          'scores': []
+        }
+        for col in record.index.values:
+            if col != 'CP':
+                if np.isnan(record[col]):
+                  continue
+                obj['scores'].append({
+                  'datePeriod': col,
+                  'score': record[col]
+                })
+            else:
+                obj['cp'] = record[col]
+        if len(obj['scores']) > 0:
+            result.append(obj)
+    return HttpResponseCode.OK.format(result)
+
+@app.route("/model/prediction/targetdate", methods=["POST"])
+def api_get_prediction_targetdate():
+    """
+    使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
+    那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
+    10 日), 12/11 的 20 天期預測結果(往前 20 日)... 依此類推至 120 天期.
+    ---
+    tags:
+      - 觀點預測
+    parameters:
+      - name: request
+        in: body
+        type: object
+        properties:
+          modelId:
+            type: string
+          marketId:
+            type: string
+          targetDate:
+            type: string
+            format: date
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  baseDate:
+                    type: string
+                    format: date
+                  basePrice:
+                    type: number
+                  basePrice:
+                    type: number
+                  predictUpperBound:
+                    type: number
+                  predictLowerBound:
+                    type: number
+    """
+    try:
+        logging.info(f"api_get_prediction_targetdate receiving: {request.json}")
+        data = request.json
+        view_id = data["modelId"]
+        market_id = data["marketId"]
+        target_date = data.get("targetDate") or None
+        if targetDate is not None:
+            targetDate = datetime.datetime.strptime(
+                targetDate, "%Y-%m-%d").date()
+    except Exception as esp:
+        raise BadRequest
+    result = get_view_prediction_by_target_date(view_id, market_id, target_date)
+    return HttpResponseCode.OK.format(result)
+
+@app.route("/model/prediction/basedate", methods=["POST"])
+def api_get_basedate_prediction():
+    """
+    取得指定基底日期各天期預測結果
+    ---
+    tags:
+      - 觀點預測
+    parameters:
+      - name:
+        in: body
+        type: object
+        properties:
+          baseDate:
+            type: string
+            format: date
+          marketCode:
+            type: string
+          modelId:
+            type: string
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  dataDate:
+                    type: number
+                  upperBound:
+                    type: integer
+                  lowerBound:
+                    type: integer
+                  datePeriod:
+                    type: integer
+                  priceDate:
+                    type: string
+                    format: date
+                  score:
+                    type: interger
+                  price:
+                    type: number
+    """
+    try:
+      logging.info(f"api_get_basedate_prediction receiving: {request.json}")
+      req:dict = request.json
+      try:
+        market_id = req['marketCode']
+        view_id = req['modelId']
+        base_date:Optional[datetime.date] = req.get('baseDate')
+        if base_date is not None:
+          base_date = base_date.strftime('%Y-%m-%d')
+      except Exception as esp:
+        raise BadRequest(f'invalid arguments {req}')
+      ret = get_basedate_pred(view_id, market_id, base_date=base_date)
+      return HttpResponseCode.OK(ret)
+    except BadRequest as esp:
+      logging.info(traceback.format_exc())
+      raise esp
+    except InternalServerError as esp:
+      logging.info(traceback.format_exc())
+      raise esp
+
+
+@app.route("/model/prediction/range", methods=["POST"])
+def api_get_daterange_prediction():
+    """
+    取得指定日期各天期所有預測結果
+    ---
+    tags:
+      - 觀點預測
+    parameters:
+      - name:
+        in: body
+        type: object
+        properties:
+          startDate:
+            type: string
+            format: date
+          endDate:
+            type: string
+            format: date
+          datePeriod:
+            type: integer
+          marketCode:
+            type: string
+          modelId:
+            type: string
+    responses:
+      200:
+        description: 成功取得
+        schema:
+          type: object
+          properties:
+            status:
+              type: integer
+            message:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  dataDate:
+                    type: string
+                    format: date
+                  upperBound:
+                    type: number
+                  lowerBound:
+                    type: number
+                  priceDate:
+                    type: string
+                    format: date
+                  score:
+                    type: interger
+                  price:
+                    type: number
+    """
+    try:
+      logging.info(f"api_get_daterange_prediction receiving: {request.json}")
+      req:dict = request.json
+      try:
+        market_id = req['marketCode']
+        view_id = req['modelId']
+        period = req['datePeriod']
+        start_date = req['startDate']
+        end_date = req['endDate']
+      except Exception as esp:
+        raise BadRequest(f'invalid arguments {req}')
+      ret = get_daterange_pred(
+        view_id, market_id, period=period, start_date=start_date, end_date=end_date)
+      return HttpResponseCode.OK([i._asdict() for i in ret])
+    except BadRequest as esp:
+      logging.info(traceback.format_exc())
+      raise esp
+    except InternalServerError as esp:
+      logging.info(traceback.format_exc())
+      raise esp
+
+
 @app.errorhandler(MethodNotAllowed)
 def handle_not_allow_request(e):
     logging.error(traceback.format_exc())

@@ -1042,14 +1042,14 @@ def _batch():
         MT_MANAGER.release(BATCH_EXE_CODE)
 
 
-def batch():
-    now = datetime.datetime.now()
-    date = now.date().day
-    hour = now.hour
-    minute = now.minute
-    sec =  now.second
-    task_queue.do_prioritized_task(
-        _batch, name=f'service_batch_{date}{hour}{minute}{sec}')
+# def batch():
+#     now = datetime.datetime.now()
+#     date = now.date().day
+#     hour = now.hour
+#     minute = now.minute
+#     sec =  now.second
+#     task_queue.do_prioritized_task(
+#         _batch, name=f'service_batch_{date}{hour}{minute}{sec}')
 
 
 def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None,
