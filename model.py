@@ -1626,3 +1626,104 @@ def get_mkt_trend_score(market_id: str,
     result = pd.DataFrame(result)
     result = pd.concat([cps, result], axis=1)
     return result
+
+class DateBaseDateResp(NamedTuple):
+    dataDate:datetime.datetime
+    price:float
+    datePeriod:int
+    upperBound:float
+    lowerBound:float
+    score:int
+    priceDate:datetime.datetime
+
+
+def get_basedate_pred(view_id:str, market_id:str, 
+        base_date:Optional[datetime.date]=None) -> DateBaseDateResp:
+    V_PATH = LOCAL_DB+f'/models/{view_id}'
+    if not os.path.isdir(V_PATH):
+        raise BadRequest(f'requested view {view_id} not does not exist')
+    _db = MimosaDBManager().current_db
+    if not _db.is_initialized():
+        return []
+    ret = []
+    view_info = get_db().get_model_info(view_id)
+    view_begin = view_info.train_begin
+    effective_date = view_info.get_effective_date(base_date)
+    ptns = _db.get_pattern_values(market_id, view_info.patterns)
+    base_date = base_date or ptns.index[-1].astype('datetime64[D]')
+    prices = _db.get_market_prices(market_id)
+    base_cp = prices[prices.index == np.array(base_date)].values.tolist()[0]
+    base_date = prices[prices.index == np.array(base_date)].index.tolist()[0]
+    ptns = ptns[prices.index == np.array(base_date)].values
+    price_dates = {p:i for p in PREDICT_PERIODS for i in get_market_price_dates(
+        market_id, base_date) if i['DATE_PERIOD'] == period}
+    begin = (prices.index.astype('datetime64[D]') >= view_begin).sum()
+    end = (prices.index.astype('datetime64[D]') <= effective_date)
+    model:Dtc = pickle.load(open(V_PATH+f'/{effective_date}', 'wb'))
+    pred = model.predict(ptns).tolist()[0]
+    for period in PREDICT_PERIODS:
+        y_coder = Labelization(Y_LABELS)
+        market_ret = _db.get_future_returns(market_id, period)
+        encode_data = market_ret[begin:end-1]
+        y_coder.fit(encode_data.values, Y_OUTLIER)
+        lower_bound = y_coder.label2lowerbound(pred)[0]
+        upper_bound = y_coder.label2upperbound(pred)[0]
+        ret.append({
+            'dataDate': base_date,
+            'price': base_cp,
+            'datePeriod': period,
+            'upperBound': upper_bound,
+            'lowerBound': lower_bound,
+            'score': pred,
+            'priceDate': price_dates
+        })
+    return ret
+
+class DateRangePredResp(NamedTuple):
+    dataDate:datetime.datetime
+    price:float
+    upperBound:float
+    lowerBound:float
+    score:int
+    priceDate:datetime.datetime
+
+
+def get_daterange_pred(view_id:str, market_id:str, *, period:int, 
+        start_date:datetime.date, end_date:datetime.date)-> List[DateRangePredResp]:
+    V_PATH = LOCAL_DB+f'/models/{view_id}'
+    if not os.path.isdir(V_PATH):
+        raise BadRequest(f'requested view {view_id} not does not exist')
+    _db = MimosaDBManager().current_db
+    if not _db.is_initialized():
+        return []
+    ret = []
+    view_info = get_db().get_model_info(view_id)
+    view_begin = view_info.train_begin
+    models:Dict[str, Dtc] = {i.split['/'][-1][:-4]:pickle.load(
+        open(i, 'rb'))for i in glob.glob(f'{V_PATH}/*.pkl')}
+    e_dates = {i:np.array(
+        datetime.datetime.strptime(i, '%Y-%m-%d')) for i in models}
+    ptns = _db.get_pattern_values(market_id, view_info.patterns)
+    freturns = _db.get_future_returns(market_id, period)[str(period)].rename('freturn')
+    prices = _db.get_market_prices(market_id).rename('cp')
+    ptidx, ridx, pidx = ptns.index, freturns.index, prices.index
+    for key, date in e_dates:
+        _prices = prices[(pidx>=view_begin).sum():(pidx<=date).sum()-1]
+        _ptns = ptns[(ridx>=view_begin).sum():(ridx<=date).sum()-1]
+        score = pd.Series(models[key].predict(_ptns), index=_ptns.index).rename('pred')
+        _freturn = freturns[(ptidx>=view_begin).sum():(ptidx<=date).sum()-1]
+        y_encoder = Labelization(Y_LABELS)
+        y_encoder.fit(_freturn)
+        lower_bound:pd.Series = y_encoder.label2lowerbound(score).rename('lower')
+        upper_bound:pd.Series = y_encoder.label2upperbound(score).rename('upper')
+        data = pd.concat([score, lower_bound, upper_bound, _prices], axis=1, sort=True).dropna()
+        for date in data.index.values:
+            if date < start_date or date > end_date:
+                continue
+            price_date = [i for i in get_market_price_dates(
+                market_id, date.tolist()) if i['DATE_PERIOD']==period]
+            resp = DateRangePredResp(
+                date.tolist(), data['cp'].loc[date], data['lower'].loc[date],
+                data['upper'].loc[date], data['pred'].loc[date], price_date)
+            ret.append(DateRangePredResp)
+    return ret
