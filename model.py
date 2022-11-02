@@ -1408,30 +1408,33 @@ def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
             return result
         model_names = os.listdir(f'{model_path}/{model_id}')
         for model_name in model_names:
-            start_date = datetime.datetime.strptime(model_name, '%Y-%m-%d')
-            model_info: Optional[Dict[int, Dtc]] = pickle_load(f'{model_path}/{model_name}.pkl')
+            start_date = datetime.datetime.strptime(model_name[:-4], '%Y-%m-%d').date()
+            model_info: Optional[Dict[int, Dtc]] = pickle_load(f'{model_path}/{view_id}/{model_name}')
             result[start_date] = model_info
         result = dict(sorted(result.items(), reverse=True))
         return result
     results = []
     _db = MimosaDBManager().current_db
+    if not _db.is_initialized():
+        return results
     _dao = get_dao()
     market_dates = _db.get_market_dates(market_id)
     market_cps = _db.get_market_prices(market_id)
     models = _get_model_kernels(view_id)
-    view = _dao.get_model_info(view_id).get_model(period, start_date)
-    x_data = _db.get_pattern_values(market_id, view.patterns)
 
     for period in PREDICT_PERIODS:
         base_dates = market_dates[market_dates < target_date]
         if len(base_dates) < period:
             continue
         base_date = base_dates[-period].tolist()
-        base_cp = market_cps.loc[np.ndarray(base_date).astype('datetime64[D]')]
+        cpidx = market_cps.index.values.astype('datetime64[D]') == base_date
+        base_cp = market_cps[cpidx].values[0]
         for start_date in models:
             if start_date < base_date:
                 model = models[start_date].get(period)
                 if model is not None:
+                    view = _dao.get_model_info(view_id).get_model(period, start_date)
+                    x_data = _db.get_pattern_values(market_id, view.patterns)
                     y_data = _db.get_future_returns(market_id, [period])[period]
                     y_data = y_data[~np.isnan(y_data.values)]
                     dates = y_data.index.values.astype('datetime64[D]')
@@ -1441,7 +1444,8 @@ def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
                     y_coder = Labelization(Y_LABELS)
                     y_coder.fit(y_data.values, Y_OUTLIER)
 
-                    x = np.array([x_data.loc[np.ndarray(base_date).astype('datetime64[D]')].values])
+                    xidx = x_data.index.values.astype('datetime64[D]') == base_date
+                    x = x_data[xidx].values
                     y = model.predict(x)
                     lower_bound = y_coder.label2lowerbound(y)[0]
                     upper_bound = y_coder.label2upperbound(y)[0]
