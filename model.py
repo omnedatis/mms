@@ -290,6 +290,7 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
 def _batch_recover_executions():
     logging.info('Batch view execution recover started')
     for model in get_db().get_recover_models():
+        logging.info(f"call recover view: {model_id}")
         ViewManagerFactory.get()._add(model)
     else:
         logging.info('Batch view execution recover finished')
@@ -300,6 +301,7 @@ def _batch_del_view_data():
     try:
         logging.info("Batch deleting view data started")
         for model_id in get_db().get_removed_model():
+            logging.info(f"call remove view: {model_id}")
             ViewManagerFactory.get()._remove(model_id)
         else:
 
@@ -481,6 +483,8 @@ class _ViewManager:
             path = f'..\_local_db\models\{view_id}'
             if os.path.exists(path):
                 shutil.rmtree(path)
+                logging.info(f"remove local models of view {view_id}")
+            logging.info(f"remove view complete: {view_id}")
         except:
             logging.error(traceback.format_exc())
         self._release(view_id)
@@ -531,6 +535,7 @@ class _ViewManager:
                     get_db().save_view_kernel(view_id, bdate)
                 prev = bdate
             if controller.isactive:
+                logging.info(f"add view complete: {view_id}")
                 get_db().set_model_train_complete(view_id)
         except:
             logging.error(traceback.format_exc())
@@ -574,6 +579,7 @@ class _ViewManager:
                     get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
                     get_db().save_view_kernel(view_id, bdate)
                     get_db().set_model_train_complete(view_id)
+                    logging.info(f"update view complete: {view_id}")
         except:
             logging.error(traceback.format_exc())
 
@@ -1256,7 +1262,7 @@ class DateBaseDateResp(NamedTuple):
     priceDate:datetime.datetime
 
 
-def get_basedate_pred(view_id:str, market_id:str, 
+def get_basedate_pred(view_id:str, market_id:str,
         base_date:Optional[datetime.date]=None) -> DateBaseDateResp:
     V_PATH = LOCAL_DB+f'/models/{view_id}'
     if not os.path.isdir(V_PATH):
@@ -1307,7 +1313,7 @@ class DateRangePredResp(NamedTuple):
     priceDate:datetime.datetime
 
 
-def get_daterange_pred(view_id:str, market_id:str, *, period:int, 
+def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         start_date:datetime.date, end_date:datetime.date)-> List[DateRangePredResp]:
     V_PATH = LOCAL_DB+f'/models/{view_id}'
     if not os.path.isdir(V_PATH):
