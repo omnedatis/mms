@@ -216,96 +216,6 @@ def del_view_data(model_id: str):
         shutil.rmtree(model_dir)
 
 
-def _save_mkt_score(recv: Dict[str, pd.DataFrame]):
-    """save mkt score to DB."""
-    def gen_records(recv):
-        ret = []
-        scores, lfactor, ufactor = list(zip(*get_db().get_score_meta_info()))
-        lfactor = np.array(lfactor)
-        ufactor = np.array(ufactor)
-        for mid, freturns in recv.items():
-            # Note: without making `dropna` for performance
-            for period, freturn in zip(PREDICT_PERIODS, freturns.values.T):
-                if not controller.isactive:
-                    break
-                if len(freturn) <= period:
-                    continue
-                cur = pd.DataFrame()
-                freturn = freturn[:-period]
-                mean = freturn.mean()
-                std = freturn.std(ddof=1)
-
-                cur[MarketScoreField.MARKET_SCORE.value] = scores
-                cur[MarketScoreField.UPPER_BOUND.value] = ufactor * std + mean
-                cur[MarketScoreField.LOWER_BOUND.value] = lfactor * std + mean
-                cur[MarketScoreField.DATE_PERIOD.value] = period
-                cur[MarketScoreField.MARKET_ID.value] = mid
-                ret.append(cur)
-        return ret
-    try:
-        controller = mt_manager.acquire(BATCH_EXE_CODE)
-        logging.info("Saving market score to db started")
-        if len(recv) > 0:
-            records = gen_records(recv)
-            if len(records) > 0:
-                if controller.isactive:
-                    db = get_db()
-                    db.save_mkt_score(pd.concat(records, axis=0))
-        if not controller.isactive:
-            logging.info("Saving market score to db terminated")
-        else:
-            logging.info("Saving market score to db finished")
-    except Exception as esp:
-        logging.info("Saving market score to db failed")
-        mt_manager.release(BATCH_EXE_CODE)
-        raise esp
-
-
-def _save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
-    """save latest mkt period to DB."""
-    def gen_records(recv):
-        ret = []
-        for mid, cps in recv.items():
-            if controller.isactive:
-                # Note: without making `dropna` for performance
-                periods = list(filter(lambda p: p < len(cps), PREDICT_PERIODS))
-                if len(periods) <= 0:
-                    continue
-                cur = pd.DataFrame()
-                offsets = list(map(lambda p: -(p+1), periods))
-                dates = cps.index.values[offsets + [-1]
-                                        ].astype('datetime64[D]').tolist()
-                bps = cps.values[offsets]
-                changes = cps.values[-1] - bps
-                cur[MarketPeriodField.DATE_PERIOD.value] = periods
-                cur[MarketPeriodField.PRICE_DATE.value] = dates[-1]
-                cur[MarketPeriodField.DATA_DATE.value] = dates[:-1]
-                cur[MarketPeriodField.NET_CHANGE.value] = changes
-                cur[MarketPeriodField.NET_CHANGE_RATE.value] = changes / bps
-                cur[MarketPeriodField.MARKET_ID.value] = mid
-                ret.append(cur)
-        return ret
-
-    try:
-        controller = mt_manager.acquire(BATCH_EXE_CODE)
-        logging.info("Saving latest market period to db started")
-        if len(recv) > 0:
-            records = gen_records(recv)
-            if len(records) > 0:
-                if controller.isactive:
-                    db = get_db()
-                    db.save_latest_mkt_period(pd.concat(records, axis=0))
-        if not controller.isactive:
-            logging.info("Saving latest market period to db terminated")
-        else:
-            logging.info("Saving latest market period to db finished")
-        mt_manager.release(BATCH_EXE_CODE)
-    except Exception as esp:
-        logging.info("Saving latest market period to db failed")
-        mt_manager.release(BATCH_EXE_CODE)
-        raise esp
-
-
 def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = False):
     """Save latest pattern results to DB."""
     def trans2dbformat(recv):
@@ -347,74 +257,8 @@ def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = F
         raise esp
 
 
-def _evaluate_hit_sum(market: str, results: Dict[str, pd.DataFrame], freturns):
-    ret = pd.DataFrame()
-    ret[ModelMarketHitSumField.DATE_PERIOD.value] = PREDICT_PERIODS
-    ret[ModelMarketHitSumField.MARKET_CODE.value] = market
-    if results is None:
-        ret[ModelMarketHitSumField.HIT.value] = 0
-        ret[ModelMarketHitSumField.FCST_CNT.value] = 0
-        return ret
 
-    results = results.set_index(PredictResultField.DATE.value)
-    result_group = {p: d for p, d in results.groupby(
-        PredictResultField.PERIOD.value)}
-    cnts = []
-    hits = []
-    for period in PREDICT_PERIODS:
-        cur_result = result_group.get(period)
-        if cur_result is None:
-            cnts.append(0)
-            hits.append(0)
-            continue
-        cur_result = cur_result[[PredictResultField.UPPER_BOUND.value,
-                                 PredictResultField.LOWER_BOUND.value]]
-        cur_freturn = freturns[period].rename('FR')
-        ubs, lbs, rs = pd.concat([cur_result, cur_freturn], axis=1, sort=True
-                                 ).dropna().values.T
-        rs *= 100  # trans to percents
-        cnts.append(len(rs))
-        hits.append(((ubs >= rs) & (lbs <= rs)).sum())
-    ret[ModelMarketHitSumField.HIT.value] = hits
-    ret[ModelMarketHitSumField.FCST_CNT.value] = cnts
-    return ret
-
-
-def _get_model_hit_sum(model_id: str, batch_type: BatchType):
-    """Get model Hit-sum."""
-    if batch_type == BatchType.INIT_BATCH:
-        _db = MimosaDBManager().current_db
-    else:
-        _db = MimosaDBManager().next_db
-    results: Dict[str, pd.DataFrame] = get_db().get_model_results(model_id)
-    recv = [_evaluate_hit_sum(market, results.get(market),
-                              _db.get_future_returns(market, PREDICT_PERIODS)
-                              ) for market in _db.get_markets()]
-    if len(recv) > 0:
-        ret = pd.concat(recv, axis=0)
-        ret['MODEL_ID'] = model_id
-        return ret
-
-
-def _save_model_hit_sum(model_id: str, batch_type: BatchType):
-    """Save model hit sum to DB."""
-    recv = _get_model_hit_sum(model_id, batch_type)
-    if recv is not None:
-        db = get_db()
-        if batch_type == BatchType.INIT_BATCH:
-            db.update_model_hit_sum(recv)
-        else:
-            db.save_model_hit_sum(recv)
-
-
-# def _get_backtest_length(market: str, earlist_date: datetime.date):
-#     db = get_db()
-#     dates = db.get_market_data(market).index.values.astype('datetime64[D]')
-#     ret = min([MIN_BACKTEST_LEN, len(dates)]) - (dates >= earlist_date).sum() #???
-#     return ret
-
-def _batch_db_update(batch_type: BatchType = BatchType.SERVICE_BATCH
-        ) -> List[ThreadController]:
+def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
     logging.info('DB update started')
     try:
         markets = get_markets()
@@ -427,18 +271,11 @@ def _batch_db_update(batch_type: BatchType = BatchType.SERVICE_BATCH
             exec_type = PatternExecution.BATCH_SERVICE
             exec_ids = [get_db().set_pattern_execution_start(each.pid, exec_type)
                         for each in patterns]
-        _db.update(markets, patterns) # TODO
+        _db.update(markets, patterns, batch_type) # TODO
         ret = [CatchableTread(target=_db.dump)]
         if batch_type == BatchType.SERVICE_BATCH:
             ret += [CatchableTread(target=_save_latest_pattern_results,
-                                args=(_db.get_latest_pattern_values(), )),
-                    # CatchableTread(target=_save_latest_mkt_period,
-                    #             args=({each.mid: _db.get_market_prices(each.mid)
-                    #                     for each in markets}, )),
-                    # CatchableTread(target=_save_mkt_score,
-                    #             args=({each.mid: _db.get_future_returns(each.mid)
-                    #                     for each in markets}, ))
-                    ]
+                                args=(_db.get_latest_pattern_values(), )),]
             for exec_id in exec_ids:
                 get_db().set_pattern_execution_complete(exec_id)
         for t in ret:
@@ -457,204 +294,6 @@ def _batch_recover_executions():
     else:
         logging.info('Batch view execution recover finished')
     logging.info('Batch view execution recover terminated')
-
-
-# def _batch_recover_views(model_id: str, status: ModelStatus):
-#     """重啟模型
-
-#     此函數目的為重啟因故中斷的模型：
-#     如果模型狀態為 ADDED 則
-#     1. 呼叫_create_model建立模型，並計算各市場、各天期的最近一日的預測結果
-#     2. 呼叫_backtest_model計算各市場、各天期的歷史回測結果
-#     如果模型狀態為 CREATED 則跳過1. 直接執行 2.
-
-#     Parameters
-#     ----------
-#     model_id: str
-#         ID of the designated model.
-#     status: ModelStatus
-#         Status of Model.
-
-#     See Also
-#     --------
-#     _create_model, _backtest_model, ModelStatus
-
-#     """
-#     try:
-#         logging.info(f"Recovering on view {model_id} started")
-#         controller = MT_MANAGER.acquire(model_id)
-#         model = get_db().get_model_info(model_id)
-#         # the following thrown error will be catched
-#         if status < ModelStatus.CREATED:
-#             del_view_execution(model_id)
-#             del_view_data(model_id)
-#             _batch_create_view(model, controller)
-#         _batch_backtest_view(model, controller)
-#         _save_model_hit_sum(model_id, BatchType.INIT_BATCH)
-#         logging.info("Recovering on view {model_id} finished")
-#         MT_MANAGER.release(model_id)
-#     except Exception as esp:
-#         logging.error(f"Recovering on view {model_id} failed")
-#         MT_MANAGER.release(model_id)
-#         raise esp
-
-
-# def _batch_create_view(model: ModelInfo, controller: ThreadController):
-#     try:
-#         batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
-#         logging.info(f'Creating on view {model.view_id} started')
-#         if controller.isactive and batch_controller.isactive:
-#             exection_id = get_db().set_model_execution_start(
-#                 model.view_id, ModelExecution.ADD_PREDICT)
-#         if controller.isactive and batch_controller.isactive:
-#             recv = create_view(model, controller)
-#         if controller.isactive and batch_controller.isactive:
-#             get_db().save_model_results(model.view_id, recv.dropna(), ModelExecution.ADD_PREDICT)
-#             get_db().set_model_execution_complete(exection_id)
-#             get_db().stamp_model_execution([exection_id])
-#         if not batch_controller.isactive:
-#             logging.info('Batch terminated')
-#             MT_MANAGER.release(BATCH_EXE_CODE)
-#             return
-#         if not controller.isactive:
-#             logging.info(f'Creating on view {model.view_id} terminated')
-#         else:
-#             logging.info(f'Creating on view {model.view_id} finished')
-#         MT_MANAGER.release(BATCH_EXE_CODE)
-#     except Exception as esp:
-#         logging.error(f'Creating on view {model.view_id} failed')
-#         MT_MANAGER.release(BATCH_EXE_CODE)
-#         raise esp
-
-
-# def _batch_backtest_view(model: ModelInfo, controller: ThreadController):
-#     try:
-#         batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
-#         logging.info(f'Backtesting on view {model.view_id} started')
-#         exection_id = get_db().set_model_execution_start(
-#             model.view_id, ModelExecution.ADD_BACKTEST)
-#         earlist_dates = get_db().get_earliest_dates(model.view_id)
-#         cur_thread = None
-#         while controller.isactive:
-#             if not batch_controller.isactive:
-#                 break
-#             earlist_dates = {market: date for market, date in earlist_dates.items()
-#                             if _get_backtest_length(market, date) > 0}
-
-#             if len(earlist_dates) == 0:
-#                 # no more market has non-zero backtest length
-#                 cur_thread and cur_thread.join()
-#                 break
-#             if not batch_controller.isactive:
-#                 break
-#             recv = backtest_view(model, earlist_dates, controller)
-#             if recv is None:
-#                 cur_thread and cur_thread.join()
-#                 break
-#             cur_thread and cur_thread.join()
-#             cur_thread = CatchableTread(target=get_db().save_model_results,
-#                                         args=(model.view_id, recv.dropna(),
-#                                             ModelExecution.ADD_BACKTEST))
-#             cur_thread.start()
-#             for mid, data in recv.groupby(PredictResultField.MARKET_ID.value):
-#                 earlist_dates[mid] = data[PredictResultField.DATE.value
-#                                         ].values.min().astype('datetime64[D]').tolist()
-#         if not controller.isactive:
-#             logging.info('Backtesting on view {model.view_id} terminated')
-#             MT_MANAGER.release(BATCH_EXE_CODE)
-#             return
-
-#         # 回測完成，更新指定模型在DB上的狀態為'COMPLETE'
-#         smd = get_db().set_model_train_complete(model.view_id)
-#         get_db().set_model_execution_complete(exection_id)
-#         get_db().stamp_model_execution([exection_id, smd])
-#         logging.info('Backtesting on view {model.view_id} finished')
-#         MT_MANAGER.release(BATCH_EXE_CODE)
-#     except Exception as esp:
-#         logging.error('Backtesting on view {model.view_id} terminated')
-#         MT_MANAGER.release(BATCH_EXE_CODE)
-#         raise esp
-
-
-# def _batch_update_views():
-#     class ModelUpdateMoniter(NamedTuple):
-#         controller:ThreadController
-#         exec_id:str
-#         smd:bool
-#         complete_exce_id:str
-#         thread:CatchableTread
-#     def save_result(data: pd.DataFrame, model_id: str, exec_id: str,
-#                     controller: ThreadController):
-#         if controller.isactive:
-#             if data is not None:
-#                 get_db().save_model_results(
-#                     model_id, data.dropna(), ModelExecution.BATCH_PREDICT)
-#         if controller.isactive:
-#             get_db().set_model_execution_complete(exec_id)
-#         if controller.isactive:
-#             _save_model_hit_sum(model_id, BatchType.SERVICE_BATCH)
-#     try:
-#         batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
-#         logging.info('Updating view on started')
-#         moniters: Dict[str, ModelUpdateMoniter] = {}
-#         for model_id in get_db().get_models():
-#             controller = MT_MANAGER.acquire(model_id)
-#             logging.info(f'Updating view on {model_id} started')
-#             if batch_controller.isactive and controller.isactive:
-#                 exec_id = get_db().set_model_execution_start(
-#                     model_id, ModelExecution.BATCH_PREDICT)
-#             if batch_controller.isactive and controller.isactive:
-#                 recv, smd = _batch_update_view(model_id, controller)
-#             if batch_controller.isactive and controller.isactive:
-#                 if smd:
-#                     complete_exce_id:str = get_db().set_model_train_complete(model_id)
-#                 thread = CatchableTread(target=save_result,
-#                                         args=(recv, model_id, exec_id, controller))
-#                 thread.start()
-#                 moniters[model_id] = ModelUpdateMoniter(
-#                     controller, exec_id, smd, complete_exce_id, thread)
-#                 logging.info(f'Updaing view on {model_id} finished')
-#             if not controller.isactive:
-#                 logging.info('Updating view on {model_id} terminated')
-#             MT_MANAGER.release(model_id)
-#         if not batch_controller.isactive:
-#             logging.info('Batch terminated')
-#             MT_MANAGER.release(BATCH_EXE_CODE)
-#             return
-
-#         exec_ids = []
-#         for model_id, moniter in moniters.items():
-#             logging.info(f'Joining view thread on {model_id}')
-#             moniter.thread.join()
-#             if moniter.controller.isactive and batch_controller.isactive:
-#                 if moniter.thread.esp is None:
-#                     exec_ids.append(moniter.exec_id)
-#                     if moniter.smd:
-#                         exec_ids.append(moniter.complete_exce_id)
-#             if not moniter.controller.isactive:
-#                 logging.info(f'Joining view thread on {model_id} terminated')
-#         if not batch_controller.isactive:
-#             logging.info('Batch terminated')
-#             MT_MANAGER.release(BATCH_EXE_CODE)
-#             return []
-#         else:
-#             logging.info(f'Updating view finished')
-#             MT_MANAGER.release(BATCH_EXE_CODE)
-#             return exec_ids
-#     except Exception as esp:
-#         logging.info(f'Updating view failed')
-#         MT_MANAGER.release(BATCH_EXE_CODE)
-#         raise esp
-
-
-# def _batch_update_view(model_id: str, controller: ThreadController,
-#         ) -> Tuple[Union[pd.DataFrame, None], bool]:
-#     latest_dates = get_db().get_latest_dates(model_id)
-#     recv, is_retrained = update_view(get_db().get_model_info(
-#         model_id), latest_dates, controller)
-#     if recv is not None:
-#         recv = recv.dropna()
-#     return recv, is_retrained
 
 
 def _batch_del_view_data():
@@ -979,29 +618,20 @@ class _ViewManager:
                 time.sleep(1)
 
 
-
 def init_db():
     try:
         batch_type = BatchType.INIT_BATCH
         logging.info('Batch init started')
         clean_db_cache()
         clone_db_cache(batch_type)
-        # model_prepare_thread = get_db().clone_model_results(controller)
         if not MimosaDBManager().is_ready():
             _batch_db_update(batch_type)
-        # model_prepare_thread.join()
         _batch_del_view_data()
         _batch_recover_executions()
         logging.info('Batch init finished')
     except Exception as esp:
         logging.error("Batch init failed")
         logging.error(traceback.format_exc())
-
-
-
-# def init_db():
-#     task_queue.do_prioritized_task(
-#         _init_db, name='init_batch')
 
 
 def batch():
@@ -1034,14 +664,6 @@ def batch():
 
 task_queue = QueueManager({TaskCode.PATTERN:ExecQueue('pattern_queue')})
 
-# def batch():
-#     now = datetime.datetime.now()
-#     date = now.date().day
-#     hour = now.hour
-#     minute = now.minute
-#     sec =  now.second
-#     task_queue.do_prioritized_task(
-#         _batch, name=f'service_batch_{date}{hour}{minute}{sec}')
 
 
 def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None,

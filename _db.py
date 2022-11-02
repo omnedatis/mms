@@ -18,8 +18,10 @@ from _core import Pattern, MarketInfo
 from dao import MimosaDB as MimosaDao
 from utils import (
     int2datetime64d, datetime64d2int, print_error_info, pickle_dump, pickle_load,
-     singleton, CatchableTread, mt_manager)
-from const import PATTERN_UPDATE_CPUS, PREDICT_PERIODS, LOCAL_DB, BATCH_EXE_CODE
+    singleton, CatchableTread, mt_manager)
+from const import (
+    PATTERN_UPDATE_CPUS, PREDICT_PERIODS, LOCAL_DB, BATCH_EXE_CODE, BatchType
+    )
 
 
 _dao: MimosaDao = MimosaDao()
@@ -359,7 +361,7 @@ class MimosaDB:
         else:
             self._patterns[pidx] = pattern
 
-    def update(self, market_info, patterns, processes: int=PATTERN_UPDATE_CPUS):
+    def update(self, market_info, patterns, batch_type, processes: int=PATTERN_UPDATE_CPUS):
         MD_CACHE.clear()  # clear cache <- old version
         self._market_data_provider.update()
         self.clear()
@@ -367,10 +369,11 @@ class MimosaDB:
         def _terminator(pool):
             controller = mt_manager.acquire(BATCH_EXE_CODE)
             while True:
-                if not controller.isactive:
-                    pool.termiate()
+                if not controller.isactive and not batch_type == BatchType.SERVICE_BATCH:
+                    pool.terminate()
                     mt_manager.release(BATCH_EXE_CODE)
                     break
+                mt_manager.release(BATCH_EXE_CODE)
                 time.sleep(2)
         if len(markets) > 0:
             mdates = {}
@@ -378,7 +381,7 @@ class MimosaDB:
             pvalues = {}
             shared_patterns = mp.Manager().list(patterns)
             pool = mp.Pool(processes)
-        
+            
             def _add_mdates(mid, values):
                 mdates[mid] = values
             def _add_freturns(mid, values):
