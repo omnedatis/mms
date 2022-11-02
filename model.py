@@ -763,19 +763,13 @@ class _ViewManager:
                 self._controllers[view_id] = ThreadController()
             ret = self._controllers[view_id]
             self._requires[view_id] += 1
-            print(f"Controller-{view_id}: {self._requires[view_id]-1} -> "
-                  f"{self._requires[view_id]}")
         else:
             self._lock.acquire()
-            print(f'Lock lock _acquire {view_id}')
             if view_id not in self._controllers:
                 self._controllers[view_id] = ThreadController()
             ret = self._controllers[view_id]
             self._requires[view_id] += 1
-            print(f"Controller-{view_id}: {self._requires[view_id]-1} -> "
-                  f"{self._requires[view_id]}")
             self._lock.release()
-            print(f'release lock _acquire {view_id}')
         return ret
 
     def _release(self, view_id: str, locked=False):
@@ -783,123 +777,77 @@ class _ViewManager:
             if view_id not in self._controllers:
                 raise RuntimeError('release an not existed controller')
             self._requires[view_id] -= 1
-            print(f"Controller-{view_id}: {self._requires[view_id]+1} -> "
-                  f"{self._requires[view_id]}")
         else:
             self._lock.acquire()
-            print(f'Lock lock _release {view_id}')
             if view_id not in self._controllers:
-                print('release an not existed controller')
                 raise RuntimeError('release an not existed controller')
             self._requires[view_id] -= 1
-            print(f"Controller-{view_id}: {self._requires[view_id]+1} -> "
-                  f"{self._requires[view_id]}")
             self._lock.release()
-            print(f'release lock _release {view_id}')
 
     def _isready(self, view_id, locked=False):
         if locked:
             ret = self._requires[view_id] == 0
         else:
             self._lock.acquire()
-            print(f'Lock lock _isready {view_id}')
             ret = self._requires[view_id] == 0
             assert self._requires[view_id] >= 0
             self._lock.release()
-            print(f'release lock _isready {view_id}')
         return ret
 
     def _remove(self, view_id):
         self._lock.acquire()
-        print(f'Lock lock remove {view_id}')
         self._tasks[view_id] = ['r']
-        print(f"{view_id}: clear tasks and append `add view`")
         if view_id in self._queue:
-            print(f"{view_id} has been in queue")
             self._queue.remove(view_id)
-            print(f"remove {view_id} from queue")
-        else:
-            print(f"{view_id} is not in queue")
         self._lock.release()
-        print(f'release lock remove {view_id}')
         self._acquire(view_id).switch_off()
-        print(f"{view_id}: switch-off controller")
         self._release(view_id)
         while not self._isready(view_id):
             time.sleep(1)
         self._lock.acquire()
-        print(f'Lock lock remove {view_id}_2')
         self._queue.append(view_id)
-        print(f"append {view_id} into queue")
         self._lock.release()
-        print(f'release lock remove {view_id}_2')
 
     def _add(self, view_id):
         self._lock.acquire()
-        print(f'Lock lock _add {view_id}')
         if view_id in self._queue:
-            print(f"{view_id} has been in queue")
             self._queue.remove(view_id)
-            print(f"remove {view_id} from queue")
-        else:
-            print(f"{view_id} is not in queue")
         if len(self._tasks[view_id]) > 0 and self._tasks[view_id][0] == ['r']:
             self._tasks[view_id] = ['r', 'a']
-            print(f"{view_id}: append `add view` after `remove`")
         else:
             self._tasks[view_id] = ['a']
-            print(f"{view_id}: clear tasks and append `add view`")
         self._lock.release()
-        print(f'release lock _add {view_id}')
         self._acquire(view_id).switch_off()
         self._release(view_id)
-        print(f"{view_id}: switch-off controller")
         while not self._isready(view_id):
-            print(f"{view_id} is not ready")
             time.sleep(1)
         self._lock.acquire()
-        print(f'Lock lock _add {view_id}_2')
         self._queue.append(view_id)
-        print(f"append {view_id} into queue")
         self._lock.release()
-        print(f'release lock _add {view_id}_2')
 
     def _update(self, view_id):
         self._lock.acquire()
-        print(f'Lock lock _update {view_id}')
         if len(self._tasks[view_id]) <= 0 or self._tasks[view_id][-1] != ['u']:
             self._tasks[view_id].append('u')
-            print(f"{view_id}: append `update view` into tasks")
-        else:
-            print(f"{view_id}: `update view` has been in tasks")
-        if view_id in self._queue:
-            print(f"{view_id} has been in queue")
-        else:
-            print(f"{view_id} is not in queue")
+        if view_id not in self._queue:
             self._queue.append(view_id)
-            print(f"append {view_id} into queue")
         self._lock.release()
-        print(f'release lock _update {view_id}')
 
     def _acquire_cpu(self, locked=False):
         if locked:
             self._cpus += 1
         else:
             self._lock.acquire()
-            print('Lock lock _acquire_cpu')
             self._cpus += 1
             self._lock.release()
-            print('release lock _acquire_cpu')
 
     def _release_cpu(self, locked=False):
         if locked:
             self._cpus -= 1
         else:
             self._lock.acquire()
-            print('Lock lock _release_cpu')
             self._cpus -= 1
             self._lock.release()
-            print('release lock _release_cpu')
 
     def _do_remove(self, view_id):
         try:
@@ -907,7 +855,6 @@ class _ViewManager:
             get_db().del_model_kernel(view_id)
             path = f'..\_local_db\models\{view_id}'
             if os.path.exists(path):
-                print(f"{view_id}: delete models in {path}")
                 shutil.rmtree(path)
         except Exception as esp:
             logging.error(traceback.format_exc())
@@ -960,16 +907,11 @@ class _ViewManager:
                     get_db().save_view_kernel(view_id, bdate)
                 prev = bdate
             if controller.isactive:
-                print(f"add view {view_id} consumes {_get_t(t0)} seconds")
                 get_db().save_view_kernel(view_id, bdate)
                 get_db().set_model_train_complete(view_id)
             else:
-                print(f"add view {view_id} has been interupt after "
-                      f"{_get_t(t0)} seconds")
         except Exception as esp:
             logging.error(traceback.format_exc())
-            print(esp)
-            raise esp
         self._release(view_id)
         self._release_cpu()
 
@@ -1011,16 +953,9 @@ class _ViewManager:
                     get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
                     get_db().save_view_kernel(view_id, bdate)
                     get_db().set_model_train_complete(view_id)
-                    print(f"update view {view_id} consumes {_get_t(t0)} seconds")
-                else:
-                    print(f"update view {view_id} has been interupt after "
-                          f"{_get_t(t0)} seconds")
-            else:
-                print(f"no new model to update for view {view_id}")
         except Exception as esp:
             logging.error(traceback.format_exc())
-            print(esp)
-            raise esp
+
         self._release(view_id)
         self._release_cpu()
 
@@ -1029,14 +964,8 @@ class _ViewManager:
         while True:
             cnt += 1
             self._lock.acquire()
-            print(f'Lock lock: _run-{cnt}')
             if len(self._queue) <= 0 or self._cpus >= self._max_cpus:
-                if len(self._queue) <= 0:
-                    print(f'_run: empty queue')
-                else:
-                    print(f'_run: full cpus')
                 self._lock.release()
-                print(f'release lock: _run-{cnt}_1')
                 time.sleep(1)
                 continue
             for view_id in self._queue:
@@ -1047,7 +976,6 @@ class _ViewManager:
                         self._acquire_cpu(locked=True)
                         controller = self._acquire(view_id, locked=True)
                         self._lock.release()
-                        print(f'release lock: _run-{cnt}_2')
                         controller.switch_on()
                         if t == 'r':
                             Thread(target=self._do_remove, args=(view_id, )).start()
@@ -1063,12 +991,9 @@ class _ViewManager:
                     else:
                         self._queue = self._queue[1:]
                         self._lock.release()
-                        print(f'release lock: _run-{cnt}_3')
                         break
             else:
-                print(f'_run: no tasks')
                 self._lock.release()
-                print(f'release lock: _run-{cnt}_4')
                 time.sleep(1)
 
 
