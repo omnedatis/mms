@@ -83,10 +83,6 @@ import multiprocessing as mp
 from threading import Thread, Lock
 from _core._view.model import COMMON_DECISION_TREE_PARAMS, Labelization, MIN_Y_SAMPLES
 
-task_queue = QueueManager({
-    TaskCode.PATTERN: ExecQueue('pattern_queue'),
-    TaskCode.MODEL: ExecQueue('model_queue')
-})
 
 def _get_t(t0, digits:int=-1):
     ret = (datetime.datetime.now() - t0).total_seconds()
@@ -676,21 +672,6 @@ def _batch_del_view_data():
         MT_MANAGER.release(BATCH_EXE_CODE)
         raise esp
 
-def _view_batch():
-    pass
-
-def _view_remove():
-    pass
-
-def _view_recover():
-    pass
-
-def _view_update():
-    pass
-
-def _remove_view(view_id):
-    pass
-
 def _get_x_data(db_: MimosaDB, markets: List[str], patterns: List[str],
                 controller: ThreadController) -> Dict[str, pd.DataFrame]:
     # Note: Bad performance!!
@@ -717,7 +698,7 @@ def _get_train_dataset(db_: MimosaDB, markets: List[str], patterns: List[str],
                        ) -> Tuple[Dict[str, pd.DataFrame],
                                   Dict[str, pd.DataFrame]]:
     if markets is None or len(markets) <= 0:
-        markets = db_.get_markets()[::20]
+        markets = db_.get_markets()
     x_train = _get_x_data(db_, markets, patterns, controller)
     y_train = _get_y_data(db_, markets, period, controller)
     ret_x = []
@@ -856,7 +837,7 @@ class _ViewManager:
             path = f'..\_local_db\models\{view_id}'
             if os.path.exists(path):
                 shutil.rmtree(path)
-        except Exception as esp:
+        except:
             logging.error(traceback.format_exc())
         self._release(view_id)
         self._release_cpu()
@@ -888,7 +869,6 @@ class _ViewManager:
 
     def _do_add(self, view_id, controller):
         try:
-            t0 = datetime.datetime.now()
             db_ = MimosaDBManager().current_db
             view = get_db().get_model_info(view_id)
             bdates = self._get_bdates(view_id)
@@ -909,8 +889,7 @@ class _ViewManager:
             if controller.isactive:
                 get_db().save_view_kernel(view_id, bdate)
                 get_db().set_model_train_complete(view_id)
-            else:
-        except Exception as esp:
+        except:
             logging.error(traceback.format_exc())
         self._release(view_id)
         self._release_cpu()
@@ -939,7 +918,6 @@ class _ViewManager:
 
     def _do_update(self, view_id, controller):
         try:
-            t0 = datetime.datetime.now()
             db_ = MimosaDBManager().current_db
             view = get_db().get_model_info(view_id)
             bdates = self._get_bdates(view_id)
@@ -953,7 +931,7 @@ class _ViewManager:
                     get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
                     get_db().save_view_kernel(view_id, bdate)
                     get_db().set_model_train_complete(view_id)
-        except Exception as esp:
+        except:
             logging.error(traceback.format_exc())
 
         self._release(view_id)
