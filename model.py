@@ -1021,7 +1021,7 @@ def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
         """
         result = {}
         model_path = f'{LOCAL_DB}/models'
-        if not os.path.exists(model_path):
+        if not os.path.exists(model_path) or not os.path.exists(f'{model_path}/{model_id}'):
             return result
         model_names = os.listdir(f'{model_path}/{model_id}')
         for model_name in model_names:
