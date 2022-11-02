@@ -290,7 +290,7 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
 def _batch_recover_executions():
     logging.info('Batch view execution recover started')
     for model in get_db().get_recover_models():
-        logging.info(f"call recover view: {model_id}")
+        logging.info(f"call recover view: {model}")
         ViewManagerFactory.get()._add(model)
     else:
         logging.info('Batch view execution recover finished')
