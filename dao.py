@@ -1010,7 +1010,7 @@ class MimosaDB:
         apf_exec_info = self.cache_manager._df_find(
             exec_info,
             cols=[ModelExecutionField.STATUS_CODE.value],
-            vals=[ModelExecution.ADD_PREDICT_FINISHED.value])
+            vals=[ModelExecution.TRAIN_MODEL_FINISHED.value])
 
         model_ids = model_info[ModelInfoField.MODEL_ID.value]
         result = []
