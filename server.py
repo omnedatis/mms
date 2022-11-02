@@ -20,7 +20,7 @@ from model import (
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
     cast_macro_kwargs, del_view_execution, check_macro_info, CatchableTread,
-    get_occurred_patterns, get_draft_date, MT_MANAGER, edit_model)
+    get_occurred_patterns, get_draft_date, MT_MANAGER, edit_model, _ViewManagerFactory)
 from const import (
     ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
     BATCH_EXE_CODE)
@@ -1208,6 +1208,7 @@ def handle_bad_request(e):
 
 
 if __name__ == '__main__':
+    from threading import Thread
     mode = args.mode
     exec_mode = ExecMode.get(mode)
     if exec_mode is None:
@@ -1232,6 +1233,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=0, format=fmt, handlers=[
                             err_hdlr, info_hdlr, file_hdlr], datefmt='%Y-%m-%d %H:%M:%S')
         task_queue.start()
+        Thread(target=_ViewManagerFactory.get()._run).start()
         set_db(MimosaDB(mode=exec_mode))
 
     except Exception:

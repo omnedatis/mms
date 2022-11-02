@@ -143,7 +143,7 @@ def add_model(model_id: str):
     _create_model, _backtest_model
 
     """
-    _ViewManager()._add(model_id)
+    _ViewManagerFactory.get()._add(model_id)
 
 
 def remove_model(model_id):
@@ -161,16 +161,16 @@ def remove_model(model_id):
         ID of the designated model.
 
     """
-    _ViewManager()._remove(model_id)
+    _ViewManagerFactory.get()._remove(model_id)
 
 
 def edit_model(model_id):
     """JKJKJKJKJK
 
     """
-    _ViewManager()._remove(model_id)
+    _ViewManagerFactory.get()._remove(model_id)
     time.sleep(1)
-    _ViewManager()._add(model_id)
+    _ViewManagerFactory.get()._add(model_id)
 
 def add_pattern(pid):
     pattern = get_db().get_pattern_info(pid)
@@ -451,7 +451,7 @@ def _batch_db_update(batch_type: BatchType = BatchType.SERVICE_BATCH
 def _batch_recover_executions():
     logging.info('Batch view execution recover started')
     for model in get_db().get_recover_models():
-        _ViewManager()._add(model)
+        _ViewManagerFactory.get()._add(model)
     else:
         logging.info('Batch view execution recover finished')
     logging.info('Batch view execution recover terminated')
@@ -721,14 +721,18 @@ def _get_train_dataset(db_: MimosaDB, markets: List[str], patterns: List[str],
         return np.array([]), np.array([])
     return np.concatenate(ret_x, axis=0), np.concatenate(ret_y, axis=0)
 
+
+class _ViewManagerFactory:
+    _INSTANCE = None
+    @classmethod
+    def get(cls, cpus: int=6):
+        if cls._INSTANCE is None:
+            cls._INSTANCE = _ViewManager(cpus)
+        else:
+            cls._INSTANCE.set_cpus(cpus)
+        return cls._INSTANCE
+
 class _ViewManager:
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
     def __init__(self, cpus:int=6):
         self._controllers = {}
         self._requires = defaultdict(int)
@@ -737,6 +741,9 @@ class _ViewManager:
         self._queue = []
         self._max_cpus = cpus
         self._cpus = 0
+
+    def set_cpus(self, cpus: int):
+        self._max_cpus = cpus
 
     def _acquire(self, view_id: str, locked=False):
         if locked:
@@ -1022,7 +1029,7 @@ def _batch():
             #get_db().stamp_model_execution(model_exec_ids)
             MimosaDBManager().swap_db()
             for model_id in get_db().get_models():
-                _ViewManager()._update(model_id)
+                _ViewManagerFactory.get()._update(model_id)
             logging.info("Batch finished")
             MT_MANAGER.release(BATCH_EXE_CODE)
             return
