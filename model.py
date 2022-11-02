@@ -1074,7 +1074,7 @@ def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
                         'datePeriod': period,
                         'upperBound': upper_bound,
                         'lowerBound': lower_bound,
-                        'score': y[0],
+                        'score': int(y[0]),
                         'priceDate': str(target_date)
                     })
                 break
