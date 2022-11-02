@@ -3084,3 +3084,39 @@ class MimosaDB:
         logging.info(f"[DB Create] Set model train complete {model_id} -> {exection}")
         self._insert(table_name, data)
         logging.info(f"[DB Create] Set model train complete finished: {model_id} -> {exection}")
+
+    def get_recover_models(self) -> List[str]:
+        engine = self._engine()
+        sql = f"""
+            SELECT
+                model.{ModelInfoField.MODEL_ID.value},
+                model.{ModelInfoField.MODEL_STATUS.value},
+                me.{ModelExecutionField.STATUS_CODE.value},
+                me.{ModelExecutionField.END_DT.value}
+            FROM
+                {TableName.MODEL_INFO.value} AS model
+            LEFT JOIN
+                (
+                    SELECT
+                        {ModelExecutionField.MODEL_ID.value},
+                        {ModelExecutionField.STATUS_CODE.value},
+                        {ModelExecutionField.END_DT.value}
+                    FROM
+                        {TableName.MODEL_EXECUTION.value}
+                ) AS me
+            ON model.{ModelInfoField.MODEL_ID.value}=me.{ModelExecutionField.MODEL_ID.value}
+            WHERE
+                model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PRIVATE_AND_VALID.value}' OR
+                model.{ModelInfoField.MODEL_STATUS.value}='{DBModelStatus.PUBLIC_AND_VALID.value}'
+        """
+        data = pd.read_sql_query(sql, engine)
+        group_data = data.groupby(ModelInfoField.MODEL_ID.value)
+        results = []
+        for model_id, model_state_info in group_data:
+            model_add_predict_info = model_state_info[
+                model_state_info[ModelExecutionField.STATUS_CODE.value].values ==
+                ModelExecution.TRAIN_MODEL_FINISHED.value]
+            # ADD_PREDICT 未建立就掛掉
+            if len(model_add_predict_info) == 0:
+                results.append(model_id)
+        return results
