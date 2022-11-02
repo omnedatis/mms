@@ -74,19 +74,25 @@ from const import (BatchType, MarketPeriodField, MarketScoreField,
                    PatternExecution, PatternResultField, PredictResultField,
                    MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE, TaskCode,
                    Y_LABELS, Y_OUTLIER)
-from utils import extend_working_dates, CatchableTread, ThreadController
+from utils import (extend_working_dates, CatchableTread, ThreadController,
+                   pickle_dump, pickle_load)
 from _core import Pattern
-from _db import get_dao, set_dao, MimosaDBManager
+from _db import get_dao, set_dao, MimosaDBManager, MimosaDB
 from collections import defaultdict
 import multiprocessing as mp
-from threading import Thread
-from _core._view.model import COMMON_DECISION_TREE_PARAMS, Labelization
+from threading import Thread, Lock
+from _core._view.model import COMMON_DECISION_TREE_PARAMS, Labelization, MIN_Y_SAMPLES
 
 task_queue = QueueManager({
     TaskCode.PATTERN: ExecQueue('pattern_queue'),
     TaskCode.MODEL: ExecQueue('model_queue')
 })
 
+def _get_t(t0, digits:int=-1):
+    ret = (datetime.datetime.now() - t0).total_seconds()
+    if digits >= 0:
+        ret = np.round(ret, digits)
+    return ret
 
 def get_db():
     """Get Mimosa DB accessing object"""
@@ -141,25 +147,7 @@ def add_model(model_id: str):
     _create_model, _backtest_model
 
     """
-    if MT_MANAGER.exists(model_id):
-        return
-    controller = MT_MANAGER.acquire(model_id)
-    if not controller.isactive:
-        MT_MANAGER.release(model_id)
-        return
-    try:
-        logging.info('Adding view started')
-        del_view_data(model_id)
-        model = get_db().get_model_info(model_id)
-        _batch_create_view(model, controller)
-        _batch_backtest_view(model, controller)
-        _save_model_hit_sum(model_id, BatchType.INIT_BATCH)
-        logging.info('Adding view finished')
-        MT_MANAGER.release(model_id)
-    except Exception as esp:
-        logging.error("Adding view failed ")
-        logging.error(traceback.format_exc())
-        MT_MANAGER.release(model_id)
+    _ViewManager()._add(model_id)
 
 
 def remove_model(model_id):
@@ -177,14 +165,16 @@ def remove_model(model_id):
         ID of the designated model.
 
     """
-    logging.info('removing view started')
-    MT_MANAGER.acquire(model_id).switch_off()
-    MT_MANAGER.release(model_id)
-    while MT_MANAGER.exists(model_id):
-        time.sleep(1)
-    del_view_data(model_id)
-    logging.info('removing mviewodel started')
+    _ViewManager()._remove(model_id)
 
+
+def edit_model(model_id):
+    """JKJKJKJKJK
+
+    """
+    _ViewManager()._remove(model_id)
+    time.sleep(1)
+    _ViewManager()._add(model_id)
 
 def add_pattern(pid):
     pattern = get_db().get_pattern_info(pid)
@@ -425,7 +415,6 @@ def _get_backtest_length(market: str, earlist_date: datetime.date):
     ret = min([MIN_BACKTEST_LEN, len(dates)]) - (dates >= earlist_date).sum() #???
     return ret
 
-
 def _batch_db_update(batch_type: BatchType = BatchType.SERVICE_BATCH
         ) -> List[ThreadController]:
     logging.info('DB update started')
@@ -465,18 +454,8 @@ def _batch_db_update(batch_type: BatchType = BatchType.SERVICE_BATCH
 
 def _batch_recover_executions():
     logging.info('Batch view execution recover started')
-    try:
-        exec_info = get_db().get_recover_model_execution()
-    except:
-        logging.error('Batch view execution recover failed')
-    for model, etype in exec_info:
-        if etype == ModelExecution.ADD_PREDICT:
-            status = ModelStatus.ADDED
-        elif etype == ModelExecution.ADD_BACKTEST:
-            status = ModelStatus.CREATED
-        else:
-            raise RuntimeError(f'Invalid model execution type {etype} ecountered')
-        _batch_recover_views(model, status)
+    for model in get_db().get_recover_models():
+        _ViewManager()._add(model)
     else:
         logging.info('Batch view execution recover finished')
     logging.info('Batch view execution recover terminated')
@@ -685,10 +664,7 @@ def _batch_del_view_data():
         controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
         logging.info("Batch deleting view data started")
         for model_id in get_db().get_removed_model():
-            if controller.isactive:
-                del_view_data(model_id)
-            else:
-                break
+            _ViewManager._remove(model_id)
         else:
             MT_MANAGER.release(BATCH_EXE_CODE)
             logging.info("Batch deleting view data finished")
@@ -737,16 +713,18 @@ def _get_y_data(db_: MimosaDB, markets: List[str], period: int,
 
 def _get_train_dataset(db_: MimosaDB, markets: List[str], patterns: List[str],
                        tdate: datetime.date, edate: datetime.date, period: int,
-                       controller: ThreadController
+                       controller: ThreadController, min_samples: int=MIN_Y_SAMPLES
                        ) -> Tuple[Dict[str, pd.DataFrame],
                                   Dict[str, pd.DataFrame]]:
+    if markets is None or len(markets) <= 0:
+        markets = db_.get_markets()[::20]
     x_train = _get_x_data(db_, markets, patterns, controller)
     y_train = _get_y_data(db_, markets, period, controller)
     ret_x = []
     ret_y = []
     for market in markets:
         if not controller.isactive:
-            return np.array(), np.array()
+            return np.array([]), np.array([])
         dates = x_train[market].index.values.astype('datetime64[D]')
         sidx = (dates < tdate).sum()
         eidx = (dates < edate).sum() - period
@@ -754,135 +732,193 @@ def _get_train_dataset(db_: MimosaDB, markets: List[str], patterns: List[str],
         if eidx > sidx:
             values = pd.concat([x_train[market][sidx: eidx],
                                 y_train[market][sidx: eidx]], axis=1).dropna().values
-            if len(values) > 0:
+            if len(values) >= MIN_Y_SAMPLES:
                 ret_x.append(values[:,:-1])
                 ret_y.append(Labelization(Y_LABELS).fit_transform(values[:, -1],
                                                                   Y_OUTLIER))
     if not controller.isactive or len(ret_x) == 0 or len(ret_y) == 0:
-        return np.array(), np.array()
+        return np.array([]), np.array([])
     return np.concatenate(ret_x, axis=0), np.concatenate(ret_y, axis=0)
 
 class _ViewManager:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self, cpus:int=6):
         self._controllers = {}
         self._requires = defaultdict(int)
         self._lock = Lock()
         self._tasks = defaultdict(list)
         self._queue = []
-        self._locks = defaultdict(Lock)
         self._max_cpus = cpus
         self._cpus = 0
 
-    def _acquire(self, view_id: str, locked):
+    def _acquire(self, view_id: str, locked=False):
         if locked:
             if view_id not in self._controllers:
                 self._controllers[view_id] = ThreadController()
             ret = self._controllers[view_id]
             self._requires[view_id] += 1
+            print(f"Controller-{view_id}: {self._requires[view_id]-1} -> "
+                  f"{self._requires[view_id]}")
         else:
             self._lock.acquire()
+            print(f'Lock lock _acquire {view_id}')
             if view_id not in self._controllers:
                 self._controllers[view_id] = ThreadController()
             ret = self._controllers[view_id]
             self._requires[view_id] += 1
+            print(f"Controller-{view_id}: {self._requires[view_id]-1} -> "
+                  f"{self._requires[view_id]}")
             self._lock.release()
+            print(f'release lock _acquire {view_id}')
         return ret
 
-    def _release(self, view_id: str, locked):
+    def _release(self, view_id: str, locked=False):
         if locked:
             if view_id not in self._controllers:
                 raise RuntimeError('release an not existed controller')
-            del self._controllers[view_id]
             self._requires[view_id] -= 1
+            print(f"Controller-{view_id}: {self._requires[view_id]+1} -> "
+                  f"{self._requires[view_id]}")
         else:
             self._lock.acquire()
+            print(f'Lock lock _release {view_id}')
             if view_id not in self._controllers:
+                print('release an not existed controller')
                 raise RuntimeError('release an not existed controller')
-            del self._controllers[view_id]
             self._requires[view_id] -= 1
+            print(f"Controller-{view_id}: {self._requires[view_id]+1} -> "
+                  f"{self._requires[view_id]}")
             self._lock.release()
+            print(f'release lock _release {view_id}')
 
-    def _isready(self, view_id, locked):
+    def _isready(self, view_id, locked=False):
         if locked:
             ret = self._requires[view_id] == 0
         else:
             self._lock.acquire()
+            print(f'Lock lock _isready {view_id}')
             ret = self._requires[view_id] == 0
             assert self._requires[view_id] >= 0
             self._lock.release()
+            print(f'release lock _isready {view_id}')
         return ret
 
     def _remove(self, view_id):
         self._lock.acquire()
+        print(f'Lock lock remove {view_id}')
         self._tasks[view_id] = ['r']
+        print(f"{view_id}: clear tasks and append `add view`")
         if view_id in self._queue:
+            print(f"{view_id} has been in queue")
             self._queue.remove(view_id)
+            print(f"remove {view_id} from queue")
+        else:
+            print(f"{view_id} is not in queue")
         self._lock.release()
+        print(f'release lock remove {view_id}')
         self._acquire(view_id).switch_off()
+        print(f"{view_id}: switch-off controller")
         self._release(view_id)
         while not self._isready(view_id):
             time.sleep(1)
         self._lock.acquire()
+        print(f'Lock lock remove {view_id}_2')
         self._queue.append(view_id)
+        print(f"append {view_id} into queue")
         self._lock.release()
+        print(f'release lock remove {view_id}_2')
 
     def _add(self, view_id):
         self._lock.acquire()
+        print(f'Lock lock _add {view_id}')
         if view_id in self._queue:
-            if self._tasks[view_id][0] == ['r']:
-                self._tasks[view_id] = ['r', 'a']
-            else:
-                self._tasks[view_id] = ['a']
+            print(f"{view_id} has been in queue")
             self._queue.remove(view_id)
+            print(f"remove {view_id} from queue")
+        else:
+            print(f"{view_id} is not in queue")
+        if len(self._tasks[view_id]) > 0 and self._tasks[view_id][0] == ['r']:
+            self._tasks[view_id] = ['r', 'a']
+            print(f"{view_id}: append `add view` after `remove`")
+        else:
+            self._tasks[view_id] = ['a']
+            print(f"{view_id}: clear tasks and append `add view`")
         self._lock.release()
+        print(f'release lock _add {view_id}')
         self._acquire(view_id).switch_off()
         self._release(view_id)
+        print(f"{view_id}: switch-off controller")
         while not self._isready(view_id):
+            print(f"{view_id} is not ready")
             time.sleep(1)
         self._lock.acquire()
+        print(f'Lock lock _add {view_id}_2')
         self._queue.append(view_id)
+        print(f"append {view_id} into queue")
         self._lock.release()
+        print(f'release lock _add {view_id}_2')
 
     def _update(self, view_id):
         self._lock.acquire()
+        print(f'Lock lock _update {view_id}')
+        if len(self._tasks[view_id]) <= 0 or self._tasks[view_id][-1] != ['u']:
+            self._tasks[view_id].append('u')
+            print(f"{view_id}: append `update view` into tasks")
+        else:
+            print(f"{view_id}: `update view` has been in tasks")
         if view_id in self._queue:
-            if self._tasks[view_id][-1] != ['u']:
-                self._tasks[view_id].append('u')
+            print(f"{view_id} has been in queue")
+        else:
+            print(f"{view_id} is not in queue")
+            self._queue.append(view_id)
+            print(f"append {view_id} into queue")
         self._lock.release()
+        print(f'release lock _update {view_id}')
 
-    def acquire_cpu(self, locked):
+    def _acquire_cpu(self, locked=False):
         if locked:
             self._cpus += 1
         else:
             self._lock.acquire()
+            print('Lock lock _acquire_cpu')
             self._cpus += 1
             self._lock.release()
+            print('release lock _acquire_cpu')
 
-    def release_cpu(self, locked):
+    def _release_cpu(self, locked=False):
         if locked:
             self._cpus -= 1
         else:
             self._lock.acquire()
+            print('Lock lock _release_cpu')
             self._cpus -= 1
             self._lock.release()
+            print('release lock _release_cpu')
 
     def _do_remove(self, view_id):
         try:
             get_db().del_model_execution(view_id)
-            get_db().del_model_kernal(view_id)
+            get_db().del_model_kernel(view_id)
             path = f'..\_local_db\models\{view_id}'
             if os.path.exists(path):
+                print(f"{view_id}: delete models in {path}")
                 shutil.rmtree(path)
         except Exception as esp:
             logging.error(traceback.format_exc())
         self._release(view_id)
-        self.release_cpu()
+        self._release_cpu()
 
     def _get_bdates(self, view_id):
         path = f'..\_local_db\models\{view_id}'
         ret = []
         if os.path.exists(path):
-            ret = [datetime.date.strptime(each[:-4], "%Y-%m-%d")
+            ret = [datetime.datetime.strptime(each[:-4], "%Y-%m-%d").date()
                    for each in os.listdir(path) if each[-4:] == '.pkl']
             ret.sort()
         return ret
@@ -905,6 +941,7 @@ class _ViewManager:
 
     def _do_add(self, view_id, controller):
         try:
+            t0 = datetime.datetime.now()
             db_ = MimosaDBManager().current_db
             view = get_db().get_model_info(view_id)
             bdates = self._get_bdates(view_id)
@@ -915,18 +952,26 @@ class _ViewManager:
                     continue
                 if not controller.isactive:
                     break
-                models = self._train(view, bdate, controller)
+                models = self._train(db_, view, bdate, controller)
                 if controller.isactive:
                     pickle_dump(models, f'..\_local_db\models\{view_id}\{bdate}.pkl')
                     if prev is not None:
                         get_db().update_view_kernel(view_id, prev, bdate-datetime.timedelta(1))
                     get_db().save_view_kernel(view_id, bdate)
                 prev = bdate
-
+            if controller.isactive:
+                print(f"add view {view_id} consumes {_get_t(t0)} seconds")
+                get_db().save_view_kernel(view_id, bdate)
+                get_db().set_model_train_complete(view_id)
+            else:
+                print(f"add view {view_id} has been interupt after "
+                      f"{_get_t(t0)} seconds")
         except Exception as esp:
             logging.error(traceback.format_exc())
+            print(esp)
+            raise esp
         self._release(view_id)
-        self.release_cpu()
+        self._release_cpu()
 
     def _get_next_bdate(self, prev: datetime.date, tg: int) -> datetime.date:
         year = prev.year
@@ -935,7 +980,7 @@ class _ViewManager:
         ret = datetime.date(year+t, month-12*t, 1)
         return ret
 
-    def _train(self, view, bdate, controller):
+    def _train(self, db_, view, bdate, controller):
         models = {}
         for p in PREDICT_PERIODS:
             x, y = _get_train_dataset(db_, view.markets, view.patterns,
@@ -952,51 +997,80 @@ class _ViewManager:
 
     def _do_update(self, view_id, controller):
         try:
-            db_ = MimosaDBManager().next_db
+            t0 = datetime.datetime.now()
+            db_ = MimosaDBManager().current_db
             view = get_db().get_model_info(view_id)
-            bdates = _get_bdates(view_id)
-            if len(models) <= 0:
+            bdates = self._get_bdates(view_id)
+            if len(bdates) <= 0:
                 raise RuntimeError("update model before adding")
-            bdate = self._get_next_bdate(bdates[-1], tg)
+            bdate = self._get_next_bdate(bdates[-1], view.train_gap)
             if datetime.date.today() >= bdate:
-                models = self._train(view, bdate, controller)
-            if controller.isactive:
-                pickle_dump(models, f'..\_local_db\models\{view_id}\{bdate}.pkl')
-                get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
-                get_db().save_view_kernel(view_id, bdate)
+                models = self._train(db_, view, bdate, controller)
+                if controller.isactive:
+                    pickle_dump(models, f'..\_local_db\models\{view_id}\{bdate}.pkl')
+                    get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
+                    get_db().save_view_kernel(view_id, bdate)
+                    get_db().set_model_train_complete(view_id)
+                    print(f"update view {view_id} consumes {_get_t(t0)} seconds")
+                else:
+                    print(f"update view {view_id} has been interupt after "
+                          f"{_get_t(t0)} seconds")
+            else:
+                print(f"no new model to update for view {view_id}")
         except Exception as esp:
             logging.error(traceback.format_exc())
+            print(esp)
+            raise esp
         self._release(view_id)
-        self.release_cpu()
+        self._release_cpu()
 
     def _run(self):
+        cnt = 0
         while True:
+            cnt += 1
             self._lock.acquire()
-            if len(self._queue) > 0 or self._cpus >= self._max_cpus:
+            print(f'Lock lock: _run-{cnt}')
+            if len(self._queue) <= 0 or self._cpus >= self._max_cpus:
+                if len(self._queue) <= 0:
+                    print(f'_run: empty queue')
+                else:
+                    print(f'_run: full cpus')
                 self._lock.release()
+                print(f'release lock: _run-{cnt}_1')
                 time.sleep(1)
                 continue
             for view_id in self._queue:
-                if not self._isready(view_id, locked=True):
-                    continue
-                if len(self._tasks[view_id]) > 0:
-                    t = self._tasks[view_id][0]
-                    self._tasks[view_id] = self._tasks[view_id][1:]
-                    self.acquire_cpu(locked=True)
-                    controller = self._acquire(view_id, locked=True)
-                    self._lock.release()
-                    if t == 'r':
-                        Thread(targer=self._do_remove, args=(view_id, )).start()
-                    elif t == 'a':
-                        Thread(targer=self._do_add, args=(view_id, controller)).start()
-                    elif t == 'u':
-                        Thread(targer=self._do_update, args=(view_id, controller)).start()
+                if self._isready(view_id, locked=True):
+                    if len(self._tasks[view_id]) > 0:
+                        t = self._tasks[view_id][0]
+                        self._tasks[view_id] = self._tasks[view_id][1:]
+                        self._acquire_cpu(locked=True)
+                        controller = self._acquire(view_id, locked=True)
+                        self._lock.release()
+                        print(f'release lock: _run-{cnt}_2')
+                        controller.switch_on()
+                        if t == 'r':
+                            Thread(target=self._do_remove, args=(view_id, )).start()
+                        elif t == 'a':
+                            Thread(target=self._do_add, args=(view_id, controller)).start()
+                            #self._do_add(view_id, controller)
+                        elif t == 'u':
+                            Thread(target=self._do_update, args=(view_id, controller)).start()
+                        else:
+                            raise RuntimeError(f"invalid execution type {t}")
+                        time.sleep(1)
+                        break
                     else:
-                        raise RuntimeError(f"invalid execution type {t}")
-                    time.sleep(1)
-                else:
-                    self._queue = self._queue[1:]
-                    self._lock.release()
+                        self._queue = self._queue[1:]
+                        self._lock.release()
+                        print(f'release lock: _run-{cnt}_3')
+                        break
+            else:
+                print(f'_run: no tasks')
+                self._lock.release()
+                print(f'release lock: _run-{cnt}_4')
+                time.sleep(1)
+
 
 
 def _init_db():
@@ -1010,8 +1084,8 @@ def _init_db():
         if not MimosaDBManager().is_ready():
             _batch_db_update(batch_type)
         # model_prepare_thread.join()
-        # _batch_del_view_data()
-        # _batch_recover_executions()
+        _batch_del_view_data()
+        _batch_recover_executions()
         logging.info('Batch init finished')
     except Exception as esp:
         logging.error("Batch init failed")
@@ -1032,9 +1106,8 @@ def _batch():
         clean_db_cache()
         clone_db_cache(batch_type)
         # model_prepare_thread = get_db().clone_model_results(controller)
-        threads = []
         get_db().truncate_swap_tables()
-        # threads = _batch_db_update(batch_type) or []
+        threads = _batch_db_update(batch_type) or []
         # model_prepare_thread.join()
         # _batch_del_view_data()
         # model_exec_ids = _batch_update_views()
@@ -1045,6 +1118,8 @@ def _batch():
             get_db().checkout_fcst_data()
             #get_db().stamp_model_execution(model_exec_ids)
             MimosaDBManager().swap_db()
+            for model_id in get_db().get_models():
+                _ViewManager()._update(model_id)
             logging.info("Batch finished")
             MT_MANAGER.release(BATCH_EXE_CODE)
             return
@@ -1385,8 +1460,8 @@ def get_view_prediction_by_target_date(view_id: str, market_id: str, target_date
     market_id: str
         要進行預測的市場 ID
     target_date: datetime.date
-        要預測的目標日期 
-    
+        要預測的目標日期
+
     Returns
     -------
     result: List[Dict[str, Any]]
@@ -1408,12 +1483,12 @@ def get_view_prediction_by_target_date(view_id: str, market_id: str, target_date
     """
     def _get_model_kernels(model_id: str) -> Dict[datetime.date, Dict[int, Optional[Dtc]]]:
         """取得觀點訓練完成模型, 會根據起始日期由大到小將字典進行排序
-        
+
         Parameters
         ----------
         model_id: str
             觀點 ID
-        
+
         Returns
         -------
         result: Dict[datetime.date, Dict[int, DecisionTreeClassifier | None]

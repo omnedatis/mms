@@ -20,7 +20,7 @@ from model import (
     get_market_rise_prob, get_mkt_dist_info, add_pattern, add_model, remove_model,
     task_queue, verify_pattern, get_frame, get_plot, del_pattern_data,
     cast_macro_kwargs, del_view_execution, check_macro_info, CatchableTread,
-    get_occurred_patterns, get_draft_date, MT_MANAGER)
+    get_occurred_patterns, get_draft_date, MT_MANAGER, edit_model)
 from const import (
     ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
     BATCH_EXE_CODE)
@@ -149,8 +149,7 @@ def api_edit_model(modelId):
               nullable: true
     """
     logging.info(f"api_edit_model receiving: {modelId}")
-    del_view_execution(modelId)
-    task_queue.push(add_model, args=(modelId,), task_code=TaskCode.MODEL)
+    task_queue.push(edit_model, args=(modelId,), task_code=TaskCode.MODEL)
     return HttpResponseCode.ACCEPTED.format()
 
 
