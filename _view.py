@@ -15,7 +15,7 @@ import pandas as pd
 from _core import View, ViewModel, ModelResultField
 from _db import MimosaDBManager, MimosaDB
 from const import PredictResultField, MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE
-from utils import ThreadController, MT_MANAGER
+from utils import ThreadController, mt_manager
 
 
 
@@ -100,7 +100,7 @@ def _combine_predict_results(view_id: str, period: int,
 def update_view(view: View, latest_dates: Dict[str, datetime.date],
                 controller: ThreadController) -> Tuple[Union[pd.DataFrame, None], bool]:
     try:
-        batch_controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        batch_controller = mt_manager.acquire(BATCH_EXE_CODE)
         _db = MimosaDBManager().next_db
         # pattern data for markets
         x_data = _get_x_data(_db, _db.get_markets(), view.patterns, controller)
@@ -168,7 +168,7 @@ def update_view(view: View, latest_dates: Dict[str, datetime.date],
             if not batch_controller.isactive:
                 logging.info('')
             else:
-                MT_MANAGER.release(BATCH_EXE_CODE)
+                mt_manager.release(BATCH_EXE_CODE)
             return pd.concat(ret, axis=0), smd
         # ??? return any ?
     except Exception as esp:

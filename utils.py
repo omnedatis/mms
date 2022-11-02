@@ -516,7 +516,7 @@ class ModelThreadManager:
         return model_id in self._controllers
 
 
-MT_MANAGER = ModelThreadManager()
+mt_manager = ModelThreadManager()
 
 
 class ExecQueue:

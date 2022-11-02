@@ -7,16 +7,19 @@ Created on Mon Jun 20 19:03:51 2022
 
 import multiprocessing as mp
 import os
+import time
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+
 from func._td import set_market_data_provider, MarketDataProvider, MD_CACHE
 from _core import Pattern, MarketInfo
 from dao import MimosaDB as MimosaDao
-from utils import (int2datetime64d, datetime64d2int, print_error_info,
-                   pickle_dump, pickle_load, singleton)
-from const import PATTERN_UPDATE_CPUS, PREDICT_PERIODS, LOCAL_DB
+from utils import (
+    int2datetime64d, datetime64d2int, print_error_info, pickle_dump, pickle_load,
+     singleton, CatchableTread, mt_manager)
+from const import PATTERN_UPDATE_CPUS, PREDICT_PERIODS, LOCAL_DB, BATCH_EXE_CODE
 
 
 _dao: MimosaDao = MimosaDao()
@@ -361,13 +364,21 @@ class MimosaDB:
         self._market_data_provider.update()
         self.clear()
         markets = [each.mid for each in market_info]
+        def _terminator(pool):
+            controller = mt_manager.acquire(BATCH_EXE_CODE)
+            while True:
+                if not controller.isactive:
+                    pool.termiate()
+                    mt_manager.release(BATCH_EXE_CODE)
+                    break
+                time.sleep(2)
         if len(markets) > 0:
             mdates = {}
             freturns = {}
             pvalues = {}
             shared_patterns = mp.Manager().list(patterns)
             pool = mp.Pool(processes)
-
+        
             def _add_mdates(mid, values):
                 mdates[mid] = values
             def _add_freturns(mid, values):
@@ -388,8 +399,8 @@ class MimosaDB:
                                      error_callback=print_error_info)
                 else:
                     pvalues[market] = np.array([])
-
             pool.close()
+            CatchableTread(target=_terminator, args=(pool,)).start()
             pool.join()
 
         self._set_markets(market_info)

@@ -243,7 +243,7 @@ def _save_mkt_score(recv: Dict[str, pd.DataFrame]):
                 ret.append(cur)
         return ret
     try:
-        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
         logging.info("Saving market score to db started")
         if len(recv) > 0:
             records = gen_records(recv)
@@ -257,7 +257,7 @@ def _save_mkt_score(recv: Dict[str, pd.DataFrame]):
             logging.info("Saving market score to db finished")
     except Exception as esp:
         logging.info("Saving market score to db failed")
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
         raise esp
 
 
@@ -287,7 +287,7 @@ def _save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
         return ret
 
     try:
-        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
         logging.info("Saving latest market period to db started")
         if len(recv) > 0:
             records = gen_records(recv)
@@ -299,10 +299,10 @@ def _save_latest_mkt_period(recv: Dict[str, pd.DataFrame]):
             logging.info("Saving latest market period to db terminated")
         else:
             logging.info("Saving latest market period to db finished")
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
     except Exception as esp:
         logging.info("Saving latest market period to db failed")
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
         raise esp
 
 
@@ -323,7 +323,7 @@ def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = F
                 ret_buffer.append(cur)
         return pd.concat(ret_buffer, axis=0)
     try:
-        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
         logging.info('Saving lastest pattern result to db started')
         if len(recv) > 0:
             db = get_db()
@@ -340,10 +340,10 @@ def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = F
             logging.info('Saving lastest pattern result to db terminated')
         else:
             logging.info('Saving lastest pattern result to db fnished')
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
     except Exception as esp:
         logging.info('Saving lastest pattern result to db failed')
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
         raise esp
 
 
@@ -661,7 +661,7 @@ def _batch_del_view_data():
     try:
         logging.info("Batch deleting view data started")
         for model_id in get_db().get_removed_model():
-            _ViewManager._remove(model_id)
+            ViewManagerFactory.get()._remove(model_id)
         else:
 
             logging.info("Batch deleting view data finished")
@@ -1007,35 +1007,30 @@ def init_db():
 def batch():
     try:
         batch_type = BatchType.SERVICE_BATCH
-        controller = MT_MANAGER.acquire(BATCH_EXE_CODE)
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
         logging.info("Batch service started")
         clean_db_cache()
         clone_db_cache(batch_type)
-        # model_prepare_thread = get_db().clone_model_results(controller)
         get_db().truncate_swap_tables()
         threads = _batch_db_update(batch_type) or []
-        # model_prepare_thread.join()
-        # _batch_del_view_data()
-        # model_exec_ids = _batch_update_views()
         for t in threads:
             if controller.isactive:
                 t.join()
         if controller.isactive:
             get_db().checkout_fcst_data()
-            # get_db().stamp_model_execution(model_exec_ids)
             MimosaDBManager().swap_db()
             for model_id in get_db().get_models():
                 ViewManagerFactory.get()._update(model_id)
             logging.info("Batch finished")
-            MT_MANAGER.release(BATCH_EXE_CODE)
+            mt_manager.release(BATCH_EXE_CODE)
             return
         logging.info("Batch Terminated")
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
 
     except Exception:
         logging.error("Batch failed")
         logging.error(traceback.format_exc())
-        MT_MANAGER.release(BATCH_EXE_CODE)
+        mt_manager.release(BATCH_EXE_CODE)
 
 task_queue = QueueManager({TaskCode.PATTERN:ExecQueue('pattern_queue')})
 
@@ -1643,7 +1638,7 @@ def get_basedate_pred(view_id:str, market_id:str,
         base_date:Optional[datetime.date]=None) -> DateBaseDateResp:
     V_PATH = LOCAL_DB+f'/models/{view_id}'
     if not os.path.isdir(V_PATH):
-        raise BadRequest(f'requested view {view_id} not does not exist')
+        return []
     _db = MimosaDBManager().current_db
     if not _db.is_initialized():
         return []
@@ -1694,7 +1689,7 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         start_date:datetime.date, end_date:datetime.date)-> List[DateRangePredResp]:
     V_PATH = LOCAL_DB+f'/models/{view_id}'
     if not os.path.isdir(V_PATH):
-        raise BadRequest(f'requested view {view_id} not does not exist')
+        return []
     _db = MimosaDBManager().current_db
     if not _db.is_initialized():
         return []

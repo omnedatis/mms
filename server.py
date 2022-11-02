@@ -33,7 +33,7 @@ from model import (
     del_view_execution, check_macro_info, get_mix_pattern_mkt_dist_info, 
     get_occurred_patterns, get_draft_date, edit_model, remove_model, task_queue,
     get_daterange_pred, get_basedate_pred, init_db, get_targetdate_pred, ViewManagerFactory)
-from utils import MT_MANAGER, CatchableTread
+from utils import mt_manager, CatchableTread
 from const import (
     ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
     BATCH_EXE_CODE)
@@ -53,11 +53,11 @@ args = parser.parse_args()
 def api_batch():
     """ Run batch. """
     logging.info("Calling batch, pending")
-    MT_MANAGER.acquire(BATCH_EXE_CODE).switch_off()
-    MT_MANAGER.release(BATCH_EXE_CODE)
-    while MT_MANAGER.exists(BATCH_EXE_CODE):
+    mt_manager.acquire(BATCH_EXE_CODE).switch_off()
+    mt_manager.release(BATCH_EXE_CODE)
+    while mt_manager.exists(BATCH_EXE_CODE):
       time.sleep(10)
-    mt.Thread(target=batch).start
+    mt.Thread(target=batch).start()
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -1196,7 +1196,7 @@ def api_get_basedate_prediction():
     tags:
       - 觀點預測
     parameters:
-      - name:
+      - name: request
         in: body
         type: object
         properties:
@@ -1244,9 +1244,9 @@ def api_get_basedate_prediction():
       try:
         market_id = req['marketCode']
         view_id = req['modelId']
-        base_date:Optional[datetime.date] = req.get('baseDate')
+        base_date:str = req.get('baseDate')
         if base_date is not None:
-          base_date = base_date.strftime('%Y-%m-%d')
+          base_date = datetime.datetime.strptime(base_date, '%Y-%m-%d').date()
       except Exception as esp:
         raise BadRequest(f'invalid arguments {req}')
       ret = get_basedate_pred(view_id, market_id, base_date=base_date)
@@ -1267,7 +1267,7 @@ def api_get_daterange_prediction():
     tags:
       - 觀點預測
     parameters:
-      - name:
+      - name: request
         in: body
         type: object
         properties:
@@ -1321,7 +1321,9 @@ def api_get_daterange_prediction():
         view_id = req['modelId']
         period = req['datePeriod']
         start_date = req['startDate']
+        start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
         end_date = req['endDate']
+        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
       except Exception as esp:
         raise BadRequest(f'invalid arguments {req}')
       ret = get_daterange_pred(
