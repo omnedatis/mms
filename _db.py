@@ -373,7 +373,6 @@ class MimosaDB:
                     pool.terminate()
                     mt_manager.release(BATCH_EXE_CODE)
                     break
-                mt_manager.release(BATCH_EXE_CODE)
                 time.sleep(2)
         if len(markets) > 0:
             mdates = {}
@@ -403,8 +402,10 @@ class MimosaDB:
                 else:
                     pvalues[market] = np.array([])
             pool.close()
-            CatchableTread(target=_terminator, args=(pool,)).start()
+            t = CatchableTread(target=_terminator, args=(pool,)).start()
             pool.join()
+            
+            del t
 
         self._set_markets(market_info)
         self._set_patterns(patterns)
