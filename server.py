@@ -14,7 +14,7 @@ import os
 import time
 import traceback
 import threading as mt
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, OrderedDict
 import sys
 import warnings
 
@@ -33,7 +33,7 @@ from model import (
     del_view_execution, check_macro_info, get_mix_pattern_mkt_dist_info, 
     get_occurred_patterns, get_draft_date, edit_model, remove_model, task_queue,
     get_daterange_pred, get_basedate_pred, init_db, get_targetdate_pred, ViewManagerFactory)
-from utils import mt_manager, CatchableTread
+from utils import mt_manager
 from const import (
     ExecMode, PORT, LOG_LOC, MarketPeriodField, HttpResponseCode, TaskCode,
     BATCH_EXE_CODE)
@@ -211,7 +211,7 @@ def api_get_pattern_dates() -> dict: #TODO
 
 
 @app.route("/patterns/multi/occurdates", methods=["POST"])
-def api_get_patterns_dates():
+def api_get_patterns_dates() -> dict:
     """
     取得多個現象的指定市場, 指定期間歷史發生日期
     ---
@@ -260,12 +260,12 @@ def api_get_patterns_dates():
         data:Dict[str, Any] = request.json
         patterns:List[str] = data['patterns']
         market_id:str = data['marketCode']
-        start_date:Optional[str] = data.get('startDate')
-        if start_date is not None:
-            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+        start_date:Optional[str] = data.get('startDate')  
+        start_date = start_date and datetime.datetime.strptime(
+            start_date, '%Y-%m-%d').date()
         end_date:Optional[str] = data.get('endDate')
-        if end_date is not None:
-            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+        end_date = end_date and datetime.datetime.strptime(
+            end_date, '%Y-%m-%d').date()
     except Exception as esp:
         raise BadRequest
     ret = get_patterns_occur_dates(market_id, patterns, start_date, end_date)
@@ -273,7 +273,7 @@ def api_get_patterns_dates():
 
 
 @app.route("/patterns/compound/count", methods=["POST"])
-def api_get_pattern_count():
+def api_get_pattern_count() -> dict:
     """
     取得複合現象上漲次數
     ---
@@ -318,10 +318,12 @@ def api_get_pattern_count():
         logging.info(
             f"api_get_pattern_count receiving: {request.json}")
         data:Dict[Any] = request.json
-        patterns = data['patterns']
-        markets =  data['markets']
-        start_date = data.get('startDate') and datetime.datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()
-        end_date = data.get('endDate') and datetime.datetime.strptime(data.get('endDate'), '%Y-%m-%d').date()
+        patterns:List[str] = data['patterns']
+        markets:List[str] = data['markets']
+        start_date:Optional[datetime.date] = data.get('startDate') and \
+            datetime.datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()
+        end_date:Optional[datetime.date] = data.get('endDate') and \
+            datetime.datetime.strptime(data.get('endDate'), '%Y-%m-%d').date()
     except Exception as esp:
         raise BadRequest
 
@@ -332,7 +334,7 @@ def api_get_pattern_count():
 
 
 @app.route("/patterns/compound/occurredpatterns", methods=["POST"])
-def api_get_occurred_patterns():
+def api_get_occurred_patterns() -> dict:
     """
     取得指定日期有發生的複合現象
     ---
@@ -368,9 +370,10 @@ def api_get_occurred_patterns():
     try:
         logging.info(
             f"api_get_occurred_patterns receiving: {request.json}")
-        data = request.json
-        date = datetime.datetime.strptime(data['date'], '%Y-%m-%d')
-        patterns = data['patterns']
+        data:Dict[Any] = request.json
+        date:str = data['date']
+        patterns:List[str] = data['patterns']
+        date = datetime.datetime.strptime(date, '%Y-%m-%d').date()
     except Exception:
         raise BadRequest
     ret = get_occurred_patterns(date, patterns)
@@ -378,7 +381,7 @@ def api_get_occurred_patterns():
 
 
 @app.route("/patterns/compound/updownprob", methods=["POST"])
-def api_get_pattern_updownprob():
+def api_get_pattern_updownprob() -> dict:
     """
     取得複合現象上漲/下跌機率
     ---
@@ -429,9 +432,9 @@ def api_get_pattern_updownprob():
     try:
         logging.info(
             f"api_get_pattern_upprob receiving: {request.json}")
-        data = request.json
-        markets = data['markets']
-        patterns = data['patterns']
+        data:Dict[Any] = request.json
+        markets:List[str] = data['markets']
+        patterns:List[str]  = data['patterns']
     except Exception:
         raise BadRequest
     ret = get_mix_pattern_rise_prob(markets, patterns)
@@ -439,7 +442,7 @@ def api_get_pattern_updownprob():
 
 
 @app.route("/patterns/compound/distribution", methods=["POST"])
-def api_get_pattern_distribution():
+def api_get_pattern_distribution() -> dict:
     """
     取得複合現象分布資訊
     ---
@@ -501,7 +504,7 @@ def api_get_pattern_distribution():
 
 
 @app.route("/patterns/<string:patternId>", methods=["POST"])
-def api_add_pattern(patternId):
+def api_add_pattern(patternId:str) -> dict:
     """
     新增現象
     ---
@@ -531,7 +534,7 @@ def api_add_pattern(patternId):
     return HttpResponseCode.ACCEPTED.format()
 
 @app.route("/patterns/<string:patternId>", methods=["PATCH"])
-def api_edit_pattern(patternId):
+def api_edit_pattern(patternId:str) -> dict:
     """
     編輯現象
     ---
@@ -563,7 +566,7 @@ def api_edit_pattern(patternId):
 
 
 @app.route("/markets/upprob", methods=["GET"])
-def api_get_market_upprob():
+def api_get_market_upprob() -> dict:
     """
     取得指定市場集上漲機率
     ---
@@ -598,10 +601,10 @@ def api_get_market_upprob():
     """
     try:
         logging.info(f"api_get_market_upprob receiving: {request.args}")
-        data = request.args
-        date_period = data["datePeriod"]
-        market_type = data.get("marketType") or None
-        category_code = data.get("categoryCode") or None
+        data:OrderedDict[str, Any] = request.args
+        date_period:str = data["datePeriod"]
+        market_type:str = data.get("marketType") or None
+        category_code:str = data.get("categoryCode") or None
     except Exception as esp:
         raise BadRequest
     ret = get_market_rise_prob(int(date_period), market_type, category_code)
@@ -610,7 +613,7 @@ def api_get_market_upprob():
 
 
 @app.route("/markets/distribution", methods=["POST"])
-def api_get_market_distribution():
+def api_get_market_distribution() -> dict:
     """
     取得指定市場集分布資訊
     ---
@@ -655,9 +658,9 @@ def api_get_market_distribution():
     """
     try:
         logging.info(f"api_get_market_distribution receiving: {request.args}")
-        data = request.json
-        date_period = data["datePeriod"]
-        markets = data['markets']
+        data:Dict[str, Any] = request.json
+        date_period:str = data["datePeriod"]
+        markets:List[str] = data['markets']
     except Exception as esp:
         raise BadRequest
     ret = get_mkt_dist_info(int(date_period), markets)
@@ -665,7 +668,7 @@ def api_get_market_distribution():
 
 
 @app.route('/markets/<string:marketCode>/pricedate', methods=["GET"])
-def api_get_market_price_date(marketCode):
+def api_get_market_price_date(marketCode) -> dict:
     """
     取得起始日起各天期資料日期和對應價格天期
     ---
@@ -707,11 +710,10 @@ def api_get_market_price_date(marketCode):
     """
     try:
         logging.info(f"api_get_market_price_date receiving: {request.args}")
-        data = request.args
-        start_date = data.get("startDate") or None
-        if start_date is not None:
-            start_date = datetime.datetime.strptime(
-                start_date, "%Y-%m-%d").date()
+        data:OrderedDict[str, Any] = request.args
+        start_date:Optional[str] = data.get("startDate")
+        start_date = start_date and datetime.datetime.strptime(
+            start_date, '%Y-%m-%d').date()
     except:
         raise BadRequest
     ret = get_market_price_dates(marketCode, start_date)
@@ -721,7 +723,7 @@ def api_get_market_price_date(marketCode):
     return HttpResponseCode.OK.format(ret)
 
 @app.route('/pattern/paramcheck', methods=["POST"])
-def api_pattern_paramscheck():
+def api_pattern_paramscheck() -> dict:
     """
     檢查現象參數合法性
     ---
@@ -766,9 +768,9 @@ def api_pattern_paramscheck():
     """
     logging.info(f"api_pattern_paramscheck receiving: {request.json}")
     try:
-        data = request.json
-        func_code = data['funcCode']
-        params_codes = data['paramCodes']
+        data:Dict[str, Any] = request.json
+        func_code:str = data['funcCode']
+        params_codes:Dict[str, str] = data['paramCodes']
         kwargs = {each["paramCode"]: each["paramValue"]
                   for each in params_codes}
         if check_macro_info(func_code):
@@ -786,7 +788,7 @@ def api_pattern_paramscheck():
 
 
 @app.route('/pattern/frame', methods=["POST"])
-def api_get_pattern_frame():
+def api_get_pattern_frame() -> dict:
     """
     取得現象示意圖規則區間長度
     ---
@@ -830,13 +832,12 @@ def api_get_pattern_frame():
         data = request.json
         func_code = data['funcCode']
         params_codes = data['paramCodes']
-        kwargs = {each["paramCode"]: each["paramValue"]
-                  for each in params_codes}
+        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
         if check_macro_info(func_code):
             raise InternalServerError(f'found inconsistent data type on {func_code}')
         kwargs, msg = cast_macro_kwargs(func_code, kwargs)
         if msg:
-            return HttpResponseCode.BAD_REQUEST.format(msg)
+            raise BadRequest
     except KeyError:
         raise BadRequest
     except ValueError:
@@ -847,7 +848,7 @@ def api_get_pattern_frame():
 
 
 @app.route('/pattern/plot', methods=["POST"])
-def api_get_pattern_plot():
+def api_get_pattern_plot() -> dict:
     """
     取得現象示意圖
     ---
@@ -907,13 +908,12 @@ def api_get_pattern_plot():
         data = request.json
         func_code = data['funcCode']
         params_codes = data['paramCodes']
-        kwargs = {each["paramCode"]: each["paramValue"]
-                  for each in params_codes}
+        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
         if check_macro_info(func_code):
             raise InternalServerError(f'found inconsistent data type on {func_code}')
         kwargs, msg = cast_macro_kwargs(func_code, kwargs)
         if msg:
-            return HttpResponseCode.BAD_REQUEST.format(msg)
+           raise BadRequest
     except KeyError:
         raise BadRequest
     except ValueError:
@@ -955,7 +955,7 @@ def api_get_pattern_plot():
 
 
 @app.route('/pattern/draft/occurdates', methods=['POST'])
-def api_get_pattern_draft_date():
+def api_get_pattern_draft_date() -> dict:
     """
     取得現象草稿發生日期
     ---
@@ -1003,26 +1003,22 @@ def api_get_pattern_draft_date():
     """
     logging.info(f"api_pattern_get_frame receiving: {request.json}")
     try:
-        data = request.json
-        func_code = data['funcCode']
-        params_codes = data['paramCodes']
-        market_code = data['marketCode']
-        kwargs = {each["paramCode"]: each["paramValue"]
-                  for each in params_codes}
+        data:Dict[str, Any] = request.json
+        func_code:str = data['funcCode']
+        params_codes:Dict[str, str] = data['paramCodes']
+        market_code:str = data['marketCode']
+        kwargs = {each["paramCode"]: each["paramValue"] for each in params_codes}
         start_date = data.get('startDate')
         end_date = data.get('endDate')
-        if start_date is not None:
-            start_date = datetime.datetime.strptime(
-                start_date, "%Y-%m-%d").date()
-        if end_date is not None:
-            end_date = datetime.datetime.strptime(
-                end_date, "%Y-%m-%d").date()
+        start_date = start_date and datetime.datetime.strptime(
+            start_date, "%Y-%m-%d").date()
+        end_date = end_date and datetime.datetime.strptime(
+            end_date, "%Y-%m-%d").date()
         if check_macro_info(func_code):
             raise InternalServerError(f'found inconsistent data type on {func_code}')
-        print(kwargs)
         kwargs, msg = cast_macro_kwargs(func_code, kwargs)
         if msg:
-            return HttpResponseCode.BAD_REQUEST.format(msg)
+            raise BadRequest
     except KeyError:
         raise BadRequest
     except ValueError:
@@ -1032,7 +1028,7 @@ def api_get_pattern_draft_date():
     return HttpResponseCode.OK.format(ret)
 
 @app.route("/markets/trend", methods=["POST"])
-def api_get_market_trend():
+def api_get_market_trend() -> dict:
     """
     取得指定市場一組或一段指定時間的過去各天期報酬趨勢
     ---
@@ -1088,19 +1084,16 @@ def api_get_market_trend():
     """
     try:
         logging.info(f"api_get_market_trend receiving: {request.json}")
-        data = request.json
+        data:Dict[str, Any] = request.json
         market_id = data["marketCode"]
-        start_date = data.get("startDate") or None
-        if start_date is not None:
-            start_date = datetime.datetime.strptime(
-                start_date, "%Y-%m-%d").date()
-        end_date = data.get("endDate") or None
-        if end_date is not None:
-            end_date = datetime.datetime.strptime(
-                end_date, "%Y-%m-%d").date()
-        dates = data.get("dates") or None
-        if dates is not None:
-            dates = [datetime.datetime.strptime(
+        start_date = data.get("startDate") 
+        end_date = data.get("endDate") 
+        dates = data.get("dates") 
+        start_date = start_date and datetime.datetime.strptime(
+            start_date, "%Y-%m-%d").date()
+        end_date = end_date and datetime.datetime.strptime(
+            end_date, "%Y-%m-%d").date()
+        dates = dates and [datetime.datetime.strptime(
                      each, "%Y-%m-%d").date() for each in dates]
     except Exception as esp:
         raise BadRequest
@@ -1129,7 +1122,7 @@ def api_get_market_trend():
 
 
 @app.route("/model/prediction/targetdate", methods=["POST"])
-def api_get_targetdate_prediction():
+def api_get_targetdate_prediction() -> dict:
     """
     使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
     那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
@@ -1183,20 +1176,19 @@ def api_get_targetdate_prediction():
     """
     try:
         logging.info(f"api_get_targetdate_prediction receiving: {request.json}")
-        data = request.json
+        data:Dict[str, Any] = request.json
         view_id = data["modelId"]
         market_id = data["marketCode"]
-        target_date = data.get("targetDate") or None
-        if target_date is not None:
-            target_date = datetime.datetime.strptime(
-                target_date, "%Y-%m-%d").date()
+        target_date = data.get("targetDate")
+        target_date = target_date and datetime.datetime.strptime(
+            target_date, "%Y-%m-%d").date()
     except Exception as esp:
         raise BadRequest
     result = get_targetdate_pred(view_id, market_id, target_date)
     return HttpResponseCode.OK.format(result)
 
 @app.route("/model/prediction/basedate", methods=["POST"])
-def api_get_basedate_prediction():
+def api_get_basedate_prediction() -> dict:
     """
     取得指定基底日期各天期預測結果
     ---
@@ -1247,28 +1239,28 @@ def api_get_basedate_prediction():
                     format: date
     """
     try:
-      logging.info(f"api_get_basedate_prediction receiving: {request.json}")
-      req:dict = request.json
-      try:
-        market_id = req['marketCode']
-        view_id = req['modelId']
-        base_date:str = req.get('baseDate')
-        if base_date is not None:
-          base_date = datetime.datetime.strptime(base_date, '%Y-%m-%d').date()
-      except Exception as esp:
-        raise BadRequest(f'invalid arguments {req}')
-      ret = get_basedate_pred(view_id, market_id, base_date=base_date)
-      return HttpResponseCode.OK.format([i._asdict() for i in ret])
+        logging.info(f"api_get_basedate_prediction receiving: {request.json}")
+        try:
+            data:Dict[str, Any] = request.json
+            market_id:str = data['marketCode']
+            view_id:str = data['modelId']
+            base_date:Optional[str] = data.get('baseDate')
+            base_date = base_date and datetime.datetime.strptime(
+                base_date, '%Y-%m-%d').date()
+        except Exception as esp:
+            raise BadRequest(f'invalid arguments {data}')
+        ret = get_basedate_pred(view_id, market_id, base_date=base_date)
+        return HttpResponseCode.OK.format([i._asdict() for i in ret])
     except BadRequest as esp:
-      logging.info(traceback.format_exc())
-      raise esp
+        logging.info(traceback.format_exc())
+        raise esp
     except InternalServerError as esp:
-      logging.info(traceback.format_exc())
-      raise esp
+        logging.info(traceback.format_exc())
+        raise esp
 
 
 @app.route("/model/prediction/range", methods=["POST"])
-def api_get_daterange_prediction():
+def api_get_daterange_prediction() -> dict:
     """
     取得指定日期各天期所有預測結果
     ---
@@ -1323,26 +1315,26 @@ def api_get_daterange_prediction():
     """
     try:
       logging.info(f"api_get_daterange_prediction receiving: {request.json}")
-      req:dict = request.json
       try:
-        market_id = req['marketCode']
-        view_id = req['modelId']
-        period = int(req['datePeriod'])
-        start_date = req['startDate']
-        start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        end_date = req['endDate']
-        end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+          data:Dict[str, Any] = request.json
+          market_id:str = data['marketCode']
+          view_id:str = data['modelId']
+          period:str = int(data['datePeriod'])
+          start_date:str = data['startDate']
+          end_date:str = data['endDate']
+          start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+          end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
       except Exception as esp:
-        raise BadRequest(f'invalid arguments {req}')
+          raise BadRequest(f'invalid arguments {data}')
       ret = get_daterange_pred(
-        view_id, market_id, period=period, start_date=start_date, end_date=end_date)
+          view_id, market_id, period=int(period), start_date=start_date, end_date=end_date)
       return HttpResponseCode.OK.format([i._asdict() for i in ret])
     except BadRequest as esp:
-      logging.info(traceback.format_exc())
-      raise esp
+        logging.info(traceback.format_exc())
+        raise esp
     except InternalServerError as esp:
-      logging.info(traceback.format_exc())
-      raise esp
+        logging.info(traceback.format_exc())
+        raise esp
 
 
 @app.errorhandler(MethodNotAllowed)

@@ -57,7 +57,6 @@ import time
 from typing import Any, List, NamedTuple, Optional, Dict, Tuple
 import numpy as np
 import pandas as pd
-from scipy.stats.distributions import norm
 from sklearn.tree import DecisionTreeClassifier as Dtc
 import traceback
 from werkzeug.exceptions import BadRequest
@@ -85,12 +84,6 @@ import multiprocessing as mp
 from threading import Thread, Lock
 from _core._view.model import COMMON_DECISION_TREE_PARAMS, Labelization, MIN_Y_SAMPLES
 
-
-def _get_t(t0, digits:int=-1):
-    ret = (datetime.datetime.now() - t0).total_seconds()
-    if digits >= 0:
-        ret = np.round(ret, digits)
-    return ret
 
 def get_db():
     """Get Mimosa DB accessing object"""
@@ -743,7 +736,9 @@ def get_pattern_occur(market_id: str, pattern_id):
     return get_mix_pattern_occur(market_id, [pattern_id])
 
 
-def get_mix_pattern_occur_cnt(patterns, markets, begin_date=None, end_date=None):
+def get_mix_pattern_occur_cnt(patterns:List[str], markets:List[str],
+         begin_date:Optional[datetime.date]=None, 
+         end_date:Optional[datetime.date]=None) -> Tuple[int, int]:
     def func(vs):
         recv = np.array(
             [((v >= 0).all(axis=1).sum(), (v == 1).all(axis=1).sum()) for v in vs])
@@ -770,7 +765,8 @@ def get_mix_pattern_occur_cnt(patterns, markets, begin_date=None, end_date=None)
     return func(pdata)
 
 
-def _get_mix_pattern_rise_prob(markets, patterns, period):
+def _get_mix_pattern_rise_prob(markets, patterns, period
+        ) -> Tuple[int, int, int, int, int, int]:
     def func(v, r):
         ret = r[(v == 1).all(axis=1) & (r == r)]
         return (len(r), (r > 0).sum().tolist(), (r < 0).sum().tolist(),
@@ -787,7 +783,7 @@ def _get_mix_pattern_rise_prob(markets, patterns, period):
     return mcnt, mup, mdown, pcnt, pup, pdown
 
 
-def get_mix_pattern_rise_prob(markets, patterns):
+def get_mix_pattern_rise_prob(markets:List[str], patterns:List[str]):
     market_rise = {'dataType': 'marketAverage',
                    'upDownType': 'rise',
                    'values': []}
@@ -814,7 +810,7 @@ def get_mix_pattern_rise_prob(markets, patterns):
     return [market_rise, market_fall, pattern_rise, pattern_fall]
 
 
-def get_occurred_patterns(date, patterns):
+def get_occurred_patterns(date:datetime.date, patterns:List[str]) -> List[str]:
     _db = MimosaDBManager().current_db
     markets = _db.get_markets()
     if not markets or not _db.is_initialized():
@@ -829,7 +825,7 @@ def get_occurred_patterns(date, patterns):
     if len(pvalues) == 0:
         return []
     pvalues = pd.concat(pvalues, axis=1).fillna(False).astype(bool).T
-    ret = pvalues.columns.values[pvalues.values.any(axis=0)].tolist()
+    ret:List[str] = pvalues.columns.values[pvalues.values.any(axis=0)].tolist()
     return ret
 
 
@@ -901,7 +897,8 @@ def get_pattern_mkt_dist_info(pattern_id, period, market_type=None, category_cod
     return get_mix_pattern_mkt_dist_info([pattern_id], period, market_type, category_code)
 
 
-def get_market_rise_prob(period, market_type=None, category_code=None):
+def get_market_rise_prob(period:str, market_type:Optional[str]=None, 
+        category_code:Optional[str]=None) -> float:
     def func(r):
         ret = r[(r == r)]
         return len(ret), (ret > 0).sum().tolist()
@@ -977,115 +974,6 @@ def get_market_price_dates(market_id: str, begin_date: Optional[datetime.date] =
     return ret
 
 
-def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
-        ) -> List[Dict[str, Any]]:
-    """使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
-    那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
-    10 日), 12/11 的 20 天期預測結果(往前 20 日)... 依此類推至 120 天期.
-
-    Parameters
-    ----------
-    view_id: str
-        要用來預測的觀點 ID
-    market_id: str
-        要進行預測的市場 ID
-    target_date: datetime.date
-        要預測的目標日期
-
-    Returns
-    -------
-    result: List[Dict[str, Any]]
-        各天期預測結果, 若無該天期結果則不會填入陣列. 內容物件格式為
-         - dataDate: datetime.date
-            基底日期
-         - price: float
-            基底價格
-         - datePeriod: int
-            預測天期
-         - upperBound: float
-            預測上界報酬
-         - lowerBound: float
-            預測下界報酬
-         - score: int
-            預測標籤
-         - priceDate: datetime.date
-            目標預測日期
-    """
-    def _get_model_kernels(model_id: str) -> Dict[datetime.date, Dict[int, Optional[Dtc]]]:
-        """取得觀點訓練完成模型, 會根據起始日期由大到小將字典進行排序
-
-        Parameters
-        ----------
-        model_id: str
-            觀點 ID
-
-        Returns
-        -------
-        result: Dict[datetime.date, Dict[int, DecisionTreeClassifier | None]
-            觀點歷史訓練完成模型, 結構為: [可用起始日]-[目標天期]-DecisionTreeClassifier | None
-        """
-        result = {}
-        model_path = f'{LOCAL_DB}/models'
-        if not os.path.exists(model_path) or not os.path.exists(f'{model_path}/{model_id}'):
-            return result
-        model_names = os.listdir(f'{model_path}/{model_id}')
-        for model_name in model_names:
-            start_date = datetime.datetime.strptime(model_name[:-4], '%Y-%m-%d').date()
-            model_info: Optional[Dict[int, Dtc]] = pickle_load(f'{model_path}/{view_id}/{model_name}')
-            result[start_date] = model_info
-        result = dict(sorted(result.items(), reverse=True))
-        return result
-    results = []
-    _db = MimosaDBManager().current_db
-    if not _db.is_initialized():
-        return results
-    _dao = get_dao()
-    market_dates = _db.get_market_dates(market_id)
-    market_cps = _db.get_market_prices(market_id)
-    models = _get_model_kernels(view_id)
-
-    for period in PREDICT_PERIODS:
-        base_dates = market_dates[market_dates < target_date]
-        if len(base_dates) < period:
-            continue
-        base_date = base_dates[-period].tolist()
-        cpidx = market_cps.index.values.astype('datetime64[D]') == base_date
-        base_cp = market_cps[cpidx].values[0]
-        for start_date in models:
-            if start_date < base_date:
-                model = models[start_date].get(period)
-                if model is not None:
-                    view = _dao.get_model_info(view_id).get_model(period, start_date)
-                    x_data = _db.get_pattern_values(market_id, view.patterns)
-                    y_data = _db.get_future_returns(market_id, [period])[period]
-                    y_data = y_data[~np.isnan(y_data.values)]
-                    dates = y_data.index.values.astype('datetime64[D]')
-                    sidx = (dates < view.train_begin_date).sum()
-                    eidx = (dates < view.effective_date).sum() - view.predict_period
-                    eidx = max([sidx, eidx])
-                    y_coder = Labelization(Y_LABELS)
-                    y_coder.fit(y_data.values, Y_OUTLIER)
-
-                    xidx = x_data.index.values.astype('datetime64[D]') == base_date
-                    x = x_data[xidx].values
-                    y = model.predict(x)
-                    lower_bound = y_coder.label2lowerbound(y)[0]
-                    upper_bound = y_coder.label2upperbound(y)[0]
-                    ret = y_coder.label2mean(y)[0]
-
-                    results.append({
-                        'dataDate': str(base_date),
-                        'price': base_cp,
-                        'datePeriod': period,
-                        'upperBound': upper_bound,
-                        'lowerBound': lower_bound,
-                        'score': int(y[0]),
-                        'priceDate': str(target_date)
-                    })
-                break
-    return results
-
-
 def get_macro_params(func_code):
     db = get_db()
     return db.get_macro_param_type(func_code)
@@ -1094,6 +982,8 @@ def get_macro_params(func_code):
 def check_macro_info(func):
     """Check mismatch of definitions between code and db."""
     macro_info = get_macro_params(func)
+    if not macro_info:
+        raise BadRequest('macro info not found')
     if 'market_id' in macro_info:
         del macro_info['market_id']
 
@@ -1250,6 +1140,116 @@ def get_mkt_trend_score(market_id: str,
     result = pd.DataFrame(result)
     result = pd.concat([cps, result], axis=1)
     return result
+
+
+def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
+        ) -> List[Dict[str, Any]]:
+    """使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
+    那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
+    10 日), 12/11 的 20 天期預測結果(往前 20 日)... 依此類推至 120 天期.
+
+    Parameters
+    ----------
+    view_id: str
+        要用來預測的觀點 ID
+    market_id: str
+        要進行預測的市場 ID
+    target_date: datetime.date
+        要預測的目標日期
+
+    Returns
+    -------
+    result: List[Dict[str, Any]]
+        各天期預測結果, 若無該天期結果則不會填入陣列. 內容物件格式為
+         - dataDate: datetime.date
+            基底日期
+         - price: float
+            基底價格
+         - datePeriod: int
+            預測天期
+         - upperBound: float
+            預測上界報酬
+         - lowerBound: float
+            預測下界報酬
+         - score: int
+            預測標籤
+         - priceDate: datetime.date
+            目標預測日期
+    """
+    def _get_model_kernels(model_id: str) -> Dict[datetime.date, Dict[int, Optional[Dtc]]]:
+        """取得觀點訓練完成模型, 會根據起始日期由大到小將字典進行排序
+
+        Parameters
+        ----------
+        model_id: str
+            觀點 ID
+
+        Returns
+        -------
+        result: Dict[datetime.date, Dict[int, DecisionTreeClassifier | None]
+            觀點歷史訓練完成模型, 結構為: [可用起始日]-[目標天期]-DecisionTreeClassifier | None
+        """
+        result = {}
+        model_path = f'{LOCAL_DB}/models'
+        if not os.path.exists(model_path) or not os.path.exists(f'{model_path}/{model_id}'):
+            return result
+        model_names = os.listdir(f'{model_path}/{model_id}')
+        for model_name in model_names:
+            start_date = datetime.datetime.strptime(model_name[:-4], '%Y-%m-%d').date()
+            model_info: Optional[Dict[int, Dtc]] = pickle_load(f'{model_path}/{view_id}/{model_name}')
+            result[start_date] = model_info
+        result = dict(sorted(result.items(), reverse=True))
+        return result
+    results = []
+    _db = MimosaDBManager().current_db
+    if not _db.is_initialized():
+        return results
+    _dao = get_dao()
+    market_dates = _db.get_market_dates(market_id)
+    market_cps = _db.get_market_prices(market_id)
+    models = _get_model_kernels(view_id)
+
+    for period in PREDICT_PERIODS:
+        base_dates = market_dates[market_dates < target_date]
+        if len(base_dates) < period:
+            continue
+        base_date = base_dates[-period].tolist()
+        cpidx = market_cps.index.values.astype('datetime64[D]') == base_date
+        base_cp = market_cps[cpidx].values[0]
+        for start_date in models:
+            if start_date < base_date:
+                model = models[start_date].get(period)
+                if model is not None:
+                    view = _dao.get_model_info(view_id).get_model(period, start_date)
+                    x_data = _db.get_pattern_values(market_id, view.patterns)
+                    y_data = _db.get_future_returns(market_id, [period])[period]
+                    y_data = y_data[~np.isnan(y_data.values)]
+                    dates = y_data.index.values.astype('datetime64[D]')
+                    sidx = (dates < view.train_begin_date).sum()
+                    eidx = (dates < view.effective_date).sum() - view.predict_period
+                    eidx = max([sidx, eidx])
+                    y_coder = Labelization(Y_LABELS)
+                    y_coder.fit(y_data.values, Y_OUTLIER)
+
+                    xidx = x_data.index.values.astype('datetime64[D]') == base_date
+                    x = x_data[xidx].values
+                    y = model.predict(x)
+                    lower_bound = y_coder.label2lowerbound(y)[0]
+                    upper_bound = y_coder.label2upperbound(y)[0]
+                    ret = y_coder.label2mean(y)[0]
+
+                    results.append({
+                        'dataDate': str(base_date),
+                        'price': base_cp,
+                        'datePeriod': period,
+                        'upperBound': upper_bound,
+                        'lowerBound': lower_bound,
+                        'score': int(y[0]),
+                        'priceDate': str(target_date)
+                    })
+                break
+    return results
+
 
 class DateBaseDateResp(NamedTuple):
     dataDate:datetime.datetime
