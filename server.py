@@ -120,7 +120,7 @@ def api_remove_model(modelId:str) -> dict:
     """
     logging.info(f"api_remove_model  receiving: {modelId}")
     del_view_execution(modelId)
-    remove_model()
+    remove_model(modelId)
     return HttpResponseCode.ACCEPTED.format()
 
 
