@@ -662,8 +662,8 @@ def api_get_market_distribution():
     return HttpResponseCode.OK.format(ret)
 
 
-@app.route('/markets/<string:marketId>/pricedate', methods=["GET"])
-def api_get_market_price_date(marketId):
+@app.route('/markets/<string:marketCode>/pricedate', methods=["GET"])
+def api_get_market_price_date(marketCode):
     """
     取得起始日起各天期資料日期和對應價格天期
     ---
@@ -674,7 +674,7 @@ def api_get_market_price_date(marketId):
         in: query
         type: string
         format: date
-      - name: marketId
+      - name: marketCode
         in: path
         type: string
         required: true
@@ -712,7 +712,7 @@ def api_get_market_price_date(marketId):
                 start_date, "%Y-%m-%d").date()
     except:
         raise BadRequest
-    ret = get_market_price_dates(marketId, start_date)
+    ret = get_market_price_dates(marketCode, start_date)
     ret = [{"dataDate": each[MarketPeriodField.DATA_DATE.value].strftime('%Y-%m-%d'),
             "priceDate":each[MarketPeriodField.PRICE_DATE.value].strftime('%Y-%m-%d'),
             "datePeriod":each[MarketPeriodField.DATE_PERIOD.value], } for each in ret]
@@ -1041,7 +1041,7 @@ def api_get_market_trend():
         in: body
         type: object
         properties:
-          marketId:
+          marketCode:
             type: string
           startDate:
             type: string
@@ -1087,7 +1087,7 @@ def api_get_market_trend():
     try:
         logging.info(f"api_get_market_trend receiving: {request.json}")
         data = request.json
-        market_id = data["marketId"]
+        market_id = data["marketCode"]
         start_date = data.get("startDate") or None
         if start_date is not None:
             start_date = datetime.datetime.strptime(
@@ -1127,7 +1127,7 @@ def api_get_market_trend():
 
 
 @app.route("/model/prediction/targetdate", methods=["POST"])
-def api_get_prediction_targetdate():
+def api_get_targetdate_prediction():
     """
     使用指定觀點, 取得目標預測日期往前各天期的預測結果, 例如: 目標日期為 12/31,
     那麼就會取得 12/26 的 5 天期預測結果(往前 5 日), 12/21 的 10 天期預測結果(往前
@@ -1142,7 +1142,7 @@ def api_get_prediction_targetdate():
         properties:
           modelId:
             type: string
-          marketId:
+          marketCode:
             type: string
           targetDate:
             type: string
@@ -1162,23 +1162,28 @@ def api_get_prediction_targetdate():
               items:
                 type: object
                 properties:
-                  baseDate:
+                  datePeriod:
+                    type: integer
+                  dataDate:
                     type: string
                     format: date
-                  basePrice:
+                  upperBound:
                     type: number
-                  basePrice:
+                  lowerBound:
                     type: number
-                  predictUpperBound:
+                  price:
                     type: number
-                  predictLowerBound:
-                    type: number
+                  score:
+                    type: integer
+                  priceDate:
+                    type: string
+                    format: date
     """
     try:
-        logging.info(f"api_get_prediction_targetdate receiving: {request.json}")
+        logging.info(f"api_get_targetdate_prediction receiving: {request.json}")
         data = request.json
         view_id = data["modelId"]
-        market_id = data["marketId"]
+        market_id = data["marketCode"]
         target_date = data.get("targetDate") or None
         if target_date is not None:
             target_date = datetime.datetime.strptime(
@@ -1222,21 +1227,22 @@ def api_get_basedate_prediction():
               items:
                 type: object
                 properties:
-                  dataDate:
-                    type: number
-                  upperBound:
-                    type: integer
-                  lowerBound:
-                    type: integer
                   datePeriod:
+                    type: integer
+                  dataDate:
+                    type: string
+                    format: date
+                  upperBound:
+                    type: number
+                  lowerBound:
+                    type: number
+                  price:
+                    type: number
+                  score:
                     type: integer
                   priceDate:
                     type: string
                     format: date
-                  score:
-                    type: integer
-                  price:
-                    type: number
     """
     try:
       logging.info(f"api_get_basedate_prediction receiving: {request.json}")
@@ -1305,13 +1311,13 @@ def api_get_daterange_prediction():
                     type: number
                   lowerBound:
                     type: number
+                  price:
+                    type: number
+                  score:
+                    type: interger
                   priceDate:
                     type: string
                     format: date
-                  score:
-                    type: interger
-                  price:
-                    type: number
     """
     try:
       logging.info(f"api_get_daterange_prediction receiving: {request.json}")
