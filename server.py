@@ -1234,7 +1234,7 @@ def api_get_basedate_prediction():
                     type: string
                     format: date
                   score:
-                    type: interger
+                    type: integer
                   price:
                     type: number
     """
@@ -1250,7 +1250,7 @@ def api_get_basedate_prediction():
       except Exception as esp:
         raise BadRequest(f'invalid arguments {req}')
       ret = get_basedate_pred(view_id, market_id, base_date=base_date)
-      return HttpResponseCode.OK(ret)
+      return HttpResponseCode.OK.format([i._asdict() for i in ret])
     except BadRequest as esp:
       logging.info(traceback.format_exc())
       raise esp
@@ -1328,7 +1328,7 @@ def api_get_daterange_prediction():
         raise BadRequest(f'invalid arguments {req}')
       ret = get_daterange_pred(
         view_id, market_id, period=period, start_date=start_date, end_date=end_date)
-      return HttpResponseCode.OK([i._asdict() for i in ret])
+      return HttpResponseCode.OK.format([i._asdict() for i in ret])
     except BadRequest as esp:
       logging.info(traceback.format_exc())
       raise esp
