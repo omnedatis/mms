@@ -693,8 +693,9 @@ def get_mix_pattern_occur(market_id: str, patterns: List, start_date: str = None
     return ret.tolist()
 
 
-def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: str = None,
-                             end_date: str = None) -> List[Dict[str, str]]:
+def get_patterns_occur_dates(market_id: str, patterns: List[str], 
+        start_date: Optional[datetime.date] = None,
+        end_date: Optional[datetime.date] = None) -> List[Dict[str, str]]:
     """取得指定市場, 指定時間區段複數現象的發生時間
 
     Parameters
@@ -717,8 +718,6 @@ def get_patterns_occur_dates(market_id: str, patterns: List[str], start_date: st
     if not _db.is_initialized():
         return []
 
-    start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
     results = []
     for pattern in patterns:
         pdata = _db.get_pattern_values(market_id, [pattern])
@@ -1277,20 +1276,20 @@ def get_basedate_pred(view_id:str, market_id:str,
         open(i, 'rb')) for i in glob.glob(fr'{V_PATH}\*.pkl')}
     cps = _db.get_market_prices(market_id)
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
-    _base_date = np.array(base_date or cps.index[-1]).astype('datetime64[D]')
+    _base_date = np.array(base_date or cps.index.values[-1]).astype('datetime64[D]')
     if cps.index.values[-1] < _base_date:
         return []
-    cp = cps.iloc[(cps.index.values<=_base_date).sum()]
-    ptns = ptns.values[(cps.index.values<=_base_date).sum()]
-    data_date = cps.index.values[(cps.index.values<=_base_date).sum()].astype('datetime64[D]')
+    cp = cps.iloc[(cps.index.values<=_base_date).sum()-1]
+    ptns = ptns.values[(cps.index.values<=_base_date).sum()-1]
+    data_date = cps.index.values[(cps.index.values<=_base_date).sum()-1].astype('datetime64[D]')
     e_dates:Dict[str, datetime.timedelta] = {i:data_date.tolist(
         )-datetime.datetime.strptime(i, '%Y-%m-%d').date() for i in models}
     e_dates ={k:v for k, v  in e_dates.items() if v.days>0}
     if len(e_dates) == 0:
         return []
     e_date = next(iter(sorted(e_dates, key=lambda k: e_dates[k].days)))
-    begin = (cps.index.values.astype('datetime64[D]') >= view_begin).sum()
-    end = (cps.index.values.astype('datetime64[D]') <= datetime.datetime.strptime(e_date, '%Y-%m-%d').date()).sum()
+    begin = (cps.index.values.astype('datetime64[D]') >= view_begin).sum()-1
+    end = (cps.index.values.astype('datetime64[D]') <= datetime.datetime.strptime(e_date, '%Y-%m-%d').date()).sum()-1
     price_dates = {i['DATE_PERIOD']:i['PRICE_DATE'] for i in get_market_price_dates(market_id, data_date)}
     model = models[e_date]
     for period in PREDICT_PERIODS:
@@ -1336,10 +1335,10 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
     ptidx, ridx, pidx = ptns.index, freturns.index, prices.index
     for key, date in e_dates.items():
         date = np.array(date).astype('datetime64[D]')
-        _prices = prices[(pidx<=view_begin).sum():(pidx<=date).sum()-1]
-        _ptns = ptns.iloc[(ptidx<=view_begin).sum():(ptidx<=date).sum()-1,:]
+        _prices = prices[(pidx<=view_begin).sum()-1:(pidx<=date).sum()-2]
+        _ptns = ptns.iloc[(ptidx<=view_begin).sum()-1:(ptidx<=date).sum()-2,:]
         score = pd.Series(models[key][period].predict(_ptns.values), index=_ptns.index).rename('score')
-        _freturn = freturns[(ridx<=view_begin).sum():(ridx<=date).sum()-1]
+        _freturn = freturns[(ridx<=view_begin).sum()-1:(ridx<=date).sum()-2]
         y_encoder = Labelization(Y_LABELS)
         y_encoder.fit(_freturn.values)
         lower_bound = pd.Series(y_encoder.label2lowerbound(score.values), index=score.index).rename('lower')

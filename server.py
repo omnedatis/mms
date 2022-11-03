@@ -14,7 +14,7 @@ import os
 import time
 import traceback
 import threading as mt
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import sys
 import warnings
 
@@ -56,13 +56,13 @@ def api_batch():
     mt_manager.acquire(BATCH_EXE_CODE).switch_off()
     mt_manager.release(BATCH_EXE_CODE)
     while mt_manager.exists(BATCH_EXE_CODE):
-      time.sleep(10)
+        time.sleep(10)
     mt.Thread(target=batch).start()
     return HttpResponseCode.ACCEPTED.format()
 
 
 @app.route("/models/<string:modelId>", methods=["POST"])
-def api_add_model(modelId):
+def api_add_model(modelId:str) -> dict:
     """
     新增觀點
     ---
@@ -93,7 +93,7 @@ def api_add_model(modelId):
 
 
 @app.route("/models/<string:modelId>", methods=["DELETE"])
-def api_remove_model(modelId):
+def api_remove_model(modelId:str) -> dict:
     """
     移除觀點
     ---
@@ -120,13 +120,12 @@ def api_remove_model(modelId):
     """
     logging.info(f"api_remove_model  receiving: {modelId}")
     del_view_execution(modelId)
-    t = CatchableTread(target=remove_model, args=(modelId,))
-    t.start()
+    remove_model()
     return HttpResponseCode.ACCEPTED.format()
 
 
 @app.route("/models/<string:modelId>", methods=["PATCH"])
-def api_edit_model(modelId):
+def api_edit_model(modelId:str) -> dict:
     """
     編輯觀點
     ---
@@ -157,7 +156,7 @@ def api_edit_model(modelId):
 
 
 @app.route("/patterns/compound/occurdates", methods=["POST"])
-def api_get_pattern_dates():
+def api_get_pattern_dates() -> dict: #TODO
     """
     取得複合現象歷史發生日期
     ---
@@ -198,11 +197,11 @@ def api_get_pattern_dates():
     """
     try:
         logging.info(f"api_get_pattern_dates receiving: {request.json}")
-        data = request.json
-        patterns = data['patterns']
-        market_id = data['marketCode']
-        start_date = data.get('startDate')
-        end_date = data.get('endDate')
+        data:dict = request.json
+        patterns:List[str] = data['patterns']
+        market_id:str = data['marketCode']
+        start_date:str = data.get('startDate')
+        end_date:str = data.get('endDate')
     except Exception as esp:
         raise BadRequest
     ret = get_mix_pattern_occur(market_id, patterns, start_date, end_date)
@@ -258,11 +257,15 @@ def api_get_patterns_dates():
     """
     try:
         logging.info(f"api_get_patterns_dates receiving: {request.json}")
-        data = request.json
-        patterns = data['patterns']
-        market_id = data['marketCode']
-        start_date = data.get('startDate')
-        end_date = data.get('endDate')
+        data:Dict[str, Any] = request.json
+        patterns:List[str] = data['patterns']
+        market_id:str = data['marketCode']
+        start_date:Optional[str] = data.get('startDate')
+        if start_date is not None:
+            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+        end_date:Optional[str] = data.get('endDate')
+        if end_date is not None:
+            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
     except Exception as esp:
         raise BadRequest
     ret = get_patterns_occur_dates(market_id, patterns, start_date, end_date)
@@ -314,8 +317,7 @@ def api_get_pattern_count():
     try:
         logging.info(
             f"api_get_pattern_count receiving: {request.json}")
-        data = request.json
-
+        data:Dict[Any] = request.json
         patterns = data['patterns']
         markets =  data['markets']
         start_date = data.get('startDate') and datetime.datetime.strptime(data.get('startDate'), '%Y-%m-%d').date()
