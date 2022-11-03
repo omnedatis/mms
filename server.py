@@ -1319,7 +1319,7 @@ def api_get_daterange_prediction():
       try:
         market_id = req['marketCode']
         view_id = req['modelId']
-        period = req['datePeriod']
+        period = int(req['datePeriod'])
         start_date = req['startDate']
         start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
         end_date = req['endDate']

@@ -1278,6 +1278,8 @@ def get_basedate_pred(view_id:str, market_id:str,
     cps = _db.get_market_prices(market_id)
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
     _base_date = np.array(base_date or cps.index[-1]).astype('datetime64[D]')
+    if cps.index.values[-1] < _base_date:
+        return []
     cp = cps.iloc[(cps.index.values<=_base_date).sum()]
     ptns = ptns.values[(cps.index.values<=_base_date).sum()]
     data_date = cps.index.values[(cps.index.values<=_base_date).sum()].astype('datetime64[D]')
@@ -1320,34 +1322,37 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
     _db = MimosaDBManager().current_db
     if not _db.is_initialized():
         return []
+    if period not in PREDICT_PERIODS:
+        return []
     ret = []
     view_info = get_db().get_model_info(view_id)
     view_begin = np.array(view_info.train_begin).astype('datetime64[D]')
-    models:Dict[str, Dict[int, Dtc]] = {i.split['/'][-1][:-4]:pickle.load(
-        open(i, 'rb'))for i in glob.glob(f'{V_PATH}/*.pkl')}
+    models:Dict[str, Dict[int, Dtc]] = {i.split('\\')[-1][:-4]:pickle.load(
+        open(i, 'rb'))for i in glob.glob(fr'{V_PATH}\*.pkl')}
     e_dates = {i:datetime.datetime.strptime(i, '%Y-%m-%d') for i in models}
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
-    freturns = _db.get_future_returns(market_id, period)[str(period)].rename('freturn')
+    freturns = _db.get_future_returns(market_id, [period]).iloc[:,0].rename('freturn')
     prices = _db.get_market_prices(market_id).rename('cp')
     ptidx, ridx, pidx = ptns.index, freturns.index, prices.index
     for key, date in e_dates.items():
-        date = np.array(date).astype('datetime64[ns]')
+        date = np.array(date).astype('datetime64[D]')
         _prices = prices[(pidx<=view_begin).sum():(pidx<=date).sum()-1]
-        _ptns = ptns[(ptidx<=view_begin).sum():(ptidx<=date).sum()-1]
-        score = pd.Series(models[key][period].predict(_ptns), index=_ptns.index).rename('pred')
+        _ptns = ptns.iloc[(ptidx<=view_begin).sum():(ptidx<=date).sum()-1,:]
+        score = pd.Series(models[key][period].predict(_ptns.values), index=_ptns.index).rename('score')
         _freturn = freturns[(ridx<=view_begin).sum():(ridx<=date).sum()-1]
         y_encoder = Labelization(Y_LABELS)
-        y_encoder.fit(_freturn)
-        lower_bound:pd.Series = y_encoder.label2lowerbound(score).rename('lower')
-        upper_bound:pd.Series = y_encoder.label2upperbound(score).rename('upper')
-        data = pd.concat([score, lower_bound, upper_bound, _prices], axis=1, sort=True).dropna()
-        for date in data.index.values:
+        y_encoder.fit(_freturn.values)
+        lower_bound = pd.Series(y_encoder.label2lowerbound(score.values), index=score.index).rename('lower')
+        upper_bound = pd.Series(y_encoder.label2upperbound(score.values), index=score.index).rename('upper')
+        data = pd.concat([score, lower_bound, upper_bound, _prices], axis=1, sort=True).ffill().dropna()
+        for date in data.index.values.astype('datetime64[D]'):
             if date < start_date or date > end_date:
                 continue
-            price_date = [i for i in get_market_price_dates(
-                market_id, date.tolist()) if i['DATE_PERIOD']==period]
+            price_date = [i['PRICE_DATE'] for i in get_market_price_dates(
+                market_id, date.tolist()) if i['DATE_PERIOD']==period][0]
             resp = DateRangePredResp(
-                date.tolist(), data['cp'].loc[date], data['lower'].loc[date],
-                data['upper'].loc[date], data['pred'].loc[date], price_date)
+                date.tolist().strftime('%Y-%m-%d'), data['cp'].loc[date].tolist(),
+                data['lower'].loc[date].tolist(), data['upper'].loc[date].tolist(),
+                data['score'].loc[date].tolist(), price_date.strftime('%Y-%m-%d'))
             ret.append(resp)
     return ret
