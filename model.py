@@ -1318,7 +1318,7 @@ def get_basedate_pred(view_id:str, market_id:str,
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
     ptns = ptns.loc[_base_date,:]
     scores = [Scorer(k, l, u) for k, l, u in get_db().get_score_meta_info()]
-    price_dates = {i['DATE_PERIOD']:i['PRICE_DATE'] for i in extend_working_dates(_base_date, 120)}
+    price_dates = extend_working_dates(np.array([_base_date]), 120)
    
     for period in PREDICT_PERIODS:
         pred = model[period].predict(ptns.values.reshape(1,-1)) # reshape to 2D
@@ -1340,7 +1340,7 @@ def get_basedate_pred(view_id:str, market_id:str,
                 break
         ret.append(DateBaseDateResp(
             _base_date.tolist().strftime('%Y-%m-%d'), cp.tolist(), period, upper_bound.tolist(),
-            lower_bound.tolist(), score.tolist(), price_dates[period].strftime('%Y-%m-%d'))._asdict())
+            lower_bound.tolist(), score.tolist(), price_dates[-1].tolist())._asdict())
     return ret
 
 class DateRangePredResp(NamedTuple):
@@ -1409,8 +1409,8 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         y_coder.fit(_freturn)
         lower_bound = y_coder.label2lowerbound(score)[0]
         upper_bound = y_coder.label2upperbound(score)[0]
-        price_dates = {i['DATE_PERIOD']:i['PRICE_DATE'] for i in extend_working_dates(np.array(date).astype('datetime[D]'), 120)}
+        price_dates = extend_working_dates(np.array([date]).astype('datetime64[D]'), 120)
         ret.append(DateRangePredResp(
             date.strftime('%Y-%m-%d'), cp, upper_bound.tolist(),
-            lower_bound.tolist(), price_dates[period].strftime('%Y-%m-%d'))._asdict())
+            lower_bound.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
