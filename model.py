@@ -254,6 +254,7 @@ def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = F
 def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
     logging.info('DB update started')
     try:
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
         markets = get_markets()
         patterns = get_db().get_patterns()
         if batch_type == BatchType.SERVICE_BATCH:
@@ -270,11 +271,15 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
                 _db.get_latest_pattern_values())).start()]
             for exec_id in exec_ids:
                 get_db().set_pattern_execution_complete(exec_id)
-        
-        logging.info('DB update finished')
+        if controller.isactive:
+            logging.info('DB update finished')  
+        else:
+            logging.info('DB update terminated')
+        mt_manager.release(BATCH_EXE_CODE)
         return  ret
     except Exception as esp:
         logging.error('DB update failed')
+        mt_manager.release(BATCH_EXE_CODE)
         raise esp
 
 
@@ -616,6 +621,7 @@ class _ViewManager:
 
 def init_db():
     try:
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
         batch_type = BatchType.INIT_BATCH
         logging.info('Batch init started')
         clean_db_cache()
@@ -624,10 +630,15 @@ def init_db():
             _batch_db_update(batch_type)
         _batch_del_view_data()
         _batch_recover_executions()
-        logging.info('Batch init finished')
+        if controller.isactive:
+            logging.info('Batch init finished')
+        else:
+            logging.info('Batch terminated')
+        mt_manager.release(BATCH_EXE_CODE)
     except Exception as esp:
         logging.error("Batch init failed")
         logging.error(traceback.format_exc())
+        mt_manager.release(BATCH_EXE_CODE)
 
 
 def batch():
@@ -1261,6 +1272,16 @@ class DateBaseDateResp(NamedTuple):
 
 def get_basedate_pred(view_id:str, market_id:str, 
         base_date:Optional[datetime.date]=None) -> List[DateBaseDateResp]:
+    class Scorer(NamedTuple):
+        value:int
+        lower:float
+        upper:float
+    
+        def get(self, mean, std):
+            lower = self.lower*std if not pd.isna(self.lower) else -np.inf
+            upper = self.upper*std if not pd.isna(self.upper) else np.inf
+            if mean > lower and mean <= upper:
+                return self.value
 
     V_PATH = LOCAL_DB+f'/models/{view_id}'
     if not os.path.isdir(V_PATH):
@@ -1295,23 +1316,31 @@ def get_basedate_pred(view_id:str, market_id:str,
     model_effective_date = datetime.datetime.strptime(model_effective_key, '%Y-%m-%d').date()
 
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
-    ptns = ptns.values[(cps.index.values<_base_date).sum()-1,:]
-
-    begin = (cps.index.values.astype('datetime64[D]') >= view_begin).sum()-1
-    end = (cps.index.values.astype('datetime64[D]') >= model_effective_date).sum()-1
-    
+    ptns = ptns.loc[_base_date,:]
+    scores = [Scorer(k, l, u) for k, l, u in get_db().get_score_meta_info()]
     price_dates = {i['DATE_PERIOD']:i['PRICE_DATE'] for i in get_market_price_dates(market_id, _base_date)}
    
     for period in PREDICT_PERIODS:
-        score = model[period].predict(ptns.reshape(1,-1)) # reshape to 2D
+        pred = model[period].predict(ptns.values.reshape(1,-1)) # reshape to 2D
         y_coder = Labelization(Y_LABELS)
-        freturns = _db.get_future_returns(market_id, [period]).values[begin:end-1,0].dropna()
+        freturns = _db.get_future_returns(market_id, [period])
+        begin = max((freturns.index.values.astype('datetime64[D]') <= view_begin).sum()-1, 0)
+        end = max((freturns.index.values.astype('datetime64[D]') <= model_effective_date).sum()-1, 0)
+        freturns = _db.get_future_returns(market_id, [period]).values[begin:end-1,0]
+        freturns = freturns[freturns == freturns]
         y_coder.fit(freturns, Y_OUTLIER)
-        lower_bound = y_coder.label2lowerbound(score)[0]
-        upper_bound = y_coder.label2upperbound(score)[0]
+        lower_bound = y_coder.label2lowerbound(pred)[0]
+        upper_bound = y_coder.label2upperbound(pred)[0]
+        mean = y_coder.label2mean(pred)[0]
+        std = np.std(freturns)
+        score = None
+        for scorer in scores:
+            score = scorer.get(mean, std)
+            if score is not None:
+                break
         ret.append(DateBaseDateResp(
             _base_date.tolist().strftime('%Y-%m-%d'), cp.tolist(), period, upper_bound.tolist(),
-            lower_bound.tolist(), score.tolist()[0], price_dates[period].strftime('%Y-%m-%d'))._asdict())
+            lower_bound.tolist(), score.tolist(), price_dates[period].strftime('%Y-%m-%d'))._asdict())
     return ret
 
 class DateRangePredResp(NamedTuple):
@@ -1319,7 +1348,6 @@ class DateRangePredResp(NamedTuple):
     price:float
     upperBound:float
     lowerBound:float
-    score:int
     priceDate:str
 
 
@@ -1364,23 +1392,25 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         return mask.tolist() + _dates[-count:].tolist()
 
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
-    freturns = _db.get_future_returns(market_id, [period]).dropna().values[:,0]
-    begin =  (cps.index.values.astype('datetime64[D]') >= view_begin).sum()-1
+    freturns = _db.get_future_returns(market_id, [period])
+    begin =  max((freturns.index.values.astype('datetime64[D]') <= view_begin).sum()-1, 0)
     
     ret = []
     pred_dates = get_effective_model_dates(cps.index)
     for e_date, cp, date in zip(pred_dates, cps.values.tolist(), cps.index.tolist()):
         if date < start_date or date > end_date or not (e_date==e_date):
             continue
-        _ptns = ptns[ptns.index.values == date]
+        _ptns = ptns.loc[date]
         score = models[e_date.strftime('%Y-%m-%d')][period].predict(_ptns.values.reshape(1,-1))
-        end = (cps.index.values.astype('datetime64[D]') <= e_date).sum()-1
+        end = max((freturns.index.values.astype('datetime64[D]') <= e_date).sum()-1, 0)
         y_coder = Labelization(Y_LABELS)
-        y_coder.fit(freturns[begin:end-1])
+        _freturn = freturns.values[begin:end-1,0]
+        _freturn = _freturn[_freturn==_freturn]
+        y_coder.fit(_freturn)
         lower_bound = y_coder.label2lowerbound(score)[0]
         upper_bound = y_coder.label2upperbound(score)[0]
         price_dates = {i['DATE_PERIOD']:i['PRICE_DATE'] for i in get_market_price_dates(market_id, date)}
         ret.append(DateRangePredResp(
-            date.strftime('%Y-%m-%d'), cp, upper_bound.tolist(), lower_bound.tolist(),
-            score.tolist()[0], price_dates[period])._asdict())
+            date.strftime('%Y-%m-%d'), cp, upper_bound.tolist(),
+            lower_bound.tolist(), price_dates[period].strftime('%Y-%m-%d'))._asdict())
     return ret
