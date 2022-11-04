@@ -1305,7 +1305,7 @@ def get_basedate_pred(view_id:str, market_id:str,
     for period in PREDICT_PERIODS:
         score = model[period].predict(ptns.reshape(1,-1)) # reshape to 2D
         y_coder = Labelization(Y_LABELS)
-        freturns = _db.get_future_returns(market_id, [period]).dropna().values[begin:end-1,0]
+        freturns = _db.get_future_returns(market_id, [period]).values[begin:end-1,0].dropna()
         y_coder.fit(freturns, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(score)[0]
         upper_bound = y_coder.label2upperbound(score)[0]
