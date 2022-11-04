@@ -1298,7 +1298,7 @@ def get_basedate_pred(view_id:str, market_id:str,
     ptns = ptns.values[(cps.index.values<_base_date).sum()-1,:]
 
     begin = (cps.index.values.astype('datetime64[D]') >= view_begin).sum()-1
-    end = (cps.index.values.astype('datetime64[D]') <= model_effective_date).sum()-1
+    end = (cps.index.values.astype('datetime64[D]') >= model_effective_date).sum()-1
     
     price_dates = {i['DATE_PERIOD']:i['PRICE_DATE'] for i in get_market_price_dates(market_id, _base_date)}
    
