@@ -1277,7 +1277,7 @@ def get_basedate_pred(view_id:str, market_id:str,
     
     cps = _db.get_market_prices(market_id)
     if base_date is not None:
-        if cps.index.values[-1] < base_date:
+        if cps.index.values[-1] < np.array(base_date).astype('datetime64[D]'):
             return []
     _base_date = np.array(base_date or cps.index.values[-1]).astype('datetime64[D]')
     cp = cps.loc[_base_date]
