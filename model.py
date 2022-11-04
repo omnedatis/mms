@@ -1340,7 +1340,7 @@ def get_basedate_pred(view_id:str, market_id:str,
                 break
         ret.append(DateBaseDateResp(
             _base_date.tolist().strftime('%Y-%m-%d'), cp.tolist(), period, upper_bound.tolist(),
-            lower_bound.tolist(), score.tolist(), price_dates[-1].tolist())._asdict())
+            lower_bound.tolist(), score.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
 
 class DateRangePredResp(NamedTuple):
