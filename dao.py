@@ -1390,25 +1390,37 @@ class MimosaDB:
             對應的 ModelInfo 物件
 
         """
-        self.cache_manager.refresh([
-            TableName.MODEL_INFO.value, TableName.MODEL_MKT_MAP.value,
-            TableName.MODEL_PAT_MAP.value
-        ])
+
+        engine = self._engine()
+        sql = (f"SELECT model.{ModelInfoField.MODEL_ID.value}, "
+               f"model.{ModelInfoField.TRAIN_START_DT.value}, "
+               f"model.{ModelInfoField.RETRAIN_CYCLE.value}, "
+               f"mkts.{ModelMarketMapField.MARKET_CODE.value}, "
+               f"pats.{ModelPatternMapField.PATTERN_ID.value} "
+               f"FROM {TableName.MODEL_INFO.value} AS model "
+               f"LEFT JOIN {TableName.MODEL_MKT_MAP.value} As mkts "
+               f"ON model.{ModelInfoField.MODEL_ID.value}="
+               f"mkts.{ModelMarketMapField.MODEL_ID.value} "
+               f"LEFT JOIN {TableName.MODEL_PAT_MAP.value} As pats "
+               f"ON model.{ModelInfoField.MODEL_ID.value}="
+               f"pats.{ModelPatternMapField.MODEL_ID.value} "
+               f"WHERE model.{ModelInfoField.MODEL_ID.value}='{model_id}';")
+        data = pd.read_sql_query(sql, engine)
+
         # 取得觀點的訓練資訊
-        model_info = self.cache_manager.get_data(CacheName.MODEL_INFO.value)
-        m_cond = model_info[ModelInfoField.MODEL_ID.value].values == model_id
-        if len(model_info[m_cond]) == 0:
+
+        if len(data) == 0:
             # 若發生取不到資料的情況
             raise Exception(f"get_model_info: model not found: {model_id}")
 
-        train_begin = model_info[m_cond].iloc[0][ModelInfoField.TRAIN_START_DT.value]
+        train_begin = data.iloc[0][ModelInfoField.TRAIN_START_DT.value]
         # (train_begin == train_begin) 用於判斷是否為 nan 或 nat
         if train_begin is not None and (train_begin == train_begin):
             train_begin = train_begin.date()
         else:
             train_begin = None
 
-        train_gap = model_info[m_cond].iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
+        train_gap = data.iloc[0][ModelInfoField.RETRAIN_CYCLE.value]
         # (train_gap == train_gap) 用於判斷是否為 nan 或 nat
         if train_gap is not None and (train_gap == train_gap):
             train_gap = int(train_gap)
@@ -1416,20 +1428,14 @@ class MimosaDB:
             train_gap = None
 
         # 取得觀點的所有標的市場
-        markets = self.cache_manager.get_data(CacheName.MODEL_MKT_MAP.value)
-        m_cond = markets[ModelMarketMapField.MODEL_ID.value].values == model_id
-        markets = markets[m_cond][ModelMarketMapField.MARKET_CODE.value].values.tolist(
-        )
+        markets = np.unique(data[ModelMarketMapField.MARKET_CODE.value].dropna().values).tolist()
 
         # 取得觀點所有使用的現象 ID
-        patterns = self.cache_manager.get_data(CacheName.MODEL_PAT_MAP.value)
-        m_cond = patterns[ModelPatternMapField.MODEL_ID.value].values == model_id
-        if len(patterns[m_cond]) == 0:
+        patterns = np.unique(data[ModelPatternMapField.PATTERN_ID.value].dropna().values).tolist()
+        if len(patterns) == 0:
             # 若觀點下沒有任何現象, 則回傳例外
             raise Exception(
                 f"get_model_info: 0 model pattern exception: {model_id}")
-        patterns = patterns[m_cond][ModelPatternMapField.PATTERN_ID.value].values.tolist(
-        )
 
         result = ModelInfo.make(
             model_id, patterns, markets, train_begin, train_gap)
@@ -2156,13 +2162,13 @@ class MimosaDB:
             觀點ID
         start_dt: datetime.date
             觀點訓練結果可用起始日
-        
+
         Returns
         -------
         None.
         """
-        data = pd.DataFrame([[view_id, start_dt]], 
-            columns=[ModelKernelField.MODEL_ID.value, 
+        data = pd.DataFrame([[view_id, start_dt]],
+            columns=[ModelKernelField.MODEL_ID.value,
             ModelKernelField.VALID_START_DT.value])
         data = self._extend_basic_cols(data)
         self._insert(table_name=TableName.MODEL_KERNEL.value, data=data)
@@ -2586,7 +2592,7 @@ class MimosaDB:
             觀點訓練結果可用起始日
         end_dt: datetime.date
             觀點訓練結果可用終止日
-        
+
         Returns
         -------
         None.
@@ -2596,13 +2602,13 @@ class MimosaDB:
 
         whereby = [
             (ModelKernelField.MODEL_ID.value, model_id),
-            (ModelKernelField.VALID_START_DT.value, 
+            (ModelKernelField.VALID_START_DT.value,
                 np.datetime64(start_dt).astype('datetime64[D]').tolist())
         ]
         self._update(
             table_name=TableName.MODEL_KERNEL.value,
             set_value=[
-                (ModelKernelField.VALID_END_DT.value, 
+                (ModelKernelField.VALID_END_DT.value,
                  str(np.datetime64(end_dt).astype('datetime64[D]').tolist())),
                 ('MODIFY_DT', str(now)),
                 ('MODIFY_BY', self.MODIFY_BY)
