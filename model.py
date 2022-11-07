@@ -1407,7 +1407,7 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         y_coder = Labelization(Y_LABELS)
         _freturn = freturns.values[begin:end-1,0]
         _freturn = _freturn[_freturn==_freturn]
-        y_coder.fit(_freturn)
+        y_coder.fit(_freturn, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(score)[0]
         upper_bound = y_coder.label2upperbound(score)[0]
         price_dates = extend_working_dates(np.array([date]).astype('datetime64[D]'), period)
