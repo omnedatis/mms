@@ -70,7 +70,7 @@ from func.common import ParamType
 from func._tp import *
 from const import *
 from utils import *
-from const import (BatchType, MarketPeriodField, MarketScoreField,
+from const import (BatchType, MarketPeriodField, MarketScoreField, 
                    ModelExecution, ModelMarketHitSumField, ModelStatus,
                    PatternExecution, PatternResultField, PredictResultField,
                    MIN_BACKTEST_LEN, PREDICT_PERIODS, BATCH_EXE_CODE, TaskCode,
@@ -1274,9 +1274,9 @@ def get_basedate_pred(view_id:str, market_id:str,
         base_date:Optional[datetime.date]=None) -> List[DateBaseDateResp]:
     class Scorer(NamedTuple):
         value:int
-        lower:float
         upper:float
-    
+        lower:float
+
         def get(self, mean, std):
             lower = self.lower*std if not pd.isna(self.lower) else -np.inf
             upper = self.upper*std if not pd.isna(self.upper) else np.inf
@@ -1317,11 +1317,11 @@ def get_basedate_pred(view_id:str, market_id:str,
 
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
     ptns = ptns.loc[_base_date,:]
-    scores = [Scorer(k, l, u) for k, l, u in get_db().get_score_meta_info()]
-    price_dates = extend_working_dates(np.array([_base_date]), 120)
+    scores = [Scorer(k, upper=u, lower=l) for k, u, l in get_db().get_score_meta_info()]
+    
    
     for period in PREDICT_PERIODS:
-        pred = model[period].predict(ptns.values.reshape(1,-1)) # reshape to 2D
+        pred = model[period].predict(ptns.values.reshape((1,-1))) # reshape to 2D
         y_coder = Labelization(Y_LABELS)
         freturns = _db.get_future_returns(market_id, [period])
         begin = max((freturns.index.values.astype('datetime64[D]') <= view_begin).sum()-1, 0)
@@ -1334,6 +1334,7 @@ def get_basedate_pred(view_id:str, market_id:str,
         mean = y_coder.label2mean(pred)[0]
         std = np.std(freturns)
         score = None
+        price_dates = extend_working_dates(np.array([_base_date]), period)
         for scorer in scores:
             score = scorer.get(mean, std)
             if score is not None:
@@ -1401,7 +1402,7 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         if date < start_date or date > end_date or not (e_date==e_date):
             continue
         _ptns = ptns.loc[date]
-        score = models[e_date.strftime('%Y-%m-%d')][period].predict(_ptns.values.reshape(1,-1))
+        score = models[e_date.strftime('%Y-%m-%d')][period].predict(_ptns.values.reshape((1,-1)))
         end = max((freturns.index.values.astype('datetime64[D]') <= e_date).sum()-1, 0)
         y_coder = Labelization(Y_LABELS)
         _freturn = freturns.values[begin:end-1,0]
@@ -1409,7 +1410,7 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         y_coder.fit(_freturn)
         lower_bound = y_coder.label2lowerbound(score)[0]
         upper_bound = y_coder.label2upperbound(score)[0]
-        price_dates = extend_working_dates(np.array([date]).astype('datetime64[D]'), 120)
+        price_dates = extend_working_dates(np.array([date]).astype('datetime64[D]'), period)
         ret.append(DateRangePredResp(
             date.strftime('%Y-%m-%d'), cp, upper_bound.tolist(),
             lower_bound.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
