@@ -262,21 +262,23 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
         else:
             _db = MimosaDBManager().current_db
         _db.update(markets, patterns, batch_type)
-        ret = [CatchableTread(target=_db.dump).start()]
+        ret = [CatchableTread(target=_db.dump)]
         if batch_type == BatchType.SERVICE_BATCH:
             exec_type = PatternExecution.BATCH_SERVICE
             exec_ids = [get_db().set_pattern_execution_start(each.pid, exec_type)
                         for each in patterns]
             ret += [CatchableTread(target=_save_latest_pattern_results, args=(
-                _db.get_latest_pattern_values())).start()]
+                _db.get_latest_pattern_values(),))]
             for exec_id in exec_ids:
                 get_db().set_pattern_execution_complete(exec_id)
+        for t in ret:
+            t.start()
         if controller.isactive:
             logging.info('DB update finished')  
         else:
             logging.info('DB update terminated')
         mt_manager.release(BATCH_EXE_CODE)
-        return  ret
+        return ret
     except Exception as esp:
         logging.error('DB update failed')
         mt_manager.release(BATCH_EXE_CODE)

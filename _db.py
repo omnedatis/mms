@@ -404,8 +404,6 @@ class MimosaDB:
             pool.close()
             t = CatchableTread(target=_terminator, args=(pool,)).start()
             pool.join()
-            
-            del t
 
         self._set_markets(market_info)
         self._set_patterns(patterns)
