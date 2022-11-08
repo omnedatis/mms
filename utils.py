@@ -585,7 +585,7 @@ class QueueManager:
     def __init__(self, queues: Dict[TaskCode, ExecQueue]):
         self._queues = queues
         for key, queue in self._queues.items():
-            queue.limit = key.value
+            queue.limit = key
 
     def push(self, func: Callable, *, task_code: TaskCode, args: Optional[tuple] = None):
         self._queues[task_code].push(func, args=args)
