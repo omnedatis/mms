@@ -369,9 +369,9 @@ class MimosaDB:
         def _terminator(pool):
             controller = mt_manager.acquire(BATCH_EXE_CODE)
             while True:
-                if not controller.isactive and not batch_type == BatchType.SERVICE_BATCH:
-                    pool.terminate()
+                if not controller.isactive:
                     mt_manager.release(BATCH_EXE_CODE)
+                    pool.terminate()
                     break
                 time.sleep(2)
         if len(markets) > 0:
@@ -402,7 +402,8 @@ class MimosaDB:
                 else:
                     pvalues[market] = np.array([])
             pool.close()
-            t = CatchableTread(target=_terminator, args=(pool,)).start()
+            if batch_type == BatchType.SERVICE_BATCH:
+                t = CatchableTread(target=_terminator, args=(pool,)).start()
             pool.join()
 
         self._set_markets(market_info)
