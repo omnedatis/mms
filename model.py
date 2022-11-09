@@ -107,7 +107,7 @@ def clone_db_cache(batch_type):
     db.clone_db_cache(batch_type)
 
 
-def get_markets() -> List[MarketInfo]:
+def get_markets() -> List[MarketInfo]: # why not dao method ?
     "Get all the markets and its information"
     db = get_db()
     minfo = db.get_market_info()
@@ -253,26 +253,35 @@ def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = F
 
 
 def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
-    logging.info('DB update started')
     try:
         controller = mt_manager.acquire(BATCH_EXE_CODE)
-        markets = get_markets()
+        logging.info('DB update started')
+        markets = get_markets() # henceforth, ...
         patterns = get_db().get_patterns()
         if batch_type == BatchType.SERVICE_BATCH:
             _db = MimosaDBManager().next_db
         else:
             _db = MimosaDBManager().current_db
+         # ... can be writen in the function to form a standalone step
         _db.update(markets, patterns, batch_type)
-        ret = [CatchableTread(target=_db.dump)]
+        ret = [CatchableTread(target=_db.dump)] #???
         if batch_type == BatchType.SERVICE_BATCH:
-            exec_type = PatternExecution.BATCH_SERVICE
-            exec_ids = [get_db().set_pattern_execution_start(each.pid, exec_type)
-                        for each in patterns]
+            exec_type = PatternExecution.BATCH_SERVICE # redundant definition in const
+            exec_ids = []
+            for each in patterns:
+                if not controller.isactive:
+                    break
+                exec_ids.append(get_db().set_pattern_execution_start(each.pid, exec_type))
             ret += [CatchableTread(target=_save_latest_pattern_results, args=(
                 _db.get_latest_pattern_values(),))]
             for exec_id in exec_ids:
+                if not controller.isactive:
+                    break
                 get_db().set_pattern_execution_complete(exec_id)
+
         for t in ret:
+            if not controller.isactive:
+                break
             t.start()
         if controller.isactive:
             logging.info('DB update finished')  
@@ -650,17 +659,21 @@ def batch():
         controller = mt_manager.acquire(BATCH_EXE_CODE)
         logging.info("Batch service started")
         clean_db_cache()
-        clone_db_cache(batch_type)
-        get_db().truncate_swap_tables()
-        threads = _batch_db_update(batch_type) or []
+        if controller.isactive:
+            clone_db_cache(batch_type) # ineffective without clone
+        if controller.isactive:
+            get_db().truncate_swap_tables()
+        threads = _batch_db_update(batch_type) or [] # standalone step
+        # update threads
         for t in threads:
-            if controller.isactive:
-                t.join()
+            if not controller.isactive:
+                break
+            t.join()
         if controller.isactive:
             get_db().checkout_fcst_data()
             MimosaDBManager().swap_db()
-            _batch_del_view_data()
-            for model_id in get_db().get_models():
+            _batch_del_view_data() # fast
+            for model_id in get_db().get_models(): # a function ?
                 ViewManagerFactory.get()._update(model_id)
             logging.info("Service batch finished")
             mt_manager.release(BATCH_EXE_CODE)

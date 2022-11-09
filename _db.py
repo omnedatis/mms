@@ -364,7 +364,7 @@ class MimosaDB:
 
     def update(self, market_info, patterns, batch_type, processes: int=PATTERN_UPDATE_CPUS):
         controller = mt_manager.acquire(BATCH_EXE_CODE)
-        logging.info('Pattern update started')
+        logging.info('Local DB update started')
         MD_CACHE.clear()  # clear cache <- old version
         self._market_data_provider.update()
         self.clear()
@@ -416,14 +416,14 @@ class MimosaDB:
                 self._market_dates = [mdates[mid] for mid in markets]
                 self._market_future_returns = [freturns[mid] for mid in markets]
                 self._market_pattern_values = [pvalues[mid] for mid in markets]
-                logging.info('Pattern update finished')
+                logging.info('Local DB update finished')
                 mt_manager.release(BATCH_EXE_CODE)
                 return
-            logging.info('Pattern update terminated')
+            logging.info('Local DB update terminated')
             mt_manager.release(BATCH_EXE_CODE)
         except Exception as esp:
             logging.error(traceback.format_exc())
-            logging.error('Pattern update failed')
+            logging.error('Local DB update failed')
             mt_manager.release(BATCH_EXE_CODE)
             raise esp
 
