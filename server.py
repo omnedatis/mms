@@ -52,18 +52,18 @@ args = parser.parse_args()
 @app.route("/model/batch", methods=["GET"])
 def api_batch():
     """ Run batch. """
-    logging.info("Calling batch, pending")
+    logging.info("Calling service batch, pending")
     now = datetime.datetime.now()
-    d = now.date().day
-    h = now.hour
-    m = now.minute
-    s = now.second
+    d = str(now.date().day).rjust(2, '0')
+    h = str(now.hour).rjust(2, '0')
+    m = str(now.minute).rjust(2, '0')
+    s = str(now.second).rjust(2, '0')
     mt_manager.acquire(BATCH_EXE_CODE).switch_off()
     mt_manager.release(BATCH_EXE_CODE)
     while mt_manager.exists(BATCH_EXE_CODE):
         time.sleep(10)
     
-    mt.Thread(target=batch, name=f'batch_service {d}{h}{m}{s}').start()
+    mt.Thread(target=batch, name=f'service-batch-{d}{h}{m}{s}').start()
     return HttpResponseCode.ACCEPTED.format()
 
 
@@ -1401,6 +1401,6 @@ if __name__ == '__main__':
         logging.error("setting up failed")
         logging.error(traceback.format_exc())
     if (not args.motionless) and (not args.batchless):
-        mt.Thread(target=init_db).start()
+        mt.Thread(target=init_db, name='init-batch').start()
     if (not args.motionless):
         serve(app, port=PORT, threads=10, )

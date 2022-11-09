@@ -4,10 +4,11 @@ Created on Mon Jun 20 19:03:51 2022
 
 @author: WaNiNi
 """
-
+import logging
 import multiprocessing as mp
 import os
 import time
+import traceback
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -362,6 +363,8 @@ class MimosaDB:
             self._patterns[pidx] = pattern
 
     def update(self, market_info, patterns, batch_type, processes: int=PATTERN_UPDATE_CPUS):
+        controller = mt_manager.acquire(BATCH_EXE_CODE)
+        logging.info('Pattern update started')
         MD_CACHE.clear()  # clear cache <- old version
         self._market_data_provider.update()
         self.clear()
@@ -405,12 +408,24 @@ class MimosaDB:
             if batch_type == BatchType.SERVICE_BATCH:
                 t = CatchableTread(target=_terminator, args=(pool,)).start()
             pool.join()
-
-        self._set_markets(market_info)
-        self._set_patterns(patterns)
-        self._market_dates = [mdates[mid] for mid in markets]
-        self._market_future_returns = [freturns[mid] for mid in markets]
-        self._market_pattern_values = [pvalues[mid] for mid in markets]
+        
+        try:
+            if controller.isactive:
+                self._set_markets(market_info)
+                self._set_patterns(patterns)
+                self._market_dates = [mdates[mid] for mid in markets]
+                self._market_future_returns = [freturns[mid] for mid in markets]
+                self._market_pattern_values = [pvalues[mid] for mid in markets]
+                logging.info('Pattern update finished')
+                mt_manager.release()
+                return
+            logging.info('Pattern update terminated')
+            mt_manager.release()
+        except Exception as esp:
+            logging.error(traceback.format_exc())
+            logging.error('Pattern update failed')
+            mt_manager.release()
+            raise esp
 
 
 @singleton

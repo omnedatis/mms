@@ -245,7 +245,8 @@ def _save_latest_pattern_results(recv: Dict[str, pd.DataFrame], update: bool = F
             logging.info('Saving lastest pattern result to db fnished')
         mt_manager.release(BATCH_EXE_CODE)
     except Exception as esp:
-        logging.info('Saving lastest pattern result to db failed')
+        logging.error(traceback.format_exc())
+        logging.error('Saving lastest pattern result to db failed')
         mt_manager.release(BATCH_EXE_CODE)
         raise esp
 
@@ -280,32 +281,33 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
         mt_manager.release(BATCH_EXE_CODE)
         return ret
     except Exception as esp:
+        logging.error(traceback.format_exc())
         logging.error('DB update failed')
         mt_manager.release(BATCH_EXE_CODE)
         raise esp
 
 
 def _batch_recover_executions():
-    logging.info('Batch view execution recover started')
+    logging.info('Recovering view execution started')
     for model in get_db().get_recover_models():
         logging.info(f"call recover view: {model}")
         ViewManagerFactory.get()._add(model)
     else:
-        logging.info('Batch view execution recover finished')
+        logging.info('recovering view execution finished')
 
 
 def _batch_del_view_data():
     try:
-        logging.info("Batch deleting view data started")
+        logging.info("Removing view data started")
         for model_id in get_db().get_removed_model():
             logging.info(f"call remove view: {model_id}")
             ViewManagerFactory.get()._remove(model_id)
         else:
 
-            logging.info("Batch deleting view data finished")
+            logging.info("Removing view data finished")
             return
     except Exception as esp:
-        logging.info("Batch deleting view data falied")
+        logging.info("Removing view data falied")
         raise esp
 
 def _get_x_data(db_: MimosaDB, markets: List[str], patterns: List[str],
@@ -480,8 +482,8 @@ class _ViewManager:
             path = f'..\_local_db\models\{view_id}'
             if os.path.exists(path):
                 shutil.rmtree(path)
-                logging.info(f"remove local models of view {view_id}")
-            logging.info(f"remove view complete: {view_id}")
+                logging.info(f"Removing local models of view {view_id}")
+            logging.info(f"Removing view finished: {view_id}")
         except:
             logging.error(traceback.format_exc())
         self._release(view_id)
@@ -532,7 +534,7 @@ class _ViewManager:
                     get_db().save_view_kernel(view_id, bdate)
                 prev = bdate
             if controller.isactive:
-                logging.info(f"add view complete: {view_id}")
+                logging.info(f"Adding view finished: {view_id}")
                 get_db().set_model_train_complete(view_id)
         except:
             logging.error(traceback.format_exc())
@@ -576,7 +578,7 @@ class _ViewManager:
                     get_db().update_view_kernel(view_id, bdates[-1], bdate-datetime.timedelta(1))
                     get_db().save_view_kernel(view_id, bdate)
                     get_db().set_model_train_complete(view_id)
-                    logging.info(f"update view complete: {view_id}")
+                    logging.info(f"Updating view complete: {view_id}")
         except:
             logging.error(traceback.format_exc())
 
@@ -625,7 +627,7 @@ def init_db():
     try:
         controller = mt_manager.acquire(BATCH_EXE_CODE)
         batch_type = BatchType.INIT_BATCH
-        logging.info('Batch init started')
+        logging.info('Initial batch started')
         clean_db_cache()
         clone_db_cache(batch_type)
         if not MimosaDBManager().is_ready():
@@ -633,13 +635,13 @@ def init_db():
         _batch_del_view_data()
         _batch_recover_executions()
         if controller.isactive:
-            logging.info('Batch init finished')
+            logging.info('Initial batch finished')
         else:
-            logging.info('Batch terminated')
+            logging.info('Initial batch terminated')
         mt_manager.release(BATCH_EXE_CODE)
     except Exception as esp:
-        logging.error("Batch init failed")
         logging.error(traceback.format_exc())
+        logging.error("Initial batch failed")
         mt_manager.release(BATCH_EXE_CODE)
 
 
@@ -661,15 +663,15 @@ def batch():
             _batch_del_view_data()
             for model_id in get_db().get_models():
                 ViewManagerFactory.get()._update(model_id)
-            logging.info("Batch finished")
+            logging.info("Service batch finished")
             mt_manager.release(BATCH_EXE_CODE)
             return
-        logging.info("Batch Terminated")
+        logging.info("Service batch terminated")
         mt_manager.release(BATCH_EXE_CODE)
 
     except Exception:
-        logging.error("Batch failed")
         logging.error(traceback.format_exc())
+        logging.error("Service batch failed")
         mt_manager.release(BATCH_EXE_CODE)
 
 task_queue = QueueManager({TaskCode.PATTERN:ExecQueue('pattern_queue')})
