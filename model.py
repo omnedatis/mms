@@ -290,20 +290,19 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
 def _batch_recover_executions():
     logging.info('Recovering view execution started')
     for model in get_db().get_recover_models():
-        logging.info(f"call recover view: {model}")
+        logging.info(f"Calling recover view: {model}")
         ViewManagerFactory.get()._add(model)
     else:
-        logging.info('recovering view execution finished')
+        logging.info('Recovering view execution finished')
 
 
 def _batch_del_view_data():
     try:
         logging.info("Removing view data started")
         for model_id in get_db().get_removed_model():
-            logging.info(f"call remove view: {model_id}")
+            logging.info(f"Calling remove view: {model_id}")
             ViewManagerFactory.get()._remove(model_id)
         else:
-
             logging.info("Removing view data finished")
             return
     except Exception as esp:

@@ -417,14 +417,14 @@ class MimosaDB:
                 self._market_future_returns = [freturns[mid] for mid in markets]
                 self._market_pattern_values = [pvalues[mid] for mid in markets]
                 logging.info('Pattern update finished')
-                mt_manager.release()
+                mt_manager.release(BATCH_EXE_CODE)
                 return
             logging.info('Pattern update terminated')
-            mt_manager.release()
+            mt_manager.release(BATCH_EXE_CODE)
         except Exception as esp:
             logging.error(traceback.format_exc())
             logging.error('Pattern update failed')
-            mt_manager.release()
+            mt_manager.release(BATCH_EXE_CODE)
             raise esp
 
 
