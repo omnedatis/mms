@@ -1295,16 +1295,6 @@ class DateBaseDateResp(NamedTuple):
 
 def get_basedate_pred(view_id:str, market_id:str, 
         base_date:Optional[datetime.date]=None) -> List[DateBaseDateResp]:
-    class Scorer(NamedTuple):
-        value:int
-        upper:float
-        lower:float
-
-        def get(self, mean, std):
-            lower = self.lower*std if not pd.isna(self.lower) else -np.inf
-            upper = self.upper*std if not pd.isna(self.upper) else np.inf
-            if mean > lower and mean <= upper:
-                return self.value
 
     V_PATH = LOCAL_DB+f'/models/{view_id}'
     if not os.path.isdir(V_PATH):
@@ -1330,7 +1320,7 @@ def get_basedate_pred(view_id:str, market_id:str,
         i:_base_date.tolist()-datetime.datetime.strptime(i, '%Y-%m-%d').date(
         ) for i in models}
     edm = effective_date_time_diff_map
-    edm ={k:v for k, v  in edm.items() if v.days>0}
+    edm ={k:v for k, v  in edm.items() if v.days>=0}
     if len(edm) == 0:
         return []
 
@@ -1340,31 +1330,24 @@ def get_basedate_pred(view_id:str, market_id:str,
 
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
     ptns = ptns.loc[_base_date,:]
-    scores = [Scorer(k, upper=u, lower=l) for k, u, l in get_db().get_score_meta_info()]
-    
    
     for period in PREDICT_PERIODS:
         pred = model[period].predict(ptns.values.reshape((1,-1))) # reshape to 2D
         y_coder = Labelization(Y_LABELS)
         freturns = _db.get_future_returns(market_id, [period])
-        begin = max((freturns.index.values.astype('datetime64[D]') <= view_begin).sum()-1, 0)
-        end = max((freturns.index.values.astype('datetime64[D]') <= model_effective_date).sum()-1, 0)
-        _freturns = _db.get_future_returns(market_id, [period]).values[begin:end-1-period,0]
+        begin = (freturns.index.values.astype('datetime64[D]') < view_begin).sum()
+        end = (freturns.index.values.astype('datetime64[D]') < model_effective_date).sum()
+        _freturns = _db.get_future_returns(market_id, [period]).values[begin:end-period,0]
         _freturns = _freturns[_freturns == _freturns]
         y_coder.fit(_freturns, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(pred)[0]
         upper_bound = y_coder.label2upperbound(pred)[0]
-        mean = y_coder.label2mean(pred)[0]
-        std = np.std(freturns)
-        score = None
+        mean = y_coder.label2mean(pred)
         price_dates = extend_working_dates(np.array([_base_date]), period)
-        for scorer in scores:
-            score = scorer.get(mean, std)
-            if score is not None:
-                break
+        score = _get_freturn_score(mean, period, market_id)
         ret.append(DateBaseDateResp(
             _base_date.tolist().strftime('%Y-%m-%d'), cp.tolist(), period, upper_bound.tolist(),
-            lower_bound.tolist(), score.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
+            lower_bound.tolist(), score.tolist()[0], price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
 
 class DateRangePredResp(NamedTuple):
@@ -1417,7 +1400,7 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
 
     ptns = _db.get_pattern_values(market_id, view_info.patterns)
     freturns = _db.get_future_returns(market_id, [period])
-    begin =  max((freturns.index.values.astype('datetime64[D]') <= view_begin).sum()-1, 0)
+    begin = (freturns.index.values.astype('datetime64[D]') <= view_begin).sum()
     
     ret = []
     pred_dates = get_effective_model_dates(cps.index)
@@ -1426,9 +1409,9 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
             continue
         _ptns = ptns.loc[date]
         score = models[e_date.strftime('%Y-%m-%d')][period].predict(_ptns.values.reshape((1,-1)))
-        end = max((freturns.index.values.astype('datetime64[D]') <= e_date).sum()-1, 0)
+        end = (freturns.index.values.astype('datetime64[D]') <= e_date).sum()
         y_coder = Labelization(Y_LABELS)
-        _freturn = freturns.values[begin:end-1-period,0]
+        _freturn = freturns.values[begin:end-period,0]
         _freturn = _freturn[_freturn==_freturn]
         y_coder.fit(_freturn, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(score)[0]
