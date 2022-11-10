@@ -1342,9 +1342,9 @@ def get_basedate_pred(view_id:str, market_id:str,
         freturns = _db.get_future_returns(market_id, [period])
         begin = max((freturns.index.values.astype('datetime64[D]') <= view_begin).sum()-1, 0)
         end = max((freturns.index.values.astype('datetime64[D]') <= model_effective_date).sum()-1, 0)
-        freturns = _db.get_future_returns(market_id, [period]).values[begin:end-1,0]
-        freturns = freturns[freturns == freturns]
-        y_coder.fit(freturns, Y_OUTLIER)
+        _freturns = _db.get_future_returns(market_id, [period]).values[begin:end-1-period,0]
+        _freturns = _freturns[_freturns == _freturns]
+        y_coder.fit(_freturns, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(pred)[0]
         upper_bound = y_coder.label2upperbound(pred)[0]
         mean = y_coder.label2mean(pred)[0]
@@ -1421,7 +1421,7 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         score = models[e_date.strftime('%Y-%m-%d')][period].predict(_ptns.values.reshape((1,-1)))
         end = max((freturns.index.values.astype('datetime64[D]') <= e_date).sum()-1, 0)
         y_coder = Labelization(Y_LABELS)
-        _freturn = freturns.values[begin:end-1,0]
+        _freturn = freturns.values[begin:end-1-period,0]
         _freturn = _freturn[_freturn==_freturn]
         y_coder.fit(_freturn, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(score)[0]
@@ -1431,3 +1431,22 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
             date.strftime('%Y-%m-%d'), cp, upper_bound.tolist(),
             lower_bound.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
+
+def get_score(mean, std):
+    class Scorer(NamedTuple):
+        value:int
+        upper:float
+        lower:float
+
+        def get(self, mean, std):
+            lower = self.lower*std if not pd.isna(self.lower) else -np.inf
+            upper = self.upper*std if not pd.isna(self.upper) else np.inf
+            if mean > lower and mean <= upper:
+                return self.value
+    scorers = [Scorer(k, upper=u, lower=l) for k, u, l in get_db().get_score_meta_info()]
+    score = None
+    for scorer in scorers:
+        score = scorer.get(mean, std)
+        if score is not None:
+            break
+    return score
