@@ -1432,21 +1432,24 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
             lower_bound.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
 
-def get_score(mean, std):
+def _get_freturn_score(freturns:np.ndarray, period:int, market_id:str):
     class Scorer(NamedTuple):
-        value:int
+        score:int
         upper:float
         lower:float
 
         def get(self, mean, std):
             lower = self.lower*std if not pd.isna(self.lower) else -np.inf
             upper = self.upper*std if not pd.isna(self.upper) else np.inf
-            if mean > lower and mean <= upper:
-                return self.value
+            ret = ((mean > lower) & (mean <= upper)).astype('int')
+            ret[ret == 1] = self.score
+            return ret
+    _db = MimosaDBManager().current_db
+    std = _db.get_future_std(market_id, period)
+    if std == np.nan:
+        return np.nan
     scorers = [Scorer(k, upper=u, lower=l) for k, u, l in get_db().get_score_meta_info()]
-    score = None
+    ret = []
     for scorer in scorers:
-        score = scorer.get(mean, std)
-        if score is not None:
-            break
-    return score
+        ret.append(scorer.get(freturns, std))
+    return np.array(ret).sum(axis=0)

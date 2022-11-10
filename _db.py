@@ -21,7 +21,8 @@ from utils import (
     int2datetime64d, datetime64d2int, print_error_info, pickle_dump, pickle_load,
     singleton, CatchableTread, mt_manager)
 from const import (
-    PATTERN_UPDATE_CPUS, PREDICT_PERIODS, LOCAL_DB, BATCH_EXE_CODE, BatchType
+    PATTERN_UPDATE_CPUS, PREDICT_PERIODS, LOCAL_DB, BATCH_EXE_CODE, MIN_Y_SAMPLES,
+    BatchType
     )
 
 
@@ -427,6 +428,21 @@ class MimosaDB:
             mt_manager.release(BATCH_EXE_CODE)
             raise esp
 
+    def get_future_std(self, market_id: str, period: int) -> float:
+        if self._market_future_returns is None:
+            raise RuntimeError("market return values are not initialized")
+        midx = self._market_ids.get(market_id)
+        if midx is None:
+            raise KeyError(f"market is not found: {market_id}")
+        pidx = self._period_ids.get(period)
+        if pidx is None:
+            raise ValueError(f'invalid period: {period}')
+        values = self._market_future_returns[midx].T[pidx]
+        if len(values) < period + MIN_Y_SAMPLES:
+            ret = np.nan
+        else:
+            ret = values[:-period].std()
+        return float(ret)
 
 @singleton
 class MimosaDBManager:
