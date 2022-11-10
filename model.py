@@ -1261,7 +1261,7 @@ def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
                     eidx = (dates < view.effective_date).sum() - view.predict_period
                     eidx = max([sidx, eidx])
                     y_coder = Labelization(Y_LABELS)
-                    y_coder.fit(y_data.values, Y_OUTLIER)
+                    y_coder.fit(y_data.values[sidx:eidx], Y_OUTLIER)
 
                     xidx = x_data.index.values.astype('datetime64[D]') == base_date
                     x = x_data[xidx].values
