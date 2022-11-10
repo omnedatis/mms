@@ -264,7 +264,9 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
             _db = MimosaDBManager().current_db
          # ... can be writen in the function to form a standalone step
         _db.update(markets, patterns, batch_type)
-        ret = [CatchableTread(target=_db.dump)] #???
+        db_dump = [CatchableTread(target=_db.dump)]
+        db_dump[0].start()
+        ret:List[ThreadController] = []
         if batch_type == BatchType.SERVICE_BATCH:
             exec_type = PatternExecution.BATCH_SERVICE # redundant definition in const
             exec_ids = []
@@ -278,7 +280,6 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
                 if not controller.isactive:
                     break
                 get_db().set_pattern_execution_complete(exec_id)
-
         for t in ret:
             if not controller.isactive:
                 break
@@ -288,7 +289,10 @@ def _batch_db_update(batch_type: BatchType) -> List[ThreadController]:
         else:
             logging.info('DB update terminated')
         mt_manager.release(BATCH_EXE_CODE)
-        return ret
+        if batch_type == BatchType.SERVICE_BATCH:
+            return ret + db_dump
+        if batch_type == BatchType.INIT_BATCH:
+             return db_dump
     except Exception as esp:
         logging.error(traceback.format_exc())
         logging.error('DB update failed')
@@ -638,10 +642,13 @@ def init_db():
         logging.info('Initial batch started')
         clean_db_cache()
         clone_db_cache(batch_type)
+        t = None
         if not MimosaDBManager().is_ready():
-            _batch_db_update(batch_type)
+            t = _batch_db_update(batch_type)
         _batch_del_view_data()
         _batch_recover_executions()
+        if t is not None:
+            t[0].join()
         if controller.isactive:
             logging.info('Initial batch finished')
         else:
