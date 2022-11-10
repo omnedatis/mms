@@ -1249,20 +1249,18 @@ def get_targetdate_pred(view_id: str, market_id: str, target_date: datetime.date
         cpidx = market_cps.index.values.astype('datetime64[D]') == base_date
         base_cp = market_cps[cpidx].values[0]
         for start_date in models:
-            if start_date < base_date:
+            if start_date <= base_date:
                 model = models[start_date].get(period)
                 if model is not None:
                     view = _dao.get_model_info(view_id).get_model(period, start_date)
                     x_data = _db.get_pattern_values(market_id, view.patterns)
                     y_data = _db.get_future_returns(market_id, [period])[period]
-                    y_data = y_data[~np.isnan(y_data.values)]
                     dates = y_data.index.values.astype('datetime64[D]')
                     sidx = (dates < view.train_begin_date).sum()
-                    eidx = (dates < view.effective_date).sum() - view.predict_period
+                    eidx = (dates < start_date).sum() - view.predict_period
                     eidx = max([sidx, eidx])
                     y_coder = Labelization(Y_LABELS)
                     y_coder.fit(y_data.values[sidx:eidx], Y_OUTLIER)
-
                     xidx = x_data.index.values.astype('datetime64[D]') == base_date
                     x = x_data[xidx].values
                     y = model.predict(x)
@@ -1343,11 +1341,12 @@ def get_basedate_pred(view_id:str, market_id:str,
         lower_bound = y_coder.label2lowerbound(pred)[0]
         upper_bound = y_coder.label2upperbound(pred)[0]
         mean = y_coder.label2mean(pred)
-        price_dates = extend_working_dates(np.array([_base_date]), period)
+        price_dates = extend_working_dates(cps.index.values.astype('datetime64[D]'), 120)
+        price_date = price_dates[(price_dates<_base_date).sum()+period]
         score = _get_freturn_score(mean, period, market_id)
         ret.append(DateBaseDateResp(
             _base_date.tolist().strftime('%Y-%m-%d'), cp.tolist(), period, upper_bound.tolist(),
-            lower_bound.tolist(), score.tolist()[0], price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
+            lower_bound.tolist(), score.tolist()[0], price_date.tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
 
 class DateRangePredResp(NamedTuple):
@@ -1416,10 +1415,11 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
         y_coder.fit(_freturn, Y_OUTLIER)
         lower_bound = y_coder.label2lowerbound(score)[0]
         upper_bound = y_coder.label2upperbound(score)[0]
-        price_dates = extend_working_dates(np.array([date]).astype('datetime64[D]'), period)
+        price_dates = extend_working_dates(cps.index.values.astype('datetime64[D]'), 120)
+        price_date = price_dates[(price_dates<date).sum()+period]
         ret.append(DateRangePredResp(
             date.strftime('%Y-%m-%d'), cp, upper_bound.tolist(),
-            lower_bound.tolist(), price_dates[-1].tolist().strftime('%Y-%m-%d'))._asdict())
+            lower_bound.tolist(), price_date.tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
 
 def _get_freturn_score(freturns:np.ndarray, period:int, market_id:str):
