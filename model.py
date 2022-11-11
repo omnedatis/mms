@@ -1380,42 +1380,44 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
     begin = (freturns.index.values.astype('datetime64[D]') < view_begin).sum()
 
     def get_effective_model_dates(dates:pd.Index) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        order_models = dict(sorted(models.items()), key= lambda i : model_times[i], reverse=True)
+        order_models = dict(sorted(models.items(), key= lambda i : model_times[i[0]], reverse=True))
+ 
         dates:np.ndarray = dates.values.astype('datetime64[D]').copy()
         lowers = []
         uppers = []
         count = 0
         for key, model in order_models.items():
+
             e_date = np.array(datetime.datetime.strptime(
                 key, '%Y-%m-%d').date()).astype('datetime64[D]')
             if (dates < e_date).sum() == len(dates.reshape((-1,))):
                 continue
-            elif (dates < e_date).sum() == 0:
-                break
             else:
                 pred_begin = (dates < e_date).sum()
                 if count == 0:
-                    _ptns = ptns[ptns.index.values == dates[pred_begin:]].values
+                    _ptns = ptns.values[pred_begin:]
                 else:
-                    _ptns = ptns[ptns.index.values == dates[pred_begin:count]].values
+                    _ptns = ptns.values[pred_begin:count]
+
                 scores = model[period].predict(_ptns)
                 if bool(scores.reshape((-1,)).tolist()):
                     y_coder = Labelization(Y_LABELS)
-                    y_coder.fit(freturns[begin:pred_begin] ,Y_OUTLIER)
+                    y_coder.fit(freturns.values[begin:pred_begin-period].reshape((-1,)) ,Y_OUTLIER)
                     lowers.append(y_coder.label2lowerbound(scores)) 
                     uppers.append(y_coder.label2upperbound(scores)) 
                     count = pred_begin
         return np.concatenate(lowers), np.concatenate(uppers), dates[pred_begin:]
-    price_dates = extend_working_dates(cps.index.values.astype('datetime[D]'), 120)
+    price_dates = extend_working_dates(cps.index.values.astype('datetime64[D]'), 120)
     ret = []
-    _index = cps.index[(cps.index.values<=start_date).sum():(cps.index.values<=end_date).sum()]
-    lowers, uppers, dates = get_effective_model_dates(_index)
+    lowers, uppers, dates = get_effective_model_dates(cps.index)
     for l, u, d in zip(lowers.tolist(), uppers.tolist(), dates.tolist()):
+        if d < start_date or d > end_date:
+            continue
         cp = cps[(cps.index.values.astype('datetime64[D]')<d).sum()]
         pd_ = price_dates[(cps.index.values.astype('datetime64[D]')<d).sum()+period]
         ret.append(DateRangePredResp(
-            d.strftime('%Y-%m-%d'), cp, u.tolist(),
-            l.tolist(), pd_.tolist().strftime('%Y-%m-%d'))._asdict())
+            d.strftime('%Y-%m-%d'), cp, u,
+            l, pd_.tolist().strftime('%Y-%m-%d'))._asdict())
     return ret
 
 def _get_freturn_score(freturns:np.ndarray, period:int, market_id:str):
