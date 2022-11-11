@@ -15,10 +15,13 @@ log
 
 # python garbage
 __pycache__
-.spyproject
 
 # conda env
 env
 
 # temp stuff
 _stash
+
+# IDE
+.spyproject
+.idea
