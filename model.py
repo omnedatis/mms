@@ -1403,10 +1403,10 @@ def get_daterange_pred(view_id:str, market_id:str, *, period:int,
                 if bool(scores.reshape((-1,)).tolist()):
                     y_coder = Labelization(Y_LABELS)
                     y_coder.fit(freturns.values[begin:pred_begin-period].reshape((-1,)) ,Y_OUTLIER)
-                    lowers.append(y_coder.label2lowerbound(scores)) 
-                    uppers.append(y_coder.label2upperbound(scores)) 
+                    lowers.append(y_coder.label2lowerbound(scores)[::-1]) 
+                    uppers.append(y_coder.label2upperbound(scores)[::-1]) 
                     count = pred_begin
-        return np.concatenate(lowers), np.concatenate(uppers), dates[pred_begin:]
+        return np.concatenate(lowers)[::-1], np.concatenate(uppers)[::-1], dates[pred_begin:]
     price_dates = extend_working_dates(cps.index.values.astype('datetime64[D]'), 120)
     ret = []
     lowers, uppers, dates = get_effective_model_dates(cps.index)
